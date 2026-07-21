@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Visual Learning — Interactive Topics</title>
+<style>
+  :root{
+    --bg:#0d0d0f; --panel:#17181b; --panel-2:#1e1f24; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.3);
+    --green:#00C853; --border:#2c2d34;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(124,58,237,.18), transparent 60%),
+      radial-gradient(900px 500px at 0% 110%, rgba(0,200,83,.10), transparent 55%),
+      var(--bg);
+    color:var(--line);
+    font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    min-height:100vh;
+  }
+
+  /* ---------------- HEADER ---------------- */
+  header{
+    max-width:1100px; margin:0 auto; padding:64px 24px 30px;
+  }
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand .logo{
+    width:44px;height:44px;border-radius:12px;
+    background:linear-gradient(135deg,var(--accent),#a855f7);
+    box-shadow:0 0 26px var(--accent-soft);flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:22px;
+  }
+  h1{font-size:34px;font-weight:800;letter-spacing:-.5px;line-height:1.1}
+  .sub{color:var(--muted);font-size:15px;margin-top:10px;max-width:620px;line-height:1.6}
+  .meta{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+  .chip{
+    font-size:12px;color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:999px;padding:6px 13px;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .chip b{color:var(--line);font-weight:700}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+
+  /* ---------------- SEARCH ---------------- */
+  .searchbar{max-width:1100px;margin:0 auto;padding:0 24px}
+  #search{
+    width:100%;background:var(--panel);border:1px solid var(--border);
+    border-radius:12px;color:var(--line);padding:14px 16px;font-size:14px;outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  #search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  #search::placeholder{color:var(--muted)}
+
+  /* ---------------- GRID ---------------- */
+  main{max-width:1100px;margin:0 auto;padding:26px 24px 80px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+
+  .card{
+    position:relative;display:flex;flex-direction:column;
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:20px;text-decoration:none;color:inherit;overflow:hidden;
+    transition:transform .16s ease, border-color .16s, box-shadow .16s;
+  }
+  .card::before{
+    content:"";position:absolute;inset:0;opacity:0;transition:opacity .16s;
+    background:radial-gradient(500px 200px at 100% 0%, var(--accent-soft), transparent 70%);
+  }
+  .card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:0 18px 44px rgba(0,0,0,.5)}
+  .card:hover::before{opacity:1}
+  .card.soon{cursor:default;opacity:.6}
+  .card.soon:hover{transform:none;border-color:var(--border);box-shadow:none}
+  .card.soon:hover::before{opacity:0}
+
+  .c-top{display:flex;align-items:center;gap:13px;position:relative}
+  .c-ico{
+    width:48px;height:48px;border-radius:12px;flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:24px;
+    background:var(--panel-2);border:1px solid var(--border);
+  }
+  .c-title{font-size:17px;font-weight:700;line-height:1.2}
+  .c-tag{font-size:11.5px;color:var(--accent);font-weight:600;margin-top:2px}
+  .c-tag.green{color:var(--green)}
+  .c-desc{font-size:13px;color:var(--muted);line-height:1.55;margin-top:14px;position:relative;flex:1}
+  .c-foot{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px;position:relative}
+  .pill{
+    font-size:10.5px;color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:6px;padding:3px 8px;
+  }
+  .c-open{
+    margin-top:16px;position:relative;display:inline-flex;align-items:center;gap:6px;
+    font-size:13px;font-weight:600;color:var(--accent);
+  }
+  .card:hover .c-open{gap:10px}
+  .soon .badge-soon{
+    position:absolute;top:16px;right:16px;font-size:10px;font-weight:700;
+    color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:3px 8px;
+    text-transform:uppercase;letter-spacing:.5px;
+  }
+
+  .empty{color:var(--muted);text-align:center;padding:60px 0;font-size:14px;display:none}
+
+  footer{max-width:1100px;margin:0 auto;padding:0 24px 50px;color:var(--muted);font-size:12.5px;text-align:center}
+  footer a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="logo">📚</div>
+      <div>
+        <h1>Visual Learning</h1>
+      </div>
+    </div>
+    <p class="sub">A growing collection of interactive, animated visualizations that make complex engineering topics click. Pick a topic below to explore it live.</p>
+    <div class="meta">
+      <span class="chip"><span class="dot"></span> <b id="countLive">0</b>&nbsp;live topics</span>
+      <span class="chip"><b>Interactive</b>&nbsp;pan · zoom · animate</span>
+      <span class="chip"><b>No build</b>&nbsp;pure HTML/JS</span>
+    </div>
+  </header>
+
+  <div class="searchbar">
+    <input id="search" placeholder="Search topics — e.g. kafka, system design…" autocomplete="off" />
+  </div>
+
+  <main>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty">No topics match your search.</div>
+  </main>
+
+  <footer>
+    Add a new topic by dropping an <code>.html</code> file and adding one entry to the <code>TOPICS</code> list in <code>index.html</code>.
+  </footer>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   TOPICS REGISTRY
+   ---------------------------------------------------------------------
+   To add a new visualization:
+     1. Create its own <name>.html file in this folder.
+     2. Add one object below.  That's it — the card appears automatically.
+
+   Fields:
+     file    → the html file to open (omit / set "" for "coming soon")
+     title   → card heading
+     icon    → any emoji
+     tag     → short category label
+     green   → true to color the tag green (optional)
+     desc    → one or two sentence description
+     tags    → array of small keyword pills
+   ===================================================================== */
+const TOPICS = [
+  {
+    file: "system-design.html",
+    title: "System Design",
+    icon: "🏗️",
+    tag: "Architecture",
+    desc: "A pannable whiteboard of a full production architecture — clients, CDN, load balancers, API gateway, microservices, caches, queues, databases, storage and observability. Hover any node to trace its dependencies.",
+    tags: ["CDN", "Load Balancer", "Microservices", "Databases", "Kafka", "Observability"],
+  },
+  {
+    file: "kafka.html",
+    title: "Apache Kafka",
+    icon: "🪵",
+    tag: "Event Streaming",
+    green: true,
+    desc: "A live Kafka cluster simulation: producers, brokers, topics, partitions, replication and consumer groups. Watch messages flow, trigger a broker failure, and follow the guided 10-step lifecycle demo.",
+    tags: ["Producers", "Brokers", "Partitions", "Replication", "Consumer Lag", "Demo"],
+  },
+
+  // ---- Add future topics below (set file:"" to show as "Coming soon") ----
+  // { file:"", title:"Load Balancing", icon:"⚖️", tag:"Networking",
+  //   desc:"Round robin, least connections, consistent hashing and health checks visualized.",
+  //   tags:["Round Robin","Least Conn","Sticky"] },
+];
+
+/* ---------------- RENDER ---------------- */
+const grid = document.getElementById("grid");
+const emptyEl = document.getElementById("empty");
+const searchEl = document.getElementById("search");
+
+function cardHtml(t){
+  const soon = !t.file;
+  const tagCls = "c-tag" + (t.green ? " green" : "");
+  const pills = (t.tags || []).map(p => `<span class="pill">${p}</span>`).join("");
+  const inner = `
+    ${soon ? `<span class="badge-soon">Soon</span>` : ""}
+    <div class="c-top">
+      <div class="c-ico">${t.icon || "▦"}</div>
+      <div>
+        <div class="c-title">${t.title}</div>
+        <div class="${tagCls}">${t.tag || ""}</div>
+      </div>
+    </div>
+    <div class="c-desc">${t.desc || ""}</div>
+    <div class="c-foot">${pills}</div>
+    ${soon ? "" : `<span class="c-open">Open visualization →</span>`}`;
+
+  if (soon) {
+    const div = document.createElement("div");
+    div.className = "card soon";
+    div.innerHTML = inner;
+    return div;
+  }
+  const a = document.createElement("a");
+  a.className = "card";
+  a.href = t.file;
+  a.innerHTML = inner;
+  return a;
+}
+
+function render(filter = ""){
+  grid.innerHTML = "";
+  const q = filter.trim().toLowerCase();
+  const shown = TOPICS.filter(t => {
+    if (!q) return true;
+    const hay = [t.title, t.tag, t.desc, ...(t.tags || [])].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  shown.forEach(t => grid.appendChild(cardHtml(t)));
+  emptyEl.style.display = shown.length ? "none" : "block";
+}
+
+document.getElementById("countLive").textContent = TOPICS.filter(t => t.file).length;
+searchEl.addEventListener("input", e => render(e.target.value));
+render();
+</script>
+</body>
+</html>

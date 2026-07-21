@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>System Design — Architecture Whiteboard</title>
+<style>
+  :root {
+    --bg: #111111;
+    --panel: #1a1a1c;
+    --panel-2: #202024;
+    --line: #f4f4f5;
+    --muted: #8b8b93;
+    --accent: #7C3AED;
+    --accent-soft: rgba(124, 58, 237, 0.35);
+    --gray: #2a2a30;
+    --gray-border: #3a3a42;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--line);
+    font-family: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ---------------- TOP BAR ---------------- */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 16px; z-index: 40;
+    background: rgba(20,20,22,0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--gray-border);
+  }
+  #topbar .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 15px; letter-spacing: .2px;
+  }
+  #topbar .brand .logo {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent), #a855f7);
+    box-shadow: 0 0 14px var(--accent-soft);
+  }
+  #topbar .spacer { flex: 1; }
+  .tbtn {
+    background: var(--panel-2); color: var(--line);
+    border: 1px solid var(--gray-border); border-radius: 8px;
+    padding: 7px 12px; font-size: 12.5px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all .15s ease;
+  }
+  .tbtn:hover { border-color: var(--accent); color: #fff; box-shadow: 0 0 10px var(--accent-soft); }
+  .tbtn.primary { background: var(--accent); border-color: var(--accent); }
+  .tbtn.primary:hover { background: #8b48f0; }
+  #zoomLabel {
+    font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted);
+    min-width: 46px; text-align: center;
+  }
+
+  /* ---------------- LEFT TOOLBAR ---------------- */
+  #toolbar {
+    position: fixed; left: 14px; top: 50%; transform: translateY(-50%);
+    z-index: 30; display: flex; flex-direction: column; gap: 6px;
+    background: var(--panel); border: 1px solid var(--gray-border);
+    border-radius: 14px; padding: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  }
+  .tool {
+    width: 40px; height: 40px; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); background: transparent; border: none;
+    transition: all .15s ease;
+  }
+  .tool:hover { background: var(--panel-2); color: #fff; }
+  .tool.active { background: var(--accent-soft); color: #fff; box-shadow: inset 0 0 0 1px var(--accent); }
+  .tool svg { width: 20px; height: 20px; }
+  .tool-sep { height: 1px; background: var(--gray-border); margin: 4px 2px; }
+
+  /* ---------------- CANVAS ---------------- */
+  #viewport {
+    position: fixed; inset: 52px 0 0 0; overflow: hidden;
+    cursor: grab;
+    background:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0);
+    background-size: 26px 26px;
+  }
+  #viewport.grabbing { cursor: grabbing; }
+  #world {
+    position: absolute; top: 0; left: 0;
+    transform-origin: 0 0; will-change: transform;
+  }
+  #edges {
+    position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none;
+  }
+
+  .edge-path {
+    fill: none; stroke: rgba(244,244,245,0.28);
+    stroke-width: 1.6; transition: stroke .2s, stroke-width .2s;
+  }
+  .edge-path.hot { stroke: var(--accent); stroke-width: 2.4; filter: drop-shadow(0 0 6px var(--accent)); }
+  .edge-dot { fill: #fff; filter: drop-shadow(0 0 4px rgba(255,255,255,.9)); }
+  .edge-dot.hot { fill: #c4a2ff; filter: drop-shadow(0 0 6px var(--accent)); }
+
+  /* ---------------- NODES ---------------- */
+  .node {
+    position: absolute; background: var(--gray);
+    border: 1px solid var(--gray-border); border-radius: 12px;
+    padding: 10px 12px; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,.45);
+    transition: box-shadow .2s, border-color .2s, transform .12s, background .2s;
+  }
+  .node:hover { transform: translateY(-2px); }
+  .node .n-head { display: flex; align-items: center; gap: 8px; }
+  .node .n-icon {
+    width: 26px; height: 26px; border-radius: 7px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel-2); font-size: 15px;
+    border: 1px solid var(--gray-border);
+  }
+  .node .n-title { font-size: 13px; font-weight: 600; line-height: 1.15; }
+  .node .n-sub { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+  .node .n-tags { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .node .tag {
+    font-size: 9.5px; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--gray-border); border-radius: 5px; padding: 2px 5px;
+  }
+  .node .n-metrics {
+    margin-top: 8px; display: flex; gap: 8px; font-size: 9.5px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .node .n-metrics b { color: #d4d4d8; font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
+
+  /* highlight states */
+  .node.glow {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 24px var(--accent-soft);
+    background: #241a33;
+  }
+  .node.dim { opacity: .28; }
+  .node.active-pulse .n-icon { animation: iconpulse 1.8s ease-in-out infinite; }
+  @keyframes iconpulse {
+    0%,100% { box-shadow: 0 0 0 rgba(124,58,237,0); }
+    50% { box-shadow: 0 0 12px var(--accent); }
+  }
+  @keyframes dbpulse {
+    0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+    50% { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 18px rgba(52,211,153,.35); }
+  }
+  .node.db { animation: dbpulse 2.6s ease-in-out infinite; }
+
+  /* section labels */
+  .section-label {
+    position: absolute; font-size: 11px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted);
+    font-weight: 600;
+  }
+  .section-label::before {
+    content: ""; display: inline-block; width: 18px; height: 2px;
+    background: var(--accent); margin-right: 8px; vertical-align: middle;
+    border-radius: 2px;
+  }
+
+  /* users cluster */
+  .user-ico { font-size: 20px; filter: grayscale(.2); }
+
+  /* ---------------- POPUP ---------------- */
+  #popup {
+    position: fixed; z-index: 60; width: 300px;
+    background: var(--panel); border: 1px solid var(--gray-border);
+    border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    display: none; overflow: hidden;
+  }
+  #popup .p-head {
+    padding: 14px 16px; display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(135deg, rgba(124,58,237,.25), transparent);
+    border-bottom: 1px solid var(--gray-border);
+  }
+  #popup .p-head .p-ico {
+    width: 34px; height: 34px; border-radius: 9px; display: flex;
+    align-items: center; justify-content: center; font-size: 18px;
+    background: var(--panel-2); border: 1px solid var(--gray-border);
+  }
+  #popup .p-title { font-size: 15px; font-weight: 700; }
+  #popup .p-cat { font-size: 11px; color: var(--accent); }
+  #popup .p-close {
+    margin-left: auto; cursor: pointer; color: var(--muted);
+    width: 26px; height: 26px; border-radius: 7px; display: flex;
+    align-items: center; justify-content: center; font-size: 18px;
+  }
+  #popup .p-close:hover { background: var(--panel-2); color: #fff; }
+  #popup .p-body { padding: 14px 16px; }
+  #popup .p-purpose { font-size: 12.5px; color: #d4d4d8; line-height: 1.5; margin-bottom: 12px; }
+  #popup .p-row {
+    display: flex; justify-content: space-between; font-size: 12px;
+    padding: 6px 0; border-top: 1px solid var(--gray);
+  }
+  #popup .p-row .k { color: var(--muted); }
+  #popup .p-row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  #popup .p-deps { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+  #popup .p-deps .dep {
+    font-size: 10.5px; background: var(--panel-2); border: 1px solid var(--gray-border);
+    border-radius: 6px; padding: 3px 7px; color: #c9c9d1;
+  }
+
+  /* ---------------- MINIMAP ---------------- */
+  #minimap {
+    position: fixed; right: 14px; bottom: 14px; z-index: 30;
+    width: 210px; height: 130px; background: rgba(16,16,18,.9);
+    border: 1px solid var(--gray-border); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  #minimap svg { width: 100%; height: 100%; display: block; }
+  #mm-view { fill: rgba(124,58,237,.18); stroke: var(--accent); stroke-width: 1.5; }
+  #mm-node { fill: rgba(255,255,255,.35); }
+
+  /* ---------------- ZOOM CONTROLS ---------------- */
+  #zoomctl {
+    position: fixed; right: 14px; bottom: 156px; z-index: 30;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #zoomctl button {
+    width: 36px; height: 36px; border-radius: 9px; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--gray-border);
+    color: var(--line); font-size: 18px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  #zoomctl button:hover { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-soft); }
+
+  .hint {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    z-index: 20; font-size: 11.5px; color: var(--muted);
+    background: rgba(20,20,22,.8); border: 1px solid var(--gray-border);
+    padding: 6px 12px; border-radius: 20px; backdrop-filter: blur(6px);
+  }
+</style>
+</head>
+<body>
+
+  <!-- ================= TOP BAR ================= -->
+  <div id="topbar">
+    <div class="brand"><span class="logo"></span> System Design</div>
+    <button class="tbtn" id="btnDark">🌙 Theme</button>
+    <div class="spacer"></div>
+    <span id="zoomLabel">100%</span>
+    <button class="tbtn" id="btnReset">↺ Reset</button>
+    <button class="tbtn" id="btnSVG">⬇ SVG</button>
+    <button class="tbtn primary" id="btnPNG">⬇ PNG</button>
+  </div>
+
+  <!-- ================= LEFT TOOLBAR ================= -->
+  <div id="toolbar" title="Tools (visual)">
+    <button class="tool active" data-tool="pointer" title="Selection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3l7 17 2-7 7-2z"/></svg>
+    </button>
+    <button class="tool" data-tool="hand" title="Hand (pan)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11V6a1.5 1.5 0 013 0v4m0 0V4.5a1.5 1.5 0 013 0V10m0 0V6a1.5 1.5 0 013 0v6c0 4-2 8-6 8s-6-3-6-6l-1.5-3a1.4 1.4 0 012.4-1.4L10 11"/></svg>
+    </button>
+    <div class="tool-sep"></div>
+    <button class="tool" data-tool="rect" title="Rectangle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="2"/></svg>
+    </button>
+    <button class="tool" data-tool="circle" title="Circle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
+    </button>
+    <button class="tool" data-tool="arrow" title="Arrow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h14m0 0l-5-5m5 5l-5 5"/></svg>
+    </button>
+    <button class="tool" data-tool="text" title="Text">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6h14M12 6v12"/></svg>
+    </button>
+    <div class="tool-sep"></div>
+    <button class="tool" data-tool="reframe" title="Reset view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+
+  <!-- ================= CANVAS ================= -->
+  <div id="viewport">
+    <div id="world">
+      <svg id="edges"></svg>
+      <!-- nodes + labels injected here -->
+    </div>
+  </div>
+
+  <!-- ================= ZOOM CONTROLS ================= -->
+  <div id="zoomctl">
+    <button id="zin">+</button>
+    <button id="zout">−</button>
+    <button id="zfit" title="Fit" style="font-size:13px">⤢</button>
+  </div>
+
+  <!-- ================= MINIMAP ================= -->
+  <div id="minimap">
+    <svg id="mmSvg"></svg>
+  </div>
+
+  <!-- ================= POPUP ================= -->
+  <div id="popup">
+    <div class="p-head">
+      <div class="p-ico" id="pIco">⚙️</div>
+      <div>
+        <div class="p-title" id="pTitle">Node</div>
+        <div class="p-cat" id="pCat">Category</div>
+      </div>
+      <div class="p-close" id="pClose">×</div>
+    </div>
+    <div class="p-body">
+      <div class="p-purpose" id="pPurpose"></div>
+      <div class="p-row"><span class="k">Technology</span><span class="v" id="pTech"></span></div>
+      <div class="p-row"><span class="k">Latency</span><span class="v" id="pLat"></span></div>
+      <div class="p-row"><span class="k">Requests / sec</span><span class="v" id="pRps"></span></div>
+      <div class="p-row"><span class="k">Health</span><span class="v" id="pHealth"></span></div>
+      <div class="p-row" style="border:none"><span class="k">Dependencies</span></div>
+      <div class="p-deps" id="pDeps"></div>
+    </div>
+  </div>
+
+  <div class="hint">Drag to pan • Scroll to zoom • Hover a node to trace dependencies • Click for details</div>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   ARCHITECTURE DATA MODEL  (30+ nodes across 12 sections)
+   ===================================================================== */
+const NODES = [
+  // ---- 1. CLIENT LAYER ----
+  { id:"users",  cat:"Client", title:"Users", sub:"Global clients", icon:"👥", x:40,  y:300, w:150,
+    purpose:"End users accessing the platform from browsers and mobile apps worldwide.",
+    tech:"Web / iOS / Android", lat:"—", rps:"1.2M/s", health:"ok", pulse:true },
+  { id:"dns",    cat:"Client", title:"DNS", sub:"DNS Resolution", icon:"🌐", x:250, y:180, w:170,
+    tags:["amazon.com","A record"],
+    purpose:"Resolves the human-readable domain amazon.com to a server IP address.",
+    tech:"Route 53", lat:"12 ms", rps:"800k/s", health:"ok" },
+  { id:"ip",     cat:"Client", title:"IP Address", sub:"18.5.8.2", icon:"📍", x:250, y:300, w:170,
+    purpose:"The resolved anycast IP address the client connects to.",
+    tech:"Anycast IPv4/IPv6", lat:"—", rps:"—", health:"ok" },
+  { id:"webserver", cat:"Client", title:"Web Server", sub:"Entry endpoint", icon:"🖥️", x:250, y:420, w:170,
+    purpose:"Serves the initial HTML/JS shell and terminates TLS.",
+    tech:"Nginx", lat:"3 ms", rps:"400k/s", health:"ok" },
+
+  // ---- 10. CDN ----
+  { id:"cdn", cat:"CDN", title:"Global CDN", sub:"Edge delivery", icon:"⚡", x:490, y:180, w:180,
+    tags:["Edge Nodes","Cache-Control"],
+    purpose:"Serves static assets from edge locations closest to the user, reducing latency.",
+    tech:"CloudFront / Cloudflare", lat:"8 ms", rps:"2M/s", health:"ok", pulse:true },
+  { id:"edge", cat:"CDN", title:"Edge Nodes", sub:"300+ PoPs", icon:"🗺️", x:490, y:300, w:180,
+    purpose:"Distributed points of presence caching content near end users.",
+    tech:"Anycast POPs", lat:"5 ms", rps:"—", health:"ok" },
+
+  // ---- 2. LOAD BALANCER ----
+  { id:"elb", cat:"Load Balancer", title:"ELB", sub:"Elastic Load Balancer", icon:"⚖️", x:730, y:280, w:200,
+    tags:["Round Robin","Least Conn","Sticky"],
+    purpose:"Distributes incoming traffic across healthy application servers.",
+    tech:"AWS ALB / NLB", lat:"2 ms", rps:"1.5M/s", health:"ok", pulse:true },
+
+  // ---- 5. API GATEWAY ----
+  { id:"gateway", cat:"API Gateway", title:"API Gateway", sub:"Routing & throttling", icon:"🚪", x:990, y:280, w:210,
+    tags:["/auth","/orders","/payment","/profile"],
+    purpose:"Single entry point that routes, authenticates, and rate-limits API requests.",
+    tech:"Kong / AWS API GW", lat:"4 ms", rps:"900k/s", health:"ok", pulse:true },
+
+  // ---- 12. SECURITY ----
+  { id:"waf", cat:"Security", title:"WAF", sub:"Web App Firewall", icon:"🛡️", x:990, y:120, w:150,
+    purpose:"Filters malicious traffic (SQLi, XSS, DDoS) before it reaches services.",
+    tech:"AWS WAF", lat:"1 ms", rps:"—", health:"ok" },
+  { id:"ratelimit", cat:"Security", title:"Rate Limiter", sub:"Token bucket", icon:"⏱️", x:990, y:470, w:150,
+    purpose:"Throttles abusive clients using a leaky/token bucket algorithm.",
+    tech:"Redis + Lua", lat:"0.5 ms", rps:"—", health:"ok" },
+  { id:"jwt", cat:"Security", title:"JWT / OAuth2", sub:"Token auth", icon:"🔑", x:1260, y:110, w:160,
+    purpose:"Signs and verifies stateless access tokens for authenticated sessions.",
+    tech:"JWT · OAuth2", lat:"1 ms", rps:"—", health:"ok" },
+
+  // ---- 6. MICROSERVICES ----
+  { id:"auth",    cat:"Microservice", title:"Auth Service", sub:"", icon:"🔐", x:1280, y:230, w:170, metrics:{cpu:34,mem:52}, health:"ok",
+    purpose:"Handles login, signup, sessions and token issuance.", tech:"Node.js", lat:"18 ms", rps:"120k/s" },
+  { id:"orders",  cat:"Microservice", title:"Order Service", sub:"", icon:"📦", x:1280, y:330, w:170, metrics:{cpu:61,mem:48}, health:"ok",
+    purpose:"Creates and manages customer orders and their lifecycle.", tech:"Go", lat:"22 ms", rps:"90k/s" },
+  { id:"payment", cat:"Microservice", title:"Payment Service", sub:"", icon:"💳", x:1280, y:430, w:170, metrics:{cpu:72,mem:66}, health:"warn",
+    purpose:"Processes payments and talks to external payment gateways.", tech:"Java / Spring", lat:"45 ms", rps:"40k/s" },
+  { id:"inventory", cat:"Microservice", title:"Inventory Service", sub:"", icon:"🏷️", x:1480, y:230, w:170, metrics:{cpu:40,mem:38}, health:"ok",
+    purpose:"Tracks stock levels and reservations in real time.", tech:"Go", lat:"15 ms", rps:"70k/s" },
+  { id:"email",   cat:"Microservice", title:"Email Service", sub:"", icon:"✉️", x:1480, y:330, w:170, metrics:{cpu:22,mem:30}, health:"ok",
+    purpose:"Composes transactional emails and enqueues them for delivery.", tech:"Python", lat:"10 ms", rps:"25k/s" },
+  { id:"notif",   cat:"Microservice", title:"Notification Service", sub:"", icon:"🔔", x:1480, y:430, w:170, metrics:{cpu:28,mem:33}, health:"ok",
+    purpose:"Pushes real-time notifications (web push, SMS, in-app).", tech:"Node.js", lat:"12 ms", rps:"30k/s" },
+
+  // ---- 3. CACHE ----
+  { id:"redis", cat:"Cache", title:"Redis Cache", sub:"In-memory store", icon:"🧠", x:1720, y:170, w:180,
+    tags:["cache hit","cache miss"],
+    purpose:"Low-latency cache for sessions, hot keys and rate-limit counters.",
+    tech:"Redis Cluster", lat:"0.4 ms", rps:"1.8M/s", health:"ok", pulse:true },
+
+  // ---- 7. MESSAGE QUEUE ----
+  { id:"kafka", cat:"Message Queue", title:"Kafka", sub:"Event streaming", icon:"🪵", x:1720, y:320, w:190,
+    tags:["orders.created","payment.success","email.send"],
+    purpose:"Durable, partitioned event log decoupling producers from consumers.",
+    tech:"Apache Kafka", lat:"6 ms", rps:"500k/s", health:"ok", pulse:true },
+
+  // ---- 8. WORKERS ----
+  { id:"emailWorker", cat:"Worker", title:"Email Worker", sub:"Consumer", icon:"📧", x:2000, y:220, w:170, metrics:{cpu:35,mem:40}, health:"ok",
+    purpose:"Consumes email.send events and delivers via SMTP/SES.", tech:"Python", lat:"—", rps:"20k/s" },
+  { id:"notifWorker", cat:"Worker", title:"Notification Worker", sub:"Consumer", icon:"📲", x:2000, y:320, w:170, metrics:{cpu:31,mem:36}, health:"ok",
+    purpose:"Fans out notifications from queue events to devices.", tech:"Node.js", lat:"—", rps:"18k/s" },
+  { id:"cron", cat:"Worker", title:"Cron / Jobs", sub:"Background jobs", icon:"⏳", x:2000, y:420, w:170, metrics:{cpu:18,mem:24}, health:"ok",
+    purpose:"Scheduled and background batch jobs (cleanup, reports).", tech:"Celery / K8s CronJob", lat:"—", rps:"—", health:"ok" },
+
+  // ---- 4. DATABASE CLUSTER ----
+  { id:"pgPrimary", cat:"Database", title:"PostgreSQL Primary", sub:"Writes", icon:"🗄️", x:2260, y:180, w:190, db:true,
+    purpose:"Primary write node for the relational data store.",
+    tech:"PostgreSQL 16", lat:"9 ms", rps:"200k/s", health:"ok" },
+  { id:"replica1", cat:"Database", title:"Read Replica 1", sub:"Read", icon:"🗃️", x:2280, y:300, w:170, db:true,
+    purpose:"Asynchronous read replica for horizontal read scaling.", tech:"PostgreSQL", lat:"11 ms", rps:"150k/s", health:"ok" },
+  { id:"replica2", cat:"Database", title:"Read Replica 2", sub:"Read", icon:"🗃️", x:2280, y:400, w:170, db:true,
+    purpose:"Asynchronous read replica for horizontal read scaling.", tech:"PostgreSQL", lat:"11 ms", rps:"150k/s", health:"ok" },
+  { id:"replica3", cat:"Database", title:"Read Replica 3", sub:"Read", icon:"🗃️", x:2280, y:500, w:170, db:true,
+    purpose:"Asynchronous read replica for horizontal read scaling.", tech:"PostgreSQL", lat:"11 ms", rps:"150k/s", health:"ok" },
+
+  // ---- 9. STORAGE ----
+  { id:"objstore", cat:"Storage", title:"Object Storage", sub:"S3 buckets", icon:"🪣", x:2560, y:230, w:180,
+    tags:["Images","Documents","Logs"],
+    purpose:"Durable object store for images, documents and archived logs.",
+    tech:"AWS S3", lat:"25 ms", rps:"300k/s", health:"ok" },
+  { id:"coldstore", cat:"Storage", title:"Cold / Log Store", sub:"Archive", icon:"❄️", x:2560, y:380, w:180,
+    purpose:"Cheap long-term archive for logs and cold data.",
+    tech:"S3 Glacier", lat:"—", rps:"—", health:"ok" },
+
+  // ---- 11. OBSERVABILITY ----
+  { id:"prometheus", cat:"Observability", title:"Prometheus", sub:"Metrics", icon:"📈", x:2830, y:180, w:170,
+    purpose:"Scrapes and stores time-series metrics from every service.",
+    tech:"Prometheus", lat:"—", rps:"—", health:"ok" },
+  { id:"grafana", cat:"Observability", title:"Grafana", sub:"Dashboards", icon:"📊", x:2830, y:290, w:170,
+    purpose:"Visualizes metrics, logs and traces on live dashboards.",
+    tech:"Grafana", lat:"—", rps:"—", health:"ok" },
+  { id:"tracing", cat:"Observability", title:"Tracing / Logs", sub:"OpenTelemetry", icon:"🔎", x:2830, y:400, w:170,
+    purpose:"Distributed tracing and centralized log aggregation.",
+    tech:"Jaeger · Loki", lat:"—", rps:"—", health:"ok" },
+];
+
+/* Directed connections (from -> to) describing the request/data flow */
+const EDGES = [
+  ["users","dns"], ["users","cdn"], ["dns","ip"], ["ip","webserver"],
+  ["cdn","edge"], ["edge","elb"], ["webserver","elb"],
+  ["elb","gateway"],
+  ["waf","gateway"], ["gateway","ratelimit"], ["gateway","jwt"],
+  ["gateway","auth"], ["gateway","orders"], ["gateway","payment"],
+  ["gateway","inventory"], ["gateway","email"], ["gateway","notif"],
+  ["auth","redis"], ["orders","redis"], ["inventory","redis"],
+  ["orders","kafka"], ["payment","kafka"], ["email","kafka"], ["notif","kafka"],
+  ["kafka","emailWorker"], ["kafka","notifWorker"], ["kafka","cron"],
+  ["auth","pgPrimary"], ["orders","pgPrimary"], ["payment","pgPrimary"], ["inventory","pgPrimary"],
+  ["pgPrimary","replica1"], ["pgPrimary","replica2"], ["pgPrimary","replica3"],
+  ["emailWorker","objstore"], ["cron","objstore"], ["objstore","coldstore"],
+  ["notifWorker","objstore"],
+  ["pgPrimary","prometheus"], ["kafka","prometheus"], ["redis","prometheus"],
+  ["prometheus","grafana"], ["prometheus","tracing"],
+];
+
+/* Section headers positioned in world space */
+const SECTIONS = [
+  { t:"Client Layer", x:40,  y:120 },
+  { t:"CDN", x:490, y:120 },
+  { t:"Load Balancer", x:730, y:210 },
+  { t:"Security", x:990, y:60 },
+  { t:"API Gateway", x:990, y:230 },
+  { t:"Microservices", x:1280, y:170 },
+  { t:"Cache", x:1720, y:110 },
+  { t:"Message Queue", x:1720, y:270 },
+  { t:"Workers", x:2000, y:160 },
+  { t:"Database Cluster", x:2260, y:120 },
+  { t:"Storage", x:2560, y:170 },
+  { t:"Observability", x:2830, y:120 },
+];
+
+/* =====================================================================
+   VIEW STATE + HELPERS
+   ===================================================================== */
+const viewport = document.getElementById("viewport");
+const world = document.getElementById("world");
+const edgesSvg = document.getElementById("edges");
+const zoomLabel = document.getElementById("zoomLabel");
+
+const nodeMap = Object.fromEntries(NODES.map(n => [n.id, n]));
+// default heights (measured after render)
+NODES.forEach(n => n.h = n.h || 64);
+
+const view = { x: 40, y: 20, scale: 0.62 };
+
+// adjacency for hover dependency tracing
+const outAdj = {}, inAdj = {};
+NODES.forEach(n => { outAdj[n.id] = []; inAdj[n.id] = []; });
+EDGES.forEach(([a,b]) => { outAdj[a].push(b); inAdj[b].push(a); });
+
+function applyTransform() {
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  zoomLabel.textContent = Math.round(view.scale * 100) + "%";
+  updateMinimap();
+}
+
+/* =====================================================================
+   RENDERER  — builds section labels and node cards
+   ===================================================================== */
+function healthDot(h) {
+  const cls = h === "bad" ? "bad" : h === "warn" ? "warn" : "ok";
+  return `<span class="dot ${cls}"></span>`;
+}
+
+function render() {
+  // section labels
+  SECTIONS.forEach(s => {
+    const el = document.createElement("div");
+    el.className = "section-label";
+    el.textContent = s.t;
+    el.style.left = s.x + "px";
+    el.style.top = s.y + "px";
+    world.appendChild(el);
+  });
+
+  // nodes
+  NODES.forEach(n => {
+    const el = document.createElement("div");
+    el.className = "node" + (n.pulse ? " active-pulse" : "") + (n.db ? " db" : "");
+    el.id = "node-" + n.id;
+    el.style.left = n.x + "px";
+    el.style.top = n.y + "px";
+    el.style.width = n.w + "px";
+    el.dataset.id = n.id;
+
+    let html = `<div class="n-head">
+        <div class="n-icon">${n.icon}</div>
+        <div>
+          <div class="n-title">${healthDot(n.health)} ${n.title}</div>
+          ${n.sub ? `<div class="n-sub">${n.sub}</div>` : ""}
+        </div>
+      </div>`;
+
+    if (n.tags) {
+      html += `<div class="n-tags">${n.tags.map(t => `<span class="tag">${t}</span>`).join("")}</div>`;
+    }
+    if (n.metrics) {
+      html += `<div class="n-metrics">
+        <span>CPU <b>${n.metrics.cpu}%</b></span>
+        <span>MEM <b>${n.metrics.mem}%</b></span>
+        <span>${n.health.toUpperCase()}</span>
+      </div>`;
+    }
+    el.innerHTML = html;
+    world.appendChild(el);
+
+    // events
+    el.addEventListener("mouseenter", () => highlightDeps(n.id));
+    el.addEventListener("mouseleave", clearHighlight);
+    el.addEventListener("click", (e) => { e.stopPropagation(); componentClick(n.id, el); });
+  });
+
+  // measure real heights so edges connect precisely
+  NODES.forEach(n => {
+    const el = document.getElementById("node-" + n.id);
+    n.h = el.offsetHeight;
+    n.w = el.offsetWidth;
+  });
+
+  drawConnections();
+  buildMinimap();
+}
+
+/* =====================================================================
+   drawConnections()  — SVG hand-drawn style bezier paths + arrowheads
+   ===================================================================== */
+function handPath(x1, y1, x2, y2) {
+  // slightly wobbly bezier for a hand-drawn feel
+  const dx = (x2 - x1);
+  const c = Math.max(40, Math.abs(dx) * 0.45);
+  const j = 4; // jitter
+  const mx = (x1 + x2) / 2 + (Math.random() * j - j/2);
+  const my = (y1 + y2) / 2 + (Math.random() * j*2 - j);
+  return `M ${x1} ${y1} C ${x1 + c} ${y1}, ${mx - c*0.3} ${my}, ${mx} ${my} S ${x2 - c} ${y2}, ${x2} ${y2}`;
+}
+
+let edgeEls = [];
+function drawConnections() {
+  edgesSvg.innerHTML = "";
+  edgeEls = [];
+
+  // arrowhead marker defs
+  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+  defs.innerHTML = `
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="rgba(244,244,245,0.45)"/>
+    </marker>`;
+  edgesSvg.appendChild(defs);
+
+  EDGES.forEach(([a, b], i) => {
+    const na = nodeMap[a], nb = nodeMap[b];
+    if (!na || !nb) return;
+    // connect from right-center of source to left-center of target (fallback by geometry)
+    let x1, y1, x2, y2;
+    const aCx = na.x + na.w/2, bCx = nb.x + nb.w/2;
+    if (bCx >= aCx) { x1 = na.x + na.w; y1 = na.y + na.h/2; x2 = nb.x; y2 = nb.y + nb.h/2; }
+    else            { x1 = na.x;         y1 = na.y + na.h/2; x2 = nb.x + nb.w; y2 = nb.y + nb.h/2; }
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", handPath(x1, y1, x2, y2));
+    path.setAttribute("class", "edge-path");
+    path.setAttribute("marker-end", "url(#arrow)");
+    path.dataset.from = a;
+    path.dataset.to = b;
+    edgesSvg.appendChild(path);
+    edgeEls.push({ from:a, to:b, path });
+  });
+
+  animateTraffic();
+}
+
+/* =====================================================================
+   animateTraffic()  — white packets moving along every path
+   ===================================================================== */
+let packets = [];
+function animateTraffic() {
+  // remove old packets
+  packets.forEach(p => p.dot.remove());
+  packets = [];
+
+  edgeEls.forEach((e, i) => {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("r", "3");
+    dot.setAttribute("class", "edge-dot");
+    edgesSvg.appendChild(dot);
+    const len = e.path.getTotalLength();
+    packets.push({
+      dot, path: e.path, len,
+      // stagger so packets fire roughly every 2s, offset per edge
+      offset: (i * 0.14) % 1,
+      speed: 0.12 + Math.random() * 0.05,   // fraction per second
+      from: e.from, to: e.to
+    });
+  });
+}
+
+let lastT = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  packets.forEach(p => {
+    p.offset = (p.offset + p.speed * dt) % 1;
+    const pt = p.path.getPointAtLength(p.offset * p.len);
+    p.dot.setAttribute("cx", pt.x);
+    p.dot.setAttribute("cy", pt.y);
+  });
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* =====================================================================
+   HOVER — highlight upstream + downstream dependencies (glow purple)
+   ===================================================================== */
+function collect(id, adj, set) {
+  adj[id].forEach(next => {
+    if (!set.has(next)) { set.add(next); collect(next, adj, set); }
+  });
+}
+function highlightDeps(id) {
+  const related = new Set([id]);
+  collect(id, outAdj, related); // downstream
+  collect(id, inAdj, related);  // upstream
+
+  NODES.forEach(n => {
+    const el = document.getElementById("node-" + n.id);
+    if (related.has(n.id)) { el.classList.add("glow"); el.classList.remove("dim"); }
+    else { el.classList.add("dim"); el.classList.remove("glow"); }
+  });
+
+  edgeEls.forEach(e => {
+    const hot = related.has(e.from) && related.has(e.to);
+    e.path.classList.toggle("hot", hot);
+  });
+  packets.forEach(p => {
+    const hot = related.has(p.from) && related.has(p.to);
+    p.dot.classList.toggle("hot", hot);
+  });
+}
+function clearHighlight() {
+  NODES.forEach(n => {
+    const el = document.getElementById("node-" + n.id);
+    el.classList.remove("glow", "dim");
+  });
+  edgeEls.forEach(e => e.path.classList.remove("hot"));
+  packets.forEach(p => p.dot.classList.remove("hot"));
+}
+
+/* =====================================================================
+   componentClick()  — information popup
+   ===================================================================== */
+const popup = document.getElementById("popup");
+function componentClick(id, el) {
+  const n = nodeMap[id];
+  document.getElementById("pIco").textContent = n.icon;
+  document.getElementById("pTitle").textContent = n.title;
+  document.getElementById("pCat").textContent = n.cat;
+  document.getElementById("pPurpose").textContent = n.purpose || "—";
+  document.getElementById("pTech").textContent = n.tech || "—";
+  document.getElementById("pLat").textContent = n.lat || "—";
+  document.getElementById("pRps").textContent = n.rps || "—";
+  const hEl = document.getElementById("pHealth");
+  hEl.innerHTML = healthDot(n.health) + " " + (n.health || "ok").toUpperCase();
+
+  const deps = [...new Set([...outAdj[id], ...inAdj[id]])].map(d => nodeMap[d].title);
+  document.getElementById("pDeps").innerHTML =
+    deps.length ? deps.map(d => `<span class="dep">${d}</span>`).join("") : `<span class="dep">None</span>`;
+
+  // position near node (screen coords)
+  const r = el.getBoundingClientRect();
+  let px = r.right + 12, py = r.top;
+  if (px + 300 > window.innerWidth) px = r.left - 312;
+  if (px < 8) px = 8;
+  if (py + 320 > window.innerHeight) py = window.innerHeight - 330;
+  popup.style.left = px + "px";
+  popup.style.top = Math.max(60, py) + "px";
+  popup.style.display = "block";
+}
+document.getElementById("pClose").addEventListener("click", () => popup.style.display = "none");
+viewport.addEventListener("mousedown", () => popup.style.display = "none");
+
+/* =====================================================================
+   PAN + ZOOM
+   ===================================================================== */
+let panning = false, sx = 0, sy = 0, startX = 0, startY = 0, moved = false;
+viewport.addEventListener("mousedown", (e) => {
+  if (e.target.closest(".node")) return;
+  panning = true; moved = false;
+  sx = e.clientX; sy = e.clientY; startX = view.x; startY = view.y;
+  viewport.classList.add("grabbing");
+});
+window.addEventListener("mousemove", (e) => {
+  if (!panning) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy;
+  if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+  view.x = startX + dx; view.y = startY + dy;
+  applyTransform();
+});
+window.addEventListener("mouseup", () => { panning = false; viewport.classList.remove("grabbing"); });
+
+viewport.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const delta = -e.deltaY * 0.0015;
+  const newScale = Math.min(2.2, Math.max(0.25, view.scale * (1 + delta)));
+  // zoom around cursor
+  const wx = (mx - view.x) / view.scale;
+  const wy = (my - view.y) / view.scale;
+  view.scale = newScale;
+  view.x = mx - wx * view.scale;
+  view.y = my - wy * view.scale;
+  applyTransform();
+}, { passive: false });
+
+/* =====================================================================
+   ZOOM CONTROLS + FIT + RESET
+   ===================================================================== */
+function zoomBy(factor) {
+  const rect = viewport.getBoundingClientRect();
+  const mx = rect.width/2, my = rect.height/2;
+  const wx = (mx - view.x) / view.scale, wy = (my - view.y) / view.scale;
+  view.scale = Math.min(2.2, Math.max(0.25, view.scale * factor));
+  view.x = mx - wx * view.scale; view.y = my - wy * view.scale;
+  applyTransform();
+}
+document.getElementById("zin").onclick = () => zoomBy(1.15);
+document.getElementById("zout").onclick = () => zoomBy(1/1.15);
+
+function worldBounds() {
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  NODES.forEach(n => {
+    minX=Math.min(minX,n.x); minY=Math.min(minY,n.y-60);
+    maxX=Math.max(maxX,n.x+n.w); maxY=Math.max(maxY,n.y+n.h);
+  });
+  return {minX,minY,maxX,maxY,w:maxX-minX,h:maxY-minY};
+}
+function fitView() {
+  const b = worldBounds();
+  const vw = viewport.clientWidth, vh = viewport.clientHeight;
+  const scale = Math.min(vw/(b.w+120), vh/(b.h+120), 1.4);
+  view.scale = scale;
+  view.x = (vw - b.w*scale)/2 - b.minX*scale;
+  view.y = (vh - b.h*scale)/2 - b.minY*scale;
+  applyTransform();
+}
+document.getElementById("zfit").onclick = fitView;
+document.getElementById("btnReset").onclick = () => { view.x=40; view.y=20; view.scale=0.62; applyTransform(); };
+document.querySelector('[data-tool="reframe"]').onclick = fitView;
+
+/* =====================================================================
+   TOOLBAR (visual) + THEME
+   ===================================================================== */
+document.querySelectorAll(".tool").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tool").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+  });
+});
+let dark = true;
+document.getElementById("btnDark").onclick = () => {
+  dark = !dark;
+  if (!dark) {
+    document.documentElement.style.setProperty("--bg", "#f4f4f5");
+    document.documentElement.style.setProperty("--line", "#18181b");
+    document.documentElement.style.setProperty("--gray", "#ffffff");
+    document.documentElement.style.setProperty("--gray-border", "#d4d4d8");
+    document.documentElement.style.setProperty("--panel", "#ffffff");
+    document.documentElement.style.setProperty("--panel-2", "#f0f0f2");
+    document.documentElement.style.setProperty("--muted", "#71717a");
+    viewport.style.background = "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.08) 1px, transparent 0)";
+    viewport.style.backgroundSize = "26px 26px";
+  } else {
+    document.documentElement.style.setProperty("--bg", "#111111");
+    document.documentElement.style.setProperty("--line", "#f4f4f5");
+    document.documentElement.style.setProperty("--gray", "#2a2a30");
+    document.documentElement.style.setProperty("--gray-border", "#3a3a42");
+    document.documentElement.style.setProperty("--panel", "#1a1a1c");
+    document.documentElement.style.setProperty("--panel-2", "#202024");
+    document.documentElement.style.setProperty("--muted", "#8b8b93");
+    viewport.style.background = "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0)";
+    viewport.style.backgroundSize = "26px 26px";
+  }
+  document.body.style.background = getComputedStyle(document.documentElement).getPropertyValue("--bg");
+};
+
+/* =====================================================================
+   MINIMAP
+   ===================================================================== */
+const mmSvg = document.getElementById("mmSvg");
+let mmScale = 1, mmOx = 0, mmOy = 0;
+function buildMinimap() {
+  const b = worldBounds();
+  const W = 210, H = 130, pad = 6;
+  mmScale = Math.min((W-pad*2)/b.w, (H-pad*2)/b.h);
+  mmOx = pad - b.minX*mmScale;
+  mmOy = pad - b.minY*mmScale;
+  mmSvg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  let s = "";
+  NODES.forEach(n => {
+    s += `<rect id="mm-node" x="${n.x*mmScale+mmOx}" y="${n.y*mmScale+mmOy}" width="${Math.max(2,n.w*mmScale)}" height="${Math.max(2,n.h*mmScale)}" rx="1"/>`;
+  });
+  s += `<rect id="mm-view" x="0" y="0" width="10" height="10"/>`;
+  mmSvg.innerHTML = s;
+}
+function updateMinimap() {
+  const vRect = mmSvg.querySelector("#mm-view");
+  if (!vRect) return;
+  const vw = viewport.clientWidth, vh = viewport.clientHeight;
+  // visible world region
+  const wx = -view.x / view.scale, wy = -view.y / view.scale;
+  const ww = vw / view.scale, wh = vh / view.scale;
+  vRect.setAttribute("x", wx*mmScale + mmOx);
+  vRect.setAttribute("y", wy*mmScale + mmOy);
+  vRect.setAttribute("width", ww*mmScale);
+  vRect.setAttribute("height", wh*mmScale);
+}
+mmSvg.addEventListener("click", (e) => {
+  const r = mmSvg.getBoundingClientRect();
+  const mx = (e.clientX - r.left) * (210 / r.width);
+  const my = (e.clientY - r.top) * (130 / r.height);
+  const worldX = (mx - mmOx) / mmScale;
+  const worldY = (my - mmOy) / mmScale;
+  view.x = viewport.clientWidth/2 - worldX*view.scale;
+  view.y = viewport.clientHeight/2 - worldY*view.scale;
+  applyTransform();
+});
+
+/* =====================================================================
+   EXPORT — SVG + PNG (rendered from the data model, no libraries)
+   ===================================================================== */
+function buildExportSvg() {
+  const b = worldBounds();
+  const pad = 60;
+  const W = b.w + pad*2, H = b.h + pad*2;
+  const ox = pad - b.minX, oy = pad - b.minY;
+  const NS = "http://www.w3.org/2000/svg";
+
+  let paths = "";
+  EDGES.forEach(([a,bId]) => {
+    const na = nodeMap[a], nb = nodeMap[bId]; if(!na||!nb) return;
+    const aCx = na.x+na.w/2, bCx = nb.x+nb.w/2;
+    let x1,y1,x2,y2;
+    if (bCx>=aCx){x1=na.x+na.w;y1=na.y+na.h/2;x2=nb.x;y2=nb.y+nb.h/2;}
+    else{x1=na.x;y1=na.y+na.h/2;x2=nb.x+nb.w;y2=nb.y+nb.h/2;}
+    const c=Math.max(40,Math.abs(x2-x1)*0.45);
+    paths += `<path d="M ${x1+ox} ${y1+oy} C ${x1+c+ox} ${y1+oy}, ${x2-c+ox} ${y2+oy}, ${x2+ox} ${y2+oy}" fill="none" stroke="rgba(244,244,245,0.35)" stroke-width="1.6" marker-end="url(#ar)"/>`;
+  });
+
+  let rects = "";
+  NODES.forEach(n => {
+    const x=n.x+ox, y=n.y+oy;
+    rects += `<g>
+      <rect x="${x}" y="${y}" width="${n.w}" height="${n.h}" rx="12" fill="#2a2a30" stroke="#3a3a42"/>
+      <rect x="${x+10}" y="${y+9}" width="26" height="26" rx="7" fill="#202024" stroke="#3a3a42"/>
+      <text x="${x+23}" y="${y+27}" font-size="14" text-anchor="middle">${n.icon}</text>
+      <text x="${x+44}" y="${y+22}" font-size="13" font-weight="700" fill="#f4f4f5" font-family="Segoe UI,sans-serif">${escapeXml(n.title)}</text>
+      ${n.sub?`<text x="${x+44}" y="${y+35}" font-size="10" fill="#8b8b93" font-family="Segoe UI,sans-serif">${escapeXml(n.sub)}</text>`:""}
+    </g>`;
+  });
+
+  let labels = "";
+  SECTIONS.forEach(s => {
+    labels += `<text x="${s.x+ox}" y="${s.y+oy}" font-size="11" letter-spacing="2" fill="#8b8b93" font-family="Segoe UI,sans-serif">${escapeXml(s.t.toUpperCase())}</text>`;
+  });
+
+  return `<svg xmlns="${NS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="rgba(244,244,245,0.5)"/></marker></defs>
+    <rect width="${W}" height="${H}" fill="#111111"/>
+    ${labels}${paths}${rects}
+  </svg>`;
+}
+function escapeXml(s){return String(s).replace(/[<>&'"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;","'":"&apos;",'"':"&quot;"}[c]));}
+
+function download(name, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+document.getElementById("btnSVG").onclick = () => {
+  download("system-design.svg", new Blob([buildExportSvg()], {type:"image/svg+xml"}));
+};
+document.getElementById("btnPNG").onclick = () => {
+  const svg = buildExportSvg();
+  const img = new Image();
+  const url = URL.createObjectURL(new Blob([svg], {type:"image/svg+xml"}));
+  img.onload = () => {
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width*scale; canvas.height = img.height*scale;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob(b => download("system-design.png", b));
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+};
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+render();
+applyTransform();
+fitView();
+window.addEventListener("resize", updateMinimap);
+</script>
+</body>
+</html>

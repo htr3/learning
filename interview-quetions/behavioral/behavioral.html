@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Behavioral — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="behavioral">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Interview Prep</h2>
+      <nav id="site-nav"></nav>
+    </aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>Behavioral Interview Prep</h1>
+        <p>Click each question to expand <strong>full STAR answers</strong>. Filter by <strong>Easy / Medium / Hard</strong> or <strong>⭐ Very Important</strong>.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> quick pitch / classic</span>
+        <span><span class="level level-medium">Medium</span> STAR depth</span>
+        <span><span class="level level-hard">Hard</span> pressure / production</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+
+      <div class="tip-box">
+        <strong>STAR tip:</strong> Keep answers 2–3 minutes. Lead with a one-line headline, then Situation → Task → Action → Result. Use numbers from your resume (10%, 60%, 90%, 1M+, 3 shop owners on Apna Shop).
+      </div>
+
+      <div class="qa-list">
+
+        <article class="qa-card" data-id="tell-me-about-yourself" data-level="easy" data-vimp="true">
+          <div class="qa-question">
+            <h3>Tell me about yourself.</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Intro</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">XL Axiata:</span></li><li><span class="kw">Vodafone Germany:</span></li><li><span class="kw">Optima Philippines:</span></li><li><span class="kw">DeskMingle</span></li><li><span class="kw">Apna Shop</span></li><li><span class="kw">Spring Boot</span></li><li><span class="kw">React</span></li><li><span class="kw">PostgreSQL</span></li></ul></div><p>3+ YOE Java backend + full-stack at Amdocs — Spring Boot, React, SQL tuning, CI/CD — XL Axiata (current), Vodafone, Optima (1M+ Camel). Side products: DeskMingle &amp; Apna Shop. MCA NIT Warangal.</p>
+            <h4>Situation</h4>
+            <p>I'm a Software Engineer with 3+ years of experience, currently at Amdocs Development Center in Pune on XL Axiata — telecom/BSS systems for global operators — and I've also shipped two live full-stack products on my own.</p>
+            <h4>Task / Focus</h4>
+            <p>My strength is Java backend and full-stack delivery — Spring Boot microservices, REST APIs, PostgreSQL/SQL tuning, OAuth2/JWT security, CI/CD — plus building tools and products teams actually use.</p>
+            <h4>Action</h4>
+            <ul>
+              <li><strong class="kw">XL Axiata (current):</strong> Third-party integrations, Camunda workflow optimization (~5% faster perf tests), database tuning (~10% faster queries), production incident triage.</li>
+              <li><strong class="kw">Vodafone Germany:</strong> Spring Boot + React microservices, SQL optimization on reporting paths, TestNG automation (60% → 90% coverage), OOP design patterns.</li>
+              <li><strong class="kw">Optima Philippines:</strong> Apache Camel microservices handling 1M+ daily transactions; Jenkins CI/CD with SonarQube gates and four internal automation tools.</li>
+              <li><strong class="kw">DeskMingle &amp; Apna Shop:</strong> Live apps — Spring Boot, React, PostgreSQL, OAuth2/JWT or OTP auth, Docker on Linux; Apna Shop used daily by 3 shop owners.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>I deliver measurable impact — faster reports, fewer fallouts, ~60% less manual deployment, 90% test coverage on critical paths, and real users on my side products. MCA from NIT Warangal; CodinGame winner among 10,000+ globally.</p>
+            <h4>Delivery tip</h4>
+<p>Keep it ~90 seconds: present (role + stack) → past (1–2 highlights with impact) → future (why this role). End with a hook that invites the next question. Don't recite your CV chronologically — curate for the job.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="biggest-achievement" data-level="medium" data-vimp="true">
+          <div class="qa-question">
+            <h3>What is your biggest professional achievement?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Achievement</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Jenkins CI/CD</span></li><li><span class="kw">Fuse Logger</span></li><li><span class="kw">Subscriber Tool</span></li><li><span class="kw">SM Tool</span></li><li><span class="kw">API Visualizer</span></li><li><span class="kw">1M+ transactions/day</span></li><li><span class="kw">~60%</span></li><li><span class="kw">API</span></li></ul></div><h4>Situation</h4>
+            <p>At Optima Philippines, the team relied heavily on manual deployments and scattered logs across environments. Debugging production issues and releases took significant time.</p>
+            <h4>Task</h4>
+            <p>I was asked to improve release reliability and give developers faster ways to trace subscriber and API issues without escalating to ops every time.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Built and maintained <strong class="kw">Jenkins CI/CD</strong> pipelines for automated build and deploy.</li>
+              <li>Created <strong class="kw">Fuse Logger</strong> (multi-env log search), <strong class="kw">Subscriber Tool</strong> (DB lookup by MIN/accountId), <strong class="kw">SM Tool</strong> (deployment automation), and <strong class="kw">API Visualizer</strong> (end-to-end API flow mapping).</li>
+              <li>Maintained Camel microservices processing <strong class="kw">1M+ transactions/day</strong> with monitoring and production-grade stability.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Manual deployment effort dropped by <strong class="kw">~60%</strong>. Teams could self-serve logs, subscriber lookups, and API flows. Release consistency and on-call debugging improved — that's the work I'm most proud of because it scaled beyond one feature to how the whole team worked.</p>
+            <h4>What they're assessing</h4>
+<p>Ownership and measurable impact. Use STAR and lead with the <strong>result + number</strong> (e.g. ">10% faster reports", "60%→90% coverage"), then explain your specific role ("I", not just "we") and why it mattered to the business.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sql-optimization" data-level="medium" data-vimp="true">
+          <div class="qa-question">
+            <h3>Describe a time you improved performance. (SQL / reporting)</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Vodafone</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">more than 10%</span></li><li><span class="kw">SQL</span></li></ul></div><h4>Situation</h4>
+            <p>On Vodafone Germany, reporting queries on large datasets were slow during high-load windows. Business users waited too long for reports, and DB load spiked during peak usage.</p>
+            <h4>Task</h4>
+            <p>Reduce report generation time and improve backend efficiency without changing business logic.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Analyzed slow queries using execution plans and identified full table scans and missing indexes on reporting paths.</li>
+              <li>Added strategic indexes and rewrote/tuned joins and filters where needed.</li>
+              <li>Validated results in lower environments, then rolled out with monitoring on query time and DB CPU.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Report generation time improved by <strong class="kw">more than 10%</strong>. Resource utilization during peak windows improved, and the team had a repeatable approach for future reporting performance issues.</p>
+            <h4>Make it concrete</h4>
+<p>S: slow peak reports → T: cut time/CPU → A: EXPLAIN, composite indexes, query rewrite, validated in lower env → R: >10% faster, measured by p95 + DB CPU. Bridge: same tuning discipline scales to high-volume transactional data.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="testing-coverage" data-level="medium" data-vimp="true">
+          <div class="qa-question">
+            <h3>Tell me about improving quality or test coverage.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">TestNG</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">60%</span></li><li><span class="kw">TestNG</span></li><li><span class="kw">60% to 90%</span></li><li><span class="kw">REST</span></li><li><span class="kw">Spring</span></li><li><span class="kw">Boot</span></li><li><span class="kw">API</span></li><li><span class="kw">CI</span></li></ul></div><h4>Situation</h4>
+            <p>Vodafone Germany projects had growing REST/Spring Boot codebases but test coverage was around <strong class="kw">60%</strong>, which increased regression risk before releases.</p>
+            <h4>Task</h4>
+            <p>Increase automated test coverage and make releases safer without slowing delivery.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Introduced/expanded <strong class="kw">TestNG</strong> suites for critical API and service paths.</li>
+              <li>Prioritized high-risk flows: integrations, edge cases, and reporting-related endpoints.</li>
+              <li>Integrated tests into the team's CI mindset so failures blocked bad merges early.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Coverage increased from <strong class="kw">60% to 90%</strong>. Fewer production surprises, faster confidence in refactors, and aligned with the ~5% faster project delivery from better engineering practices.</p>
+            <h4>Frame the why</h4>
+<p>Tie coverage to outcomes, not vanity: fewer regressions reaching prod, safer releases. A: unit + slice + integration tests, stabilized flaky ones, gated CI. R: 60%→90% with real confidence — quality that a high-stakes platform demands.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="jenkins-cicd" data-level="medium" data-vimp="true">
+          <div class="qa-question">
+            <h3>Describe building or improving CI/CD.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Jenkins</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">~60% reduction</span></li><li><span class="kw">SonarQube</span></li><li><span class="kw">CI</span></li><li><span class="kw">CD</span></li><li><span class="kw">Jenkins</span></li></ul></div><h4>Situation</h4>
+            <p>At Optima Philippines, deployments were partly manual — error-prone, slow, and inconsistent across environments.</p>
+            <h4>Task</h4>
+            <p>Automate build and deployment workflows and improve release monitoring and reliability.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Designed Jenkins pipelines: build → test → SonarQube quality gate → artifact → deploy stages per environment.</li>
+              <li>Standardized Maven builds, environment configs, and rollback-friendly steps.</li>
+              <li>Worked with the team on pipeline failures, notifications, and deployment checks.</li>
+            </ul>
+            <h4>Result</h4>
+            <p><strong class="kw">~60% reduction</strong> in manual deployment effort. More consistent releases, better traceability, and freed the team to focus on features instead of repetitive deploy steps.</p>
+            <h4>What they want</h4>
+<p>Initiative + impact on team velocity. A: automated build→test→deploy→smoke with rollback. R: ~60% manual effort cut, fewer errors. Show you improved the <em>process</em>, not just shipped tickets.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="camel-scale" data-level="hard" data-vimp="true">
+          <div class="qa-question">
+            <h3>Experience with high-volume or distributed systems?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Camel</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Camel</span></li><li><span class="kw">BSS</span></li><li><span class="kw">OSS</span></li><li><span class="kw">API</span></li></ul></div><h4>Situation</h4>
+            <p>Optima's integration layer used Apache Camel microservices connecting multiple BSS/OSS systems with very high daily transaction volume.</p>
+            <h4>Task</h4>
+            <p>Keep integrations reliable, observable, and scalable under production load (1M+ transactions/day).</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Developed and maintained Camel routes for routing, transformation, and error handling.</li>
+              <li>Improved logging, monitoring, and failure recovery patterns for production issues.</li>
+              <li>Optimized hot paths and coordinated with DB/API owners on timeouts and retries.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Stable production integrations at scale, fewer incidents from silent failures, and a platform the business could trust for daily telecom operations.</p>
+            <h4>Highlight the patterns</h4>
+<p>Talk throughput + resilience: parallel routes, streaming large payloads, bounded queues (backpressure), retry/DLQ, correlation-ID tracing. Then connect: these are exactly the patterns a high-volume financial platform relies on.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="camunda-workflow" data-level="medium">
+          <div class="qa-question">
+            <h3>Tell me about automating or optimizing a business process.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Camunda</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">~5%</span></li></ul></div><h4>Situation</h4>
+            <p>At XL Axiata, order/fulfillment flows used Camunda workflows. Performance tests were slow and some workflow paths had reliability issues under load.</p>
+            <h4>Task</h4>
+            <p>Optimize workflows and the automated testing framework around them.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Reviewed BPMN flows for redundant steps, bottlenecks, and failure branches.</li>
+              <li>Tuned workflow configurations and improved performance test execution and monitoring.</li>
+              <li>Collaborated with QA/dev on automation efficiency and scalability of test runs.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Performance test execution speed improved by <strong class="kw">~5%</strong>. Better workflow reliability, automation efficiency, and monitoring — fewer surprises before production releases.</p>
+            <h4>The angle</h4>
+<p>Orchestrating a multi-step process (BPMN) with timers/compensation and an auditable trail. Emphasize reliability + visibility in a regulated telecom domain.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="db-optimization-axiata" data-level="medium">
+          <div class="qa-question">
+            <h3>Describe database optimization work you did.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">XL Axiata</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">~10%</span></li></ul></div><h4>Situation</h4>
+            <p>XL Axiata services had queries causing slow responses and operational fallouts affecting downstream processes.</p>
+            <h4>Task</h4>
+            <p>Reduce query response time and decrease fallout rate in collaboration with the team.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Profiled slow queries and identified expensive joins and missing indexes.</li>
+              <li>Proposed and implemented indexing and query changes with peer review.</li>
+              <li>Validated in test env and monitored production metrics post-release.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Query response time improved by <strong class="kw">~10%</strong> and fallouts reduced — smoother operations and happier internal consumers of those APIs.</p>
+            <h4>Show collaboration</h4>
+<p>Beyond the tuning (indexes, query shape, ~10% faster), highlight <em>how</em>: profiled with the team, partnered with DBAs on capacity, peer-reviewed changes, documented before/after metrics. Senior signal = teamwork + measurement, not lone heroics.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="third-party-integration" data-level="medium">
+          <div class="qa-question">
+            <h3>How have you handled third-party integrations?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Integration</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">BSS</span></li><li><span class="kw">REST</span></li></ul></div><h4>Situation</h4>
+            <p>XL Axiata needed reliable communication between internal BSS components and external partner systems with different contracts, SLAs, and failure modes.</p>
+            <h4>Task</h4>
+            <p>Implement and stabilize third-party service integrations.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Defined REST/SOAP (as applicable) contracts, timeouts, retries, and idempotency where needed.</li>
+              <li>Added structured logging and clear error mapping for support teams.</li>
+              <li>Coordinated with vendors and internal teams on test data and certification environments.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Improved internal–external system communication, fewer ambiguous production failures, and faster troubleshooting when partners had outages or schema changes.</p>
+            <h4>Stress resilience</h4>
+<p>Integrations fail, so emphasize timeouts, retries with backoff, circuit breakers, idempotency, and DLQ for poison messages — plus clear contracts/versioning. Shows you design for the unhappy path, which interviewers probe.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="fuse-logger" data-level="medium">
+          <div class="qa-question">
+            <h3>Tell me about a tool or automation you built. (Fuse Logger)</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Tool</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Fuse Logger</span></li><li><span class="kw">MTTR</span></li></ul></div><h4>Situation</h4>
+            <p>Developers spent too much time SSH-ing or searching logs manually across multiple environments after integration failures.</p>
+            <h4>Task</h4>
+            <p>Build a centralized way to search Fuse/integration logs across environments.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Built <strong class="kw">Fuse Logger</strong> — unified search with filters (time, correlation ID, route, env).</li>
+              <li>Connected to existing log sources; focused on UX for on-call engineers.</li>
+              <li>Gathered feedback and iterated on performance and common query presets.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>MTTR for integration incidents dropped; less dependency on senior ops for log access. Became part of daily debugging workflow.</p>
+            <h4>Why it mattered</h4>
+<p>Position it as initiative: structured logging + correlation IDs + PII masking turned scattered logs into traceable, compliant audit trails — cutting triage time. Small tool, outsized impact on debuggability and compliance.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="api-visualizer" data-level="easy">
+          <div class="qa-question">
+            <h3>How did API Visualizer help the team?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Tool</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">API Visualizer</span></li><li><span class="kw">API</span></li><li><span class="kw">Microservice</span></li><li><span class="kw">Camel</span></li></ul></div><h4>Situation</h4>
+            <p>Microservice and Camel routes formed complex chains; new joiners struggled to understand end-to-end API flows.</p>
+            <h4>Task</h4>
+            <p>Map and visualize API flows from entry to downstream systems.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Built <strong class="kw">API Visualizer</strong> to document live/near-live request paths across services.</li>
+              <li>Linked hops with metadata (service name, protocol, typical latency).</li>
+              <li>Kept it updated as routes changed in releases.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Faster onboarding, clearer incident triage ("which hop failed?"), and better design discussions before changes.</p>
+            <h4>Impact framing</h4>
+<p>Developer-experience tooling: made API contracts visible, speeding frontend/backend alignment and reducing integration bugs. Demonstrates you spot friction and build leverage for the whole team, not just yourself.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="challenging-bug" data-level="hard" data-vimp="true">
+          <div class="qa-question">
+            <h3>Describe a difficult production issue you debugged.</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Debugging</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Camel</span></li><li><span class="kw">API</span></li><li><span class="kw">SLA</span></li><li><span class="kw">Checked DB slow</span></li></ul></div><h4>Situation</h4>
+            <p>(Template — customize with a real incident.) A production integration showed intermittent timeouts during peak load; reports and fallouts spiked.</p>
+            <h4>Task</h4>
+            <p>Find root cause quickly and restore stability without a full rollback.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Used Fuse Logger / centralized logs to trace correlation IDs across Camel routes.</li>
+              <li>Checked DB slow-query logs and partner API latency percentiles.</li>
+              <li>Identified bottleneck (e.g. missing index, connection pool size, or partner throttle).</li>
+              <li>Shipped a targeted fix and added monitoring/alerting on the metric that failed first.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Service restored to SLA; post-mortem led to a preventive index/pool config change. Shows systematic debugging, not random restarts.</p>
+            <p><em>Practice: Replace template with one real Vodafone or Optima incident you remember.</em></p>
+            <h4>Show your method</h4>
+<p>Structure it: reproduce → isolate (correlation-ID trace, logs, thread/heap dump) → hypothesize → fix → verify with a regression test. Emphasize <strong>mitigate-first</strong> (rollback/flag) then root-cause, and a blameless follow-up.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="conflict" data-level="medium">
+          <div class="qa-question">
+            <h3>Tell me about a disagreement with a teammate. How did you handle it?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Teamwork</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SQL</span></li><li><span class="kw">SLA</span></li></ul></div><h4>Situation</h4>
+            <p>(Template.) During a release, a colleague wanted a quick SQL workaround in production; I preferred fixing the root cause in the service layer to avoid tech debt.</p>
+            <h4>Task</h4>
+            <p>Deliver the fix on time while keeping system maintainability.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Listened to their urgency and constraints (deadline, customer impact).</li>
+              <li>Proposed a phased approach: minimal hotfix for immediate relief + proper fix in next sprint.</li>
+              <li>Shared data (query plan, incident history) in a short technical discussion, not email debate.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Release met SLA; root-cause fix shipped next sprint. Relationship stayed positive because we aligned on facts and customer impact first.</p>
+            <h4>What they're assessing</h4>
+<p>Maturity and collaboration. Show you focused on the problem (data/trade-offs) not the person, listened to understand, found common ground, and committed to the decision even if it wasn't yours. Avoid villainizing the teammate.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="failure-mistake" data-level="medium">
+          <div class="qa-question">
+            <h3>Tell me about a mistake you made. What did you learn?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Growth</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Jenkins</span></li><li><span class="kw">Requested peer review for infra</span></li></ul></div><h4>Situation</h4>
+            <p>(Template.) Early in a project, I deployed a config change to the wrong environment variable set, causing a brief test-env outage.</p>
+            <h4>Task</h4>
+            <p>Recover quickly and prevent recurrence.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Owned the mistake immediately, notified the team, and rolled back.</li>
+              <li>Added environment checks in Jenkins pipeline and documented deploy checklist.</li>
+              <li>Requested peer review for infra-related merges.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>No repeat incidents; team trusted me more because I was transparent. Learned: automate guards instead of relying on memory under pressure.</p>
+            <h4>Land the lesson</h4>
+<p>Pick a real, owned mistake (not a humble-brag), show the impact, how you fixed it, and—most important—the <strong>system change</strong> you made so it can't recur (test, guardrail, process). Accountability + growth is what they score.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="why-leaving" data-level="easy">
+          <div class="qa-question">
+            <h3>Why are you looking for a new opportunity?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Motivation</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">deepen</span></li><li><span class="kw">broader system design</span></li><li><span class="kw">Spring</span></li><li><span class="kw">Boot</span></li><li><span class="kw">SQL</span></li><li><span class="kw">CI</span></li><li><span class="kw">CD</span></li></ul></div><h4>Answer framework (positive, not negative)</h4>
+            <p>I've grown a lot at Amdocs — telecom scale, Spring Boot, React, SQL tuning, CI/CD, and internal tools. I'm proud of the impact (coverage 90%, deploy automation, 1M+ txn services) and shipping live products (DeskMingle, Apna Shop with real users).</p>
+            <p>Now I'm looking for a role where I can <strong class="kw">deepen</strong> backend/microservices ownership, work on <strong class="kw">broader system design</strong>, and build product-facing features end-to-end. I want to contribute at the next level of scope while still building reliable services.</p>
+            <p><em>Avoid:</em> bad-mouthing manager, pay-only answer, or "bored." <em>Do:</em> growth, impact, alignment with new role.</p>
+            <h4>Stay positive</h4>
+<p>Frame it as moving <em>toward</em> something (scale, domain, ownership, product impact) — never bad-mouth a current/past employer. Keep it brief and forward-looking; negativity here is a common red flag.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="strengths-weaknesses" data-level="easy">
+          <div class="qa-question">
+            <h3>What are your strengths and weaknesses?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Classic</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Backend delivery:</span></li><li><span class="kw">Ownership:</span></li><li><span class="kw">Quality mindset:</span></li><li><span class="kw">Spring</span></li><li><span class="kw">Boot</span></li><li><span class="kw">REST</span></li><li><span class="kw">SQL</span></li><li><span class="kw">API</span></li></ul></div><h4>Strengths</h4>
+            <ul>
+              <li><strong class="kw">Backend delivery:</strong> Java, Spring Boot, REST, PostgreSQL/SQL optimization with measurable results.</li>
+              <li><strong class="kw">Full-stack ownership:</strong> DeskMingle &amp; Apna Shop — React, OAuth2/JWT, Docker deployment with real users.</li>
+              <li><strong class="kw">Team leverage:</strong> Built tools (Fuse Logger, API Visualizer) that teams actually use daily.</li>
+              <li><strong class="kw">Quality mindset:</strong> TestNG/JUnit, SonarQube, CI/CD, production monitoring.</li>
+            </ul>
+            <h4>Weakness (honest + improving)</h4>
+            <p>Earlier I sometimes dove into fixes before writing a short design doc for cross-team changes. I've improved by outlining API contracts and rollback plans in Confluence/PR description before coding — especially for integrations.</p>
+            <h4>Be genuine</h4>
+<p>Strength: back it with evidence. Weakness: a real one + concrete steps you're taking to improve (not a disguised brag like "I work too hard"). Self-awareness + active improvement is the signal.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="leadership-initiative" data-level="medium">
+          <div class="qa-question">
+            <h3>When did you show leadership without being a manager?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Leadership</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Jenkins</span></li><li><span class="kw">TestNG</span></li><li><span class="kw">Camel</span></li></ul></div><h4>Situation</h4>
+            <p>Team lacked standardized deployment and debugging tooling across Optima integrations.</p>
+            <h4>Task</h4>
+            <p>No formal title — but someone needed to drive internal tooling and pipeline improvements.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Proposed SM Tool and Fuse Logger after listening to on-call pain points.</li>
+              <li>Drove Jenkins pipeline standards and mentored juniors on TestNG and Camel patterns.</li>
+              <li>Participated in Amdocs India Coding Champion — shows competitive problem-solving drive.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Team adopted tools voluntarily because they saved time; became go-to person for integration debugging and release automation.</p>
+            <h4>Leadership ≠ title</h4>
+<p>Use an example where you drove an outcome without authority: proposing a fix, mentoring, unblocking the team, owning an incident. Show influence, communication, and follow-through.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="tight-deadline" data-level="hard">
+          <div class="qa-question">
+            <h3>Describe working under a tight deadline.</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">Pressure</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">REST</span></li><li><span class="kw">API</span></li><li><span class="kw">SQL</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">Daily 15</span></li></ul></div><h4>Situation</h4>
+            <p>Vodafone release window with fixed customer commit date and incomplete test coverage on new REST endpoints.</p>
+            <h4>Task</h4>
+            <p>Deliver feature on time without sacrificing production stability.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Prioritized test cases by risk (payment/reporting paths first).</li>
+              <li>Parallelized: I owned API + SQL, teammate owned UI/config.</li>
+              <li>Daily 15-min sync with QA; used Jenkins pipeline for repeatable deploy to staging.</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Released on schedule with critical paths covered; no P1 in first week. Reinforced that upfront risk-based testing beats last-minute manual only.</p>
+            <h4>Show judgment</h4>
+<p>Demonstrate prioritization (cut scope, not quality), proactive communication of risk, and focus on the critical path. The good answer balances delivery <em>and</em> not shipping something broken — not heroics-at-all-costs.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <!-- 6 NEW behavioral questions -->
+        <!-- Side project / full-stack -->
+        <article class="qa-card" data-id="side-project-ownership" data-level="medium" data-vimp="true">
+          <div class="qa-question">
+            <h3>Tell me about a product you built outside of work.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Apna Shop</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Apna Shop</span></li><li><span class="kw">3 shop owners</span></li><li><span class="kw">udhaar</span></li><li><span class="kw">Spring Boot</span></li><li><span class="kw">React</span></li></ul></div><h4>Situation</h4>
+            <p>Small retail shops near me tracked inventory and customer credit (udhaar) on paper — no simple digital tool tailored to how they actually work.</p>
+            <h4>Task</h4>
+            <p>Build and deploy a retail management app real shop owners would use daily — not just a portfolio demo.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Built <strong class="kw">Apna Shop</strong> (apna-shop-zeta.vercel.app) with Spring Boot, JPA/Hibernate, PostgreSQL, React, TypeScript</li>
+              <li>Implemented OTP/JWT auth, inventory, sales, udhaar ledger, customer trust scores, revenue dashboards</li>
+              <li>Iterated from owner feedback — simplified flows for non-technical users</li>
+            </ul>
+            <h4>Result</h4>
+            <p><strong class="kw">3 shop owners</strong> use it actively for day-to-day operations — proves end-to-end ownership from idea to production users.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="why-hire-you" data-level="easy" data-vimp="true">
+          <div class="qa-question">
+            <h3>Why should we hire you?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Closing</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SQL</span></li><li><span class="kw">TestNG</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">Spring Boot</span></li><li><span class="kw">React</span></li><li><span class="kw">DeskMingle</span></li><li><span class="kw">Apna Shop</span></li><li><span class="kw">I ship production</span></li></ul></div>
+            <p>Proven backend + full-stack engineer with measurable impact — SQL &gt;10%, TestNG 60→90%, Jenkins ~60% less manual deploy, 1M+ txn/day integrations — plus live products (DeskMingle, Apna Shop) and internal tools teams adopt daily.</p>
+            <h4>Detailed explanation</h4>
+            <ul>
+              <li>I ship production-grade Java/Spring Boot and improve how teams operate, not only close tickets</li>
+              <li>I communicate with data (metrics, EXPLAIN plans, coverage reports)</li>
+              <li>I fit roles needing reliability, integration experience, and end-to-end product ownership</li>
+            </ul>
+            <h4>Follow-ups</h4>
+            <p>Tailor last bullet to job description keywords (Kafka, cloud, domain).</p>
+            <h4>Close confidently</h4>
+<p>Map your strengths to the role: Java/Spring backend, integration + resilience patterns, SQL tuning, full-stack delivery, production maturity, and an ownership mindset. End with the value you'll add, not a generic "I'm hardworking".</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="mentoring" data-level="medium">
+          <div class="qa-question">
+            <h3>Tell me about mentoring or helping a junior developer.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Mentoring</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Camel</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">TestNG</span></li><li><span class="kw">Pair on first route change</span></li></ul></div><h4>Situation</h4>
+            <p>A junior joined Optima integration team unfamiliar with Camel error handling and Jenkins pipelines.</p>
+            <h4>Task</h4>
+            <p>Help them become productive without becoming a bottleneck myself.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Pair on first route change — showed correlation ID logging and Fuse Logger workflow</li>
+              <li>Shared TestNG templates and PR checklist for integrations</li>
+              <li>Reviewed their MRs with constructive comments, not rewrite-everything</li>
+            </ul>
+            <h4>Result</h4>
+            <p>They owned a small route within a month; team had shared patterns doc — multiplied my impact beyond individual output.</p>
+            <h4>What it signals</h4>
+<p>Seniority and team multiplier. Describe how you helped (pairing, code review, breaking down a problem), what the junior achieved, and how you adapted to their level. Teaching well shows deep understanding.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="prioritization" data-level="medium">
+          <div class="qa-question">
+            <h3>How do you prioritize when everything is urgent?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Process</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SLA</span></li><li><span class="kw">SQL</span></li><li><span class="kw">API</span></li><li><span class="kw">TestNG</span></li></ul></div>
+            <ul class="brief-bullets"><li>Customer/production impact first → SLA/deadline → effort vs risk.</li><li>Communicate trade-offs to lead early.</li></ul>
+            <h4>Detailed explanation</h4>
+            <p>Example frame: P1 prod fallout &gt; release blocker &gt; tech debt. Split parallel work when possible (I take SQL, peer takes API). Say no with data: "If we take X, Y slips by Z days."</p>
+            <h4>From your experience</h4>
+            <p>Vodafone release week: risk-based TestNG on payment/reporting paths before nice-to-have UI polish.</p>
+            <h4>Give a framework</h4>
+<p>Impact × urgency, align with stakeholders, protect the critical path, and communicate trade-offs. For incidents: customer impact first. Show you make deliberate choices, not just react to whoever shouts loudest.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="feedback" data-level="easy">
+          <div class="qa-question">
+            <h3>Describe a time you received critical feedback.</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Growth</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">API</span></li><li><span class="kw">Linked doc in PR description</span></li></ul></div><h4>Situation</h4>
+            <p>Lead feedback: my integration design docs were too light before cross-team changes, causing rework.</p>
+            <h4>Task</h4>
+            <p>Improve communication without slowing delivery.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Added short Confluence template: context, API contract, rollback, test plan</li>
+              <li>Linked doc in PR description — reviewers knew scope upfront</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Fewer review cycles; aligns with weakness answer about design-before-code — shows you act on feedback.</p>
+            <h4>Show coachability</h4>
+<p>Pick feedback you genuinely acted on: how you received it without defensiveness, the concrete change you made, and the better outcome. Receiving criticism gracefully is a strong maturity signal.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="learn-tech" data-level="medium">
+          <div class="qa-question">
+            <h3>Tell me about learning a new technology quickly for work.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Learning</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Spring Security</span></li><li><span class="kw">OAuth2</span></li><li><span class="kw">WebSocket</span></li><li><span class="kw">React</span></li></ul></div><h4>Situation</h4>
+            <p>Building DeskMingle required real-time chat and secure auth on a stack I hadn't used in production at Amdocs — Spring Security with OAuth2/JWT and WebSocket messaging.</p>
+            <h4>Task</h4>
+            <p>Ship a live social-discovery app (deskmingle.com) with matching, chat, and HTTPS deployment on Linux/Docker within my own timeline.</p>
+            <h4>Action</h4>
+            <ul>
+              <li>Read Spring Security + OAuth2 docs; implemented JWT flow and protected REST endpoints</li>
+              <li>Spiked WebSocket chat locally, then integrated with React frontend</li>
+              <li>Documented OpenAPI/Swagger contracts and deployed with Docker on Linux</li>
+            </ul>
+            <h4>Result</h4>
+            <p>Live product with realtime messaging and secure auth — credible "full-stack + fast learner" story alongside Camunda/Camel work at Amdocs.</p>
+            <h4>Show your method</h4>
+<p>Describe how you ramp fast: docs + small spike/POC, read existing patterns, ask targeted questions, ship something small. Tie to a real example and the outcome.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="stay-current" data-level="easy">
+          <div class="qa-question">
+            <h3>How do you stay updated with technology?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Learning</span><span class="chevron">▼</span></div>
+          </div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Kafka</span></li><li><span class="kw">K8s</span></li><li><span class="kw">DeskMingle</span></li><li><span class="kw">Apna Shop</span></li><li><span class="kw">CodinGame</span></li></ul></div>
+            <p>Learn by doing on work + side projects (DeskMingle, Apna Shop) + focused reading on gaps (Kafka, K8s) + coding practice (CodinGame winner, Amdocs Coding Champion).</p>
+            <h4>Detailed explanation</h4>
+            <ul>
+              <li>Spring/Baeldung release notes for Boot/Security features used at work and in side apps</li>
+              <li>AWS Cloud Practitioner + Kubernetes for Beginners + YAML certs; small POCs before proposing at work</li>
+              <li>This interview prep site — structured Q&A with experience-linked answers</li>
+            </ul>
+            <h4>Follow-ups</h4>
+            <p>Avoid "I watch random YouTube" — show intentionality tied to next role.</p>
+            <h4>Be specific</h4>
+<p>Name concrete sources (docs, release notes, a few engineers/blogs, side projects like this interview-prep site) rather than "I read articles". Showing genuine, ongoing curiosity beats a vague answer.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+      </div>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

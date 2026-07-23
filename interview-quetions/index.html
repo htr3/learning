@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interview Prep Hub — Vishal Thakur</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body data-page="home">
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Interview Prep</h2>
+      <nav id="site-nav"></nav>
+    </aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>Interview Prep Hub</h1>
+        <p>Centralized study guide — behavioral STAR stories, tech topics, and your Amdocs project notes.</p>
+      </header>
+
+      <div class="tip-box">
+        <strong>How to use:</strong> Click questions for answers with <strong>📌 revision keywords</strong> (green pills) + <strong class="kw">highlighted terms</strong> in the brief explanation. Filter by <strong>Easy / Medium / Hard</strong> or <strong>⭐ Very Important</strong>. Use <em>Expand all</em> or <em>Practice mode</em> for revision.
+      </div>
+
+      <div class="grid-cards" id="topic-progress">
+        <a class="topic-card" data-topic="behavioral" href="behavioral/behavioral.html">
+          <h3>Behavioral</h3>
+          <p>STAR answers from your resume <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="projects" href="projects/projects.html">
+          <h3>Projects</h3>
+          <p>DeskMingle, Apna Shop, Fuse Logger, SM Tool, etc. <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="java" href="java/java.html">
+          <h3>Java</h3>
+          <p>Core Java, concurrency, JVM <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="springboot" href="springboot/springboot.html">
+          <h3>Spring Boot</h3>
+          <p>REST, JPA, security, transactions <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="microservices" href="microservices/microservices.html">
+          <h3>Microservices</h3>
+          <p>Camel, APIs, scale, resilience <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="sql" href="sql/sql.html">
+          <h3>SQL</h3>
+          <p>50 basic queries, tuning, Vodafone story <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="testing" href="testing/testing.html">
+          <h3>Testing</h3>
+          <p>JUnit, Mockito, TestNG <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="devops" href="devops/devops.html">
+          <h3>DevOps</h3>
+          <p>Jenkins, Docker, K8s, AWS <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="production" href="production/production.html">
+          <h3>Production</h3>
+          <p>On-call, incidents, SLOs, deploys, 1M txn/day <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="kafka" href="kafka/kafka.html">
+          <h3>Kafka</h3>
+          <p>Detailed beginner-friendly Kafka guide <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="aws" href="aws/aws.html">
+          <h3>AWS</h3>
+          <p>EC2/ECS/Lambda, S3/RDS/DynamoDB, SQS/SNS, VPC/IAM, CloudWatch, deployments <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="networking" href="networking/networking.html">
+          <h3>Networking</h3>
+          <p>OSI/TCP-IP, TCP/UDP, HTTP/HTTPS, TLS, DNS, troubleshooting <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="linux" href="linux/linux.html">
+          <h3>Linux</h3>
+          <p>Shell, files/text, permissions, processes, perf troubleshooting, JVM on Linux <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="dsa" href="dsa/dsa.html">
+          <h3>DSA</h3>
+          <p>11 sections + <a href="dsa/dsa-visuals.html" onclick="event.stopPropagation()">interactive 3D visuals</a> <span class="tag progress-badge"></span></p>
+        </a>
+        <a class="topic-card" data-topic="system-design" href="system design/system-design.html">
+          <h3>System Design</h3>
+          <p>Architecture Q&amp;A + <a href="system design/system-design-diagrams.html" onclick="event.stopPropagation()">20 diagrams</a> + <a href="system design/system-design.html#piyush-playlist" onclick="event.stopPropagation()">Piyush Garg SD videos</a> <span class="tag progress-badge"></span></p>
+        </a>
+      </div>
+
+      <p style="margin-top: 2rem; font-size: 0.85rem; color: var(--muted);">
+        Resume: <a href="Vishal_Thakur_resume_f.pdf">Vishal_Thakur_resume_f.pdf</a> · Open <code>index.html</code> in a browser to start.
+      </p>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="assets/app.js"></script>
+</body>
+</html>

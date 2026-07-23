@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Design — Detailed Diagrams</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="system-design-diagrams" class="diagrams-page">
+  <div class="layout layout-diagrams">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main main-diagrams">
+      <header class="page-header">
+        <h1>System Design — Detailed Diagrams</h1>
+        <p><strong>20</strong> large flow diagrams for interview whiteboarding — telco stories, classic problems, and patterns from your prep guide.</p>
+      </header>
+
+      <div class="diagram-banner diagram-banner-back">
+        <span>← Back to Q&amp;A</span>
+        <a href="system-design.html">System Design questions</a>
+        <span class="diagram-banner-sep">·</span>
+        <a href="system-design.html#piyush-playlist"><strong>Piyush Garg SD playlist</strong></a>
+        <span class="diagram-banner-sep">·</span>
+        <a href="../index.html">Home hub</a>
+      </div>
+
+      <nav class="diagram-toc" aria-label="Diagram sections">
+        <h2 class="diagram-toc-title">Jump to diagram</h2>
+        <div class="diagram-toc-links">
+          <a href="#interview-framework">Interview framework</a>
+          <a href="#reporting-architecture">Telecom reporting</a>
+          <a href="#vodafone-reporting-microservice">Vodafone microservice</a>
+          <a href="#optima-camel-integration">Optima Camel 1M+ txn</a>
+          <a href="#order-provisioning-flow">Order provisioning</a>
+          <a href="#api-gateway-auth">API Gateway + auth</a>
+          <a href="#cache-aside">Cache-aside</a>
+          <a href="#distributed-cache-redis">Distributed cache</a>
+          <a href="#saga-order-provisioning">Saga / provisioning</a>
+          <a href="#event-driven-kafka">Event-driven Kafka</a>
+          <a href="#dlq-retry-flow">DLQ + retry</a>
+          <a href="#url-shortener">URL shortener</a>
+          <a href="#rate-limiter">Rate limiter</a>
+          <a href="#fuse-logger-tracing">Fuse Logger trace</a>
+          <a href="#db-read-replica-reporting">Read replica path</a>
+          <a href="#load-balancer-scale">Load balancer</a>
+          <a href="#horizontal-scaling">Horizontal scale</a>
+          <a href="#notification-system">Notification system</a>
+          <a href="#cicd-deploy-flow">CI/CD deploy</a>
+          <a href="#idempotent-api-flow">Idempotent API</a>
+        </div>
+      </nav>
+
+      <div class="diagram-grid">
+
+        <section class="diagram-card" id="interview-framework">
+          <h2>System design interview framework (45 min)</h2>
+          <p class="diagram-desc">Time-boxed flow for whiteboard rounds — matches fundamentals Q&amp;A.</p>
+          <pre class="flow-diagram flow-diagram-large">┌─────────────────────────────────────────────────────────────────────────┐
+│  MIN 0–5   CLARIFY                                                       │
+│  Functional reqs · Non-functional (QPS, p99, SLA) · Constraints · Scope  │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                v
+┌─────────────────────────────────────────────────────────────────────────┐
+│  MIN 5–10  ESTIMATE                                                      │
+│  DAU × actions/day ÷ 86400 ≈ avg QPS · peak 2–5× · storage/day         │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                v
+┌─────────────────────────────────────────────────────────────────────────┐
+│  MIN 10–15 API / DATA MODEL SKETCH                                       │
+│  Key resources · verbs · idempotency keys · read vs write paths          │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                v
+┌─────────────────────────────────────────────────────────────────────────┐
+│  MIN 15–25 HIGH-LEVEL DIAGRAM (boxes + arrows)                           │
+│  Client → LB → Gateway → Services → Cache / DB / Queue                   │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                v
+┌─────────────────────────────────────────────────────────────────────────┐
+│  MIN 25–40 DEEP DIVE (critical path only)                                │
+│  Bottleneck · failure modes · consistency · observability                │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                v
+┌─────────────────────────────────────────────────────────────────────────┐
+│  MIN 40–45 TRADE-OFFS &amp; WRAP                                             │
+│  What you'd do with 2× scale · cost vs complexity · your production story│
+└─────────────────────────────────────────────────────────────────────────┘</pre>
+        </section>
+
+        <section class="diagram-card" id="reporting-architecture">
+          <h2>Design a telecom reporting system (classic)</h2>
+          <p class="diagram-desc">Batch + API + cache + replica — Vodafone-domain classic problem.</p>
+          <div class="mermaid">
+flowchart TB
+  subgraph sources["Source systems"]
+    B1[Billing CDR]
+    B2[Usage events]
+    B3[CRM snapshots]
+  end
+  subgraph ingest["Ingest layer"]
+    K[Kafka / nightly batch]
+    ETL[Spark or SQL ETL]
+  end
+  subgraph store["Analytics store"]
+    DW[(Star schema: fact_usage, dim_subscriber)]
+    REP1[(Read replica 1)]
+    REP2[(Read replica 2)]
+  end
+  subgraph serve["Serve layer"]
+    API[Spring Boot Report API]
+    REDIS[(Redis: hot dashboards)]
+    PORTAL[Ops portal / BI]
+  end
+  B1 --> K
+  B2 --> K
+  B3 --> ETL
+  K --> ETL
+  ETL --> DW
+  DW --> REP1
+  DW --> REP2
+  REP1 --> API
+  REP2 --> API
+  API --> REDIS
+  API --> PORTAL
+          </div>
+          <pre class="flow-diagram flow-diagram-large">Billing/Usage ──► Kafka/Batch ──► ETL ──► Fact/Dim tables (MySQL)
+                                              │
+                    ┌─────────────────────────┼─────────────────────────┐
+                    v                         v                         v
+              Read Replica A            Read Replica B            Pre-agg tables
+                    │                         │                         │
+                    └─────────────┬───────────┴─────────────────────────┘
+                                  v
+                    Report REST API ──► Redis (TTL hot reports) ──► Dashboard
+                    OLTP primary ◄── writes only (never heavy report scan)</pre>
+        </section>
+
+        <section class="diagram-card" id="vodafone-reporting-microservice">
+          <h2>Vodafone Spring Boot reporting microservice flow</h2>
+          <p class="diagram-desc">Your experience story — API, tuned SQL, replica, Jenkins gate.</p>
+          <div class="mermaid">
+sequenceDiagram
+  participant Ops as Ops Portal
+  participant GW as API Gateway
+  participant RB as Report Boot Service
+  participant R as Read Replica
+  participant P as Primary MySQL
+  participant J as Jenkins
+  Ops->>GW: GET /reports/usage?accountId=&amp;date=
+  GW->>GW: JWT validate + rate limit
+  GW->>RB: forward + X-Correlation-Id
+  RB->>RB: Check Redis dashboard cache
+  alt cache miss
+    RB->>R: SELECT agg_daily_usage (indexed)
+    R-->>RB: rows
+    RB->>RB: fill Redis TTL 5m
+  end
+  RB-->>Ops: 200 JSON report
+  Note over P,R: Writes/subscriber updates → Primary only
+  J->>RB: deploy + Actuator /health smoke
+          </div>
+          <pre class="flow-diagram flow-diagram-large">  Ops User
+      │
+      v
+  [ API Gateway ] ──auth──► [ Report Microservice (Spring Boot) ]
+      │                              │
+      │                              ├──► Redis? (dashboard cache hit → return)
+      │                              │
+      │                              └──► Read Replica
+      │                                       │
+      │                                       └──► agg_daily_usage
+      │                                            (composite index: date, account_id)
+      │
+  Subscriber Tool / OLTP writes ───────────────► Primary MySQL (not for heavy reports)
+
+  Deploy path: Git push → Jenkins → TestNG gate → Actuator /health OK → traffic</pre>
+        </section>
+
+        <section class="diagram-card" id="optima-camel-integration">
+          <h2>Optima Camel — 1M+ transactions/day integration</h2>
+          <p class="diagram-desc">Peak buffering, idempotent consumers, circuit breaker, DLQ.</p>
+          <div class="mermaid">
+flowchart LR
+  subgraph ingress["Ingress"]
+    CH[Channel APIs]
+    GW[Gateway]
+  end
+  subgraph buffer["Buffer at peak"]
+    K[Kafka / JMS]
+  end
+  subgraph process["Camel runtime"]
+    C1[Consumer pod 1]
+    C2[Consumer pod 2]
+    C3[Consumer pod N]
+  end
+  subgraph partners["Downstream"]
+    BSS[BSS APIs]
+    OSS[Partner OSS]
+  end
+  CH --> GW --> K
+  K --> C1 & C2 & C3
+  C1 --> BSS
+  C2 --> OSS
+  C3 --> BSS
+          </div>
+          <pre class="flow-diagram flow-diagram-large">Peak (billing cycle)          Steady state
+        │                            │
+        v                            v
+   Partner spike              ~12 avg TPS (~50 peak)
+        │                            │
+        v                            v
+┌───────────────┐            ┌───────────────┐
+│ Kafka / JMS   │  buffer    │ Camel route   │
+│ (durability)  │───────────►│ consumer pool │──► idempotent handler
+└───────────────┘            └───────┬───────┘         (messageId table)
+                                     │
+                     ┌───────────────┼───────────────┐
+                     v               v               v
+              Partner HTTP     Circuit OPEN?      DLQ after N retries
+              (timeout 3s)     → fail fast        → ops replay tool
+                     │
+                     └──► Fuse Logger: same correlationId all hops</pre>
+        </section>
+
+        <section class="diagram-card" id="order-provisioning-flow">
+          <h2>Order provisioning flow (Gateway → Camel → BSS)</h2>
+          <p class="diagram-desc">Sync accept + async orchestration — integration-flow question.</p>
+          <div class="mermaid">
+flowchart TB
+  CL[Retail / Partner channel] --> GW[API Gateway]
+  GW --> OS[Order Service]
+  OS --> DB[(Order DB)]
+  OS -->|202 + trackingId| CL
+  OS --> WF[Camunda or Camel workflow]
+  WF --> P1[Credit check BSS]
+  WF --> P2[Network provision]
+  WF --> P3[Activate SIM]
+  WF --> K[Kafka: OrderStatusChanged]
+  K --> OS
+  OS --> N[Notification consumer]
+          </div>
+          <pre class="flow-diagram flow-diagram-large">POST /orders
+    │
+    v
+[Gateway] ──► [Order Service] ──► persist PENDING + idempotency key
+    │                │
+    │                └──► 202 Accepted { trackingId }
+    │                │
+    │                └──► publish / start workflow
+    │                              │
+    │                              v
+    │                    [ Camunda BPMN | Camel routes ]
+    │                              │
+    │              ┌───────────────┼───────────────┐
+    │              v               v               v
+    │         ReserveCredit   ProvisionNetwork   Activate
+    │              │               │               │
+    │              └───────────────┴───────────────┘
+    │                              │
+    │                              v
+    │                    status events ──► Kafka ──► Order Service updates state
+    │                              │
+    │                              └──► on failure: compensating step or DLQ</pre>
+        </section>
+
+        <section class="diagram-card" id="api-gateway-auth">
+          <h2>API Gateway + authentication flow</h2>
+          <p class="diagram-desc">North-south entry — TLS, JWT, rate limit, routing.</p>
+          <div class="mermaid">
+sequenceDiagram
+  participant C as Client
+  participant G as API Gateway
+  participant A as Auth Service
+  participant S as Backend Service
+  C->>G: HTTPS POST /orders + Bearer JWT
+  G->>G: TLS terminate
+  G->>G: Rate limit check (Redis)
+  G->>A: validate JWT / introspect
+  A-->>G: claims: sub, roles, tenant
+  G->>G: AuthZ: scope orders:write?
+  G->>S: forward + X-Correlation-Id + tenant header
+  S->>S: business logic + own AuthZ
+  S-->>G: 201 Created
+  G-->>C: 201 + request-id
+          </div>
+          <pre class="flow-diagram flow-diagram-large">                    INTERNET
+                        │
+                        v
+              ┌─────────────────────┐
+              │    API GATEWAY      │
+              │  · TLS termination  │
+              │  · WAF / IP allow   │
+              │  · Rate limit       │
+              │  · JWT validate     │──────► Auth Service (optional)
+              │  · Route /orders    │
+              │  · Access log       │
+              └──────────┬──────────┘
+                         │
+         ┌───────────────┼───────────────┬───────────────┐
+         v               v               v               v
+   [Order Service] [Report Service] [Camel Integration] [BFF Mobile]
+         │               │               │
+         └── each checks scopes ─────────┘
+              (defense in depth — gateway + service)</pre>
+        </section>
+
+        <section class="diagram-card" id="cache-aside">
+          <h2>Cache-aside pattern (read path)</h2>
+          <p class="diagram-desc">App owns cache population — Redis + MySQL.</p>
+          <div class="mermaid">
+flowchart TD
+  C[Client] --> A[Application]
+  A --> R{Redis GET key?}
+  R -->|HIT| A
+  R -->|MISS| A
+  A --> D[(Database)]
+  D --> A
+  A -->|SET key TTL| R
+  A --> C
+          </div>
+          <pre class="flow-diagram flow-diagram-large">READ request
+    │
+    v
+[ App ] ──GET──► [ Redis ]
+    │                │
+    │           HIT? ├── YES ──► return cached JSON (fast path)
+    │                │
+    │           MISS └──► [ App ] ──SELECT──► [ MySQL ]
+    │                              │
+    │                              └──► SET Redis (TTL + jitter)
+    │                              └──► return to client
+
+WRITE request
+    │
+    v
+[ App ] ──UPDATE──► [ MySQL ]  (source of truth)
+    │
+    └──► DELETE or UPDATE cache key (invalidation)
+         (stale cache worse than miss)
+
+Failure modes: thundering herd → single-flight lock
+               cache penetration → bloom filter for known keys</pre>
+        </section>
+
+        <section class="diagram-card" id="distributed-cache-redis">
+          <h2>Distributed cache — Redis cluster</h2>
+          <p class="diagram-desc">Sharding, replication, cache-aside at app tier.</p>
+          <pre class="flow-diagram flow-diagram-large">         [ App instances ]
+                 │      │      │
+                 └──────┼──────┘
+                        v
+              ┌─────────────────────┐
+              │  Redis Cluster      │
+              │  consistent hash    │
+              └─────────┬───────────┘
+                        │
+        ┌───────────────┼───────────────┐
+        v               v               v
+   [ Shard A ]     [ Shard B ]     [ Shard C ]
+   primary+replica primary+replica primary+replica
+
+Key design:
+  · TTL per key type (reference data 5m, session 30m)
+  · Hot key? local in-process LRU + Redis
+  · Eviction: allkeys-lru under memory pressure
+  · App: cache-aside (not DB write-through unless required)</pre>
+          <div class="mermaid">
+flowchart LR
+  A1[App 1] --> RC[Redis Cluster proxy]
+  A2[App 2] --> RC
+  RC --> S1[Shard 1]
+  RC --> S2[Shard 2]
+  RC --> S3[Shard 3]
+  S1 --> R1[Replica]
+          </div>
+        </section>
+
+        <section class="diagram-card" id="saga-order-provisioning">
+          <h2>Saga pattern — order provisioning (orchestrated)</h2>
+          <p class="diagram-desc">Camunda / choreographed steps with compensations.</p>
+          <div class="mermaid">
+stateDiagram-v2
+  [*] --> CreateOrder
+  CreateOrder --> ReserveCredit: OK
+  ReserveCredit --> ProvisionNetwork: OK
+  ProvisionNetwork --> Activate: OK
+  Activate --> [*]: Complete
+  ProvisionNetwork --> CompensateCredit: FAIL
+  Activate --> CompensateNetwork: FAIL
+  CompensateCredit --> Failed
+  CompensateNetwork --> CompensateCredit
+          </div>
+          <pre class="flow-diagram flow-diagram-large">ORCHESTRATED SAGA (Camunda BPMN — XL Axiata style)
+
+  Step 1: CreateOrder          (local TX, state=PENDING)
+      │
+      v
+  Step 2: ReserveCredit        ──fail──► Compensate: release hold
+      │
+      v
+  Step 3: ProvisionNetwork     ──fail──► Compensate: cancel reservation + notify
+      │
+      v
+  Step 4: Activate            ──fail──► Compensate: deprovision + refund path
+      │
+      v
+  COMPLETED
+
+Each step: idempotent API call + stored sagaId
+No 2PC across BSS partners — eventual consistency + human task on timeout</pre>
+        </section>
+
+        <section class="diagram-card" id="event-driven-kafka">
+          <h2>Event-driven architecture (Kafka)</h2>
+          <p class="diagram-desc">Outbox, async consumers, fan-out.</p>
+          <div class="mermaid">
+sequenceDiagram
+  participant C as Client
+  participant O as Order API
+  participant DB as Order DB
+  participant OB as Outbox poller
+  participant K as Kafka
+  participant B as Billing consumer
+  participant N as Notification consumer
+  C->>O: POST /orders
+  O->>DB: INSERT order + outbox row (1 TX)
+  O-->>C: 202 Accepted
+  OB->>DB: poll unpublished
+  OB->>K: OrderCreated event
+  K->>B: consume partition by accountId
+  K->>N: consume same topic
+  B->>B: idempotent process
+          </div>
+          <pre class="flow-diagram flow-diagram-large">┌──────────┐     POST /orders      ┌─────────────┐
+│  Client  │ ────────────────────► │ Order API   │
+└──────────┘                       └──────┬──────┘
+                                          │ single DB transaction
+                                          v
+                                   ┌─────────────┐
+                                   │ orders      │
+                                   │ outbox      │──► poller ──► Kafka topic: orders
+                                   └─────────────┘         │
+                                                           ├──► Billing consumer
+                                                           ├──► Notification consumer
+                                                           └──► Analytics sink (S3/warehouse)
+
+Partition key = accountId  →  per-subscriber ordering
+Retention = audit + replay for new consumer deploy</pre>
+        </section>
+
+        <section class="diagram-card" id="dlq-retry-flow">
+          <h2>DLQ and retry in messaging design</h2>
+          <p class="diagram-desc">Backoff, max retries, ops replay — Optima production pattern.</p>
+          <pre class="flow-diagram flow-diagram-large">Kafka topic: orders
+        │
+        v
+┌───────────────┐
+│   Consumer    │
+└───────┬───────┘
+        │
+        v
+   process() ──success──► commit offset
+        │
+     failure
+        │
+        v
+   retry count &lt; 3 ?
+    │         │
+   YES        NO
+    │         │
+    v         v
+ publish    publish to
+ to retry   DLQ topic
+ topic      │
+ (delay     v
+ 5s,30s)  ┌────────────┐
+    │     │ DLQ store  │──► Fuse Logger alert
+    │     └─────┬──────┘
+    │           v
+    │     Ops replay tool (idempotent)
+    │
+    └──► after backoff, re-consume</pre>
+          <div class="mermaid">
+flowchart LR
+  T[Main topic] --> C[Consumer]
+  C -->|ok| Done[Commit offset]
+  C -->|fail| R{retries left?}
+  R -->|yes| RT[Retry topic delay]
+  RT --> C
+  R -->|no| DLQ[Dead letter queue]
+  DLQ --> Ops[Manual replay]
+          </div>
+        </section>
+
+        <section class="diagram-card" id="url-shortener">
+          <h2>URL shortener — read/write paths</h2>
+          <p class="diagram-desc">Classic design — encode ID, cache hot links, async analytics.</p>
+          <div class="mermaid">
+flowchart TB
+  subgraph write["Write path"]
+    W1[POST /shorten] --> W2[Generate ID / base62]
+    W2 --> W3[(Shard DB)]
+    W3 --> W4[Return short URL]
+  end
+  subgraph read["Read path"]
+    R1[GET /abc123] --> CDN[CDN edge]
+    CDN --> LB[Load balancer]
+    LB --> APP[Redirect service]
+    APP --> CACHE{Redis?}
+    CACHE -->|hit| R301[301 Location]
+    CACHE -->|miss| DB[(DB lookup)]
+    DB --> CACHE
+    DB --> R301
+  end
+  W3 -.->|async| K[Kafka clicks]
+  K --> AN[Analytics DB]
+          </div>
+          <pre class="flow-diagram flow-diagram-large">WRITE:  Client ──POST /shorten──► App ──INSERT──► DB (auto-inc id → base62)
+                                              └──► return https://short/xyz
+
+READ:   Client ──GET /xyz──► CDN? ──► LB ──► App ──► Redis ──hit──► 301 → long URL
+                                              │
+                                              miss ──► DB ──► fill Redis ──► 301
+
+Scale:  100:1 read:write · partition DB by id range · cache 20% hot URLs = 80% traffic</pre>
+        </section>
+
+        <section class="diagram-card" id="rate-limiter">
+          <h2>Rate limiter at API Gateway</h2>
+          <p class="diagram-desc">Token bucket / sliding window in Redis.</p>
+          <div class="mermaid">
+flowchart TD
+  R[Incoming request] --> G[Gateway]
+  G --> K[Redis: INCR apiKey:window]
+  K --> C{count &lt;= limit?}
+  C -->|yes| F[Forward to service]
+  C -->|no| E429[429 + Retry-After]
+  F --> S[Backend]
+          </div>
+          <pre class="flow-diagram flow-diagram-large">Request + API-Key: partner-42
+        │
+        v
+┌──────────────────┐
+│  API Gateway     │
+│  key = partner-42:2026052114  (sliding window bucket)
+│  Redis INCR → count=847       limit=1000/min
+└────────┬─────────┘
+         │
+    count &lt;= 1000 ?
+    │            │
+   YES          NO
+    │            │
+    v            v
+ forward      429 Too Many Requests
+ to service   Retry-After: 23
+
+Algorithms: token bucket (burst OK) · sliding window (smoother) · fixed window (simple)</pre>
+        </section>
+
+        <section class="diagram-card" id="fuse-logger-tracing">
+          <h2>Fuse Logger — distributed correlation trace</h2>
+          <p class="diagram-desc">X-Correlation-Id across Gateway, Camel, partner HTTP.</p>
+          <div class="mermaid">
+sequenceDiagram
+  participant C as Channel
+  participant G as Gateway
+  participant O as Order Svc
+  participant R as Camel Route
+  participant P as Partner BSS
+  participant L as Fuse Logger
+  C->>G: X-Correlation-Id: abc-99
+  G->>O: same header
+  O->>R: propagate abc-99
+  R->>P: HTTP + abc-99
+  G->>L: structured log
+  O->>L: structured log
+  R->>L: structured log
+  P-->>R: response
+  Note over L: search correlationId=abc-99 → full hop timeline
+          </div>
+          <pre class="flow-diagram flow-diagram-large">X-Correlation-Id: 7f3a-8821  (generated at edge if missing)
+
+[ Channel ] ──► [ Gateway ] ──► [ Order Service ] ──► [ Camel route ]
+     │               │                  │                    │
+     └───────────────┴──────────────────┴────────────────────┘
+                              │
+                              v
+                    ┌─────────────────────┐
+                    │   Fuse Logger       │
+                    │   index: corrId,    │
+                    │   env, service, ts  │
+                    └─────────────────────┘
+                              │
+                              v
+              Engineer: "show all hops for 7f3a-8821"
+              → timeline: gateway 12ms → order 4ms → camel 890ms → partner timeout
+
+Links to API Visualizer: topology graph + latency per hop</pre>
+        </section>
+
+        <section class="diagram-card" id="db-read-replica-reporting">
+          <h2>DB read replica — reporting path</h2>
+          <p class="diagram-desc">OLTP primary vs analytics replica — Vodafone SQL tuning angle.</p>
+          <div class="mermaid">
+flowchart LR
+  subgraph oltp["OLTP path"]
+    W[Writes / subscriber updates] --> P[(Primary MySQL)]
+  end
+  subgraph analytics["Reporting path"]
+    P -->|async binlog| R1[(Replica 1)]
+    P -->|async binlog| R2[(Replica 2)]
+    R1 --> API[Report API heavy SELECT]
+    R2 --> ST[Subscriber Tool read]
+  end
+          </div>
+          <pre class="flow-diagram flow-diagram-large">                    WRITE PATH (low latency)
+  Apps ──INSERT/UPDATE──► [ PRIMARY MySQL ]
+                              │
+                              │ binlog replication (async, lag 100ms–2s)
+                              v
+              ┌───────────────┴───────────────┐
+              v                               v
+        [ REPLICA 1 ]                 [ REPLICA 2 ]
+              │                               │
+              │                               │
+    Report API (aggregates)          Subscriber Tool lookups
+    EXPLAIN + composite indexes      (tolerate slight lag)
+
+NEVER:  heavy ad-hoc report on Primary during peak billing
+FIX:    pre-agg table agg_daily_usage · partition by month · cache dashboard</pre>
+        </section>
+
+        <section class="diagram-card" id="load-balancer-scale">
+          <h2>Load balancer — L4/L7 and health checks</h2>
+          <p class="diagram-desc">Traffic distribution before app tier.</p>
+          <pre class="flow-diagram flow-diagram-large">                         [ Clients / Partners ]
+                                    │
+                                    v
+                         ┌──────────────────────┐
+                         │   L7 Load Balancer   │
+                         │  · TLS               │
+                         │  · path routing      │
+                         │    /api/orders → pool A
+                         │    /api/reports → pool B
+                         │  · sticky session? (usually NO for APIs)
+                         └──────────┬───────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              v                     v                     v
+        [ Pod 1 ✓ ready ]   [ Pod 2 ✓ ready ]   [ Pod 3 ✗ failing ]
+              │                     │              (removed from pool)
+              └─────────────────────┴─────────────────────┘
+                                    │
+                         Algorithms: round-robin · least-conn · consistent hash</pre>
+          <div class="mermaid">
+flowchart TB
+  C[Clients] --> LB[L7 Load Balancer]
+  LB --> H{Health check /actuator/health}
+  H --> P1[Instance 1]
+  H --> P2[Instance 2]
+  H -.->|unhealthy| P3[Instance 3 removed]
+          </div>
+        </section>
+
+        <section class="diagram-card" id="horizontal-scaling">
+          <h2>Horizontal scaling — stateless app tier</h2>
+          <p class="diagram-desc">Scale out app pods; shared DB and cache.</p>
+          <pre class="flow-diagram flow-diagram-large">BEFORE (vertical)                    AFTER (horizontal)
+┌─────────────────────┐              ┌─────────┐
+│  One big VM         │              │   LB    │
+│  App + local state  │              └────┬────┘
+└─────────────────────┘                   │
+                                   ┌──────┼──────┐
+                                   v      v      v
+                                [App1] [App2] [App3]   ← stateless, no session in memory
+                                   │      │      │
+                                   └──────┼──────┘
+                                          v
+                              ┌───────────────────────┐
+                              │ Shared Redis + MySQL  │
+                              │ Kafka consumer group  │
+                              └───────────────────────┘
+
+Scale trigger: CPU &gt; 70% · p99 latency · Kafka consumer lag
+K8s: HPA on CPU/RPS · rolling deploy · readiness gate</pre>
+        </section>
+
+        <section class="diagram-card" id="notification-system">
+          <h2>Notification system (SMS / email / push)</h2>
+          <p class="diagram-desc">Outbox, priority queues, provider workers.</p>
+          <div class="mermaid">
+flowchart TB
+  API[Notification API] --> DB[(Outbox DB)]
+  DB --> PUB[Publisher]
+  PUB --> QH[High priority queue]
+  PUB --> QN[Normal queue]
+  QH --> WS[SMS worker pool]
+  QN --> WE[Email worker pool]
+  WS --> TW[Twilio / SMSC]
+  WE --> SMTP[SMTP relay]
+  WS --> EV[Kafka: DeliveryStatus]
+  WE --> EV
+          </div>
+          <pre class="flow-diagram flow-diagram-large">POST /notifications  { channel, templateId, subscriberId }
+        │
+        v
+[ API ] ──TX──► [ outbox table: PENDING ]
+        │
+        └──► 202 { notificationId }
+
+Background publisher ──► Kafka topics by priority
+        │
+        ├──► SMS workers ──► telco SMSC (rate limit per provider)
+        │
+        ├──► Email workers ──► SMTP
+        │
+        └──► Push workers ──► FCM/APNs
+
+Status: SENT / FAILED / RETRY ──► event bus ──► Order service updates UI</pre>
+        </section>
+
+        <section class="diagram-card" id="cicd-deploy-flow">
+          <h2>CI/CD deploy flow (Jenkins + Actuator)</h2>
+          <p class="diagram-desc">Your Optima/Vodafone pipeline — build, test, rolling deploy, rollback.</p>
+          <div class="mermaid">
+flowchart LR
+  DEV[Developer push] --> J[Jenkins]
+  J --> B[Maven build]
+  B --> T[TestNG + unit]
+  T --> N[Nexus artifact]
+  N --> D[Deploy stage]
+  D --> R[Rolling restart pods]
+  R --> H[Actuator /health smoke]
+  H -->|pass| TR[Traffic on new version]
+  H -->|fail| RB[Rollback previous tag]
+          </div>
+          <pre class="flow-diagram flow-diagram-large">git push (feature branch → main)
+    │
+    v
+┌─────────────────────────────────────────────────────────────┐
+│ JENKINS PIPELINE                                            │
+│  1. checkout                                                │
+│  2. mvn clean package                                       │
+│  3. TestNG + unit (fail fast — block bad artifact)          │
+│  4. publish to Nexus: com.amdocs/report-svc:1.4.2           │
+│  5. deploy to env (dev → test → prod approval)              │
+└────────────────────────────┬────────────────────────────────┘
+                             v
+              ┌──────────────────────────────┐
+              │ LB drains old pod (optional) │
+              │ Start new pods               │
+              │ curl /actuator/health        │
+              │   UP + DB + disk → ready     │
+              └──────────────┬───────────────┘
+                             │
+                    pass ──► route traffic
+                    fail ──► rollback Nexus tag N-1 + alert</pre>
+        </section>
+
+        <section class="diagram-card" id="idempotent-api-flow">
+          <h2>Idempotent API — safe retries</h2>
+          <p class="diagram-desc">Idempotency-Key header + stored response — activation / orders.</p>
+          <div class="mermaid">
+sequenceDiagram
+  participant C as Client
+  participant G as Gateway
+  participant S as Service
+  participant DB as Idempotency store
+  C->>G: POST /activate Idempotency-Key: abc-123
+  G->>S: forward
+  S->>DB: lookup abc-123
+  alt first request
+    S->>S: process activation
+    S->>DB: store abc-123 + 201 response
+    S-->>C: 201 Created
+  else retry same key
+    DB-->>S: cached 201 body
+    S-->>C: 201 Created (no double charge)
+  end
+          </div>
+          <pre class="flow-diagram flow-diagram-large">POST /activate
+Headers: Idempotency-Key: abc-123
+Body:    { simId, planId }
+
+First call:
+  Service ──► idempotency_keys table: miss
+         ──► BSS activate (side effect ONCE)
+         ──► INSERT key abc-123, response_hash, status=201
+         ──► return 201
+
+Retry (network timeout, client retries same key):
+  Service ──► lookup abc-123: HIT
+         ──► return stored 201 (NO second BSS call)
+
+Kafka consumer variant:
+  messageId in processed_events table — at-least-once + idempotent = exactly-once effect</pre>
+        </section>
+
+      </div>
+
+      <div class="diagram-banner diagram-banner-back" style="margin-top: 2rem;">
+        <a href="system-design.html">← Back to System Design Q&amp;A</a>
+      </div>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: "dark", securityLevel: "loose" });
+  </script>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

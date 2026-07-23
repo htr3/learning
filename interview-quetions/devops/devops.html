@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevOps — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="devops">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>DevOps Interview Prep</h1>
+        <p>Click questions for full answers. Filter by <strong>Easy / Medium / Hard</strong> or <strong>⭐ Very Important</strong>. Jenkins ~60% manual effort reduction.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> fundamentals</span>
+        <span><span class="level level-medium">Medium</span> 3 YOE depth</span>
+        <span><span class="level level-hard">Hard</span> senior / tricky</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+      <div class="qa-list">
+
+        <article class="qa-card" data-id="cicd" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>What is CI/CD?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Basics</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CI</span></li><li><span class="kw">CD</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">TestNG</span></li></ul></div>
+            <p><strong class="kw">CI</strong> = merge code frequently, automated build+test on each commit. <strong class="kw">CD</strong> = automated deploy to staging/prod with approvals and rollback.</p>
+            <h4>From your experience</h4>
+            <p>Optima Jenkins: Maven build → TestNG → artifact to Nexus → deploy stages per env — ~60% less manual deploy effort.</p>
+            <h4>Follow-ups</h4>
+            <p>Continuous deployment vs delivery? Deployment = auto to prod; delivery = auto to staging, manual prod gate.</p>
+            <h4>Split the terms</h4>
+<p><strong class="kw">CI</strong> = merge + build + test on every commit (catch breakage early). <strong class="kw">CD</strong> = Continuous Delivery (always deployable, deploy is a button) or Continuous Deployment (auto-deploy on green). Benefit: small, frequent, low-risk releases with fast feedback.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="jenkins-story" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>STAR: Jenkins pipelines — 60% manual effort reduction</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Jenkins</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Jenkins</span></li><li><span class="kw">SM Tool complemented Jenkins for Fuse</span></li></ul></div>
+            <p>Replaced manual JAR copy/config/restart with standardized pipeline — consistent releases, faster feedback, team freed for features.</p>
+            <h4>Detailed explanation</h4>
+            <ul>
+              <li>Declarative or scripted pipeline with stages: checkout, build, test, publish, deploy</li>
+              <li>Credentials for SSH/deploy; parameterized env (dev/test/prod)</li>
+              <li>Notifications on failure; smoke test post-deploy (health URL)</li>
+              <li>SM Tool complemented Jenkins for Fuse-specific deploy steps</li>
+            </ul>
+            <h4>Example</h4>
+            <pre><code class="kw-code">pipeline {
+  stages {
+    stage('Build') { steps { sh 'mvn -B clean package' } }
+    stage('Test') { steps { sh 'mvn test' } }
+    stage('Deploy') { steps { /* promote artifact */ } }
+  }
+}</code></pre>
+            <h4>Follow-ups</h4>
+            <p>How rollback? Redeploy previous artifact tag from Nexus; blue-green if infra supports.</p>
+            <h4>STAR + proof</h4>
+<p>S: manual, error-prone deploys. T: automate + speed up releases. A: built Jenkins pipelines (build→test→artifact→deploy→smoke test) with rollback. R: ~60% manual effort cut, fewer release errors. Bridge: faster, safer releases scale directly to ICE's delivery cadence.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="docker" data-level="medium">
+          <div class="qa-question"><h3>Docker basics for Java microservices</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Docker</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Docker</span></li></ul></div>
+            <ul class="brief-bullets"><li>Image = app + JRE layers; container = running instance.</li><li>Multi-stage build: Maven in builder, slim JRE runtime image.</li></ul>
+            <h4>Example</h4>
+            <pre><code class="kw-code">FROM eclipse-temurin:17-jre
+COPY target/app.jar /app.jar
+ENTRYPOINT ["java","-jar","/app.jar"]</code></pre>
+            <h4>Follow-ups</h4>
+            <p>Don't run as root; set memory limits; healthcheck in Dockerfile or K8s probe.</p>
+            <h4>Best practices</h4>
+<ul><li><strong>Multi-stage build</strong>: Maven/Gradle in a builder stage, copy only the jar into a slim JRE/<code class="kw-code">jlink</code> runtime image.</li><li>Layer wisely (dependencies before app code) for cache reuse.</li><li>Run as non-root, pin base image versions, scan for CVEs.</li></ul>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="k8s-basics" data-level="medium">
+          <div class="qa-question"><h3>Kubernetes concepts (pod, deployment, service)</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">K8s</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Kubernetes</span></li><li><span class="kw">HTTP</span></li><li><span class="kw">Spring</span></li><li><span class="kw">Jenkins</span></li></ul></div>
+            <p>Pod = smallest unit; Deployment manages replica sets rolling updates; Service = stable network endpoint; Ingress = HTTP routing.</p>
+            <h4>Detailed explanation</h4>
+            <p>Liveness vs readiness probes map to Spring Actuator. ConfigMaps/Secrets for env — align with Jenkins inject today.</p>
+            <h4>Follow-ups</h4>
+            <p>Even if you used VMs + Jenkins, show learning path toward K8s for interview.</p>
+            <h4>The core objects</h4>
+<p><strong class="kw">Pod</strong> (one+ containers, smallest unit) → <strong class="kw">Deployment</strong> (manages replicas + rolling updates) → <strong class="kw">Service</strong> (stable virtual IP/DNS + load balancing). Add ConfigMap/Secret for config, liveness/readiness probes for health, and HPA for autoscaling.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="iac" data-level="hard">
+          <div class="qa-question"><h3>Infrastructure as Code — Terraform/Ansible overview</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">IaC</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Idempotent</span></li><li><span class="kw">Telco</span></li></ul></div>
+            <ul class="brief-bullets"><li>Terraform: declarative cloud resources, state file.</li><li>Ansible: procedural config on VMs (packages, systemd, copy configs).</li></ul>
+            <h4>Detailed explanation</h4>
+            <p>Idempotent plays; versioned modules; plan/apply review in PR. Telco may still use ticket-based infra — acknowledge + express IaC interest.</p>
+            <h4>Declarative infra</h4>
+<p><strong class="kw">Terraform</strong> provisions cloud resources declaratively (state file, plan/apply); <strong class="kw">Ansible</strong> configures servers (often imperative/idempotent tasks). Benefit: version-controlled, repeatable, reviewable infra — no snowflake servers. Keep state secure and changes in PRs.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="monitoring" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>Monitoring and alerting in production</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Ops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SLO</span></li><li><span class="kw">Camel</span></li><li><span class="kw">DLQ</span></li><li><span class="kw">SLA</span></li></ul></div>
+            <p>Metrics (CPU, latency, error rate, queue depth), logs (centralized, correlation ID), alerts on SLO breaches — page humans for actionable fires only.</p>
+            <h4>From your experience</h4>
+            <p>Camel 1M+ txn: monitor route error %, partner timeout p99, DLQ depth. Fuse Logger for log investigation after alert.</p>
+            <h4>Follow-ups</h4>
+            <p>SLI vs SLO vs SLA? Error budget drives release velocity.</p>
+            <h4>What good looks like</h4>
+<p>Metrics (Prometheus + Grafana), logs (ELK/Loki), traces (OpenTelemetry/Jaeger), alerting (Alertmanager/PagerDuty). Alert on the four golden signals / SLO burn — symptoms users feel — with actionable, runbook-linked alerts to avoid fatigue.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="secrets" data-level="medium">
+          <div class="qa-question"><h3>Secrets management in pipelines</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Security</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Jenkins</span></li></ul></div>
+            <ul class="brief-bullets"><li>Jenkins credentials store, vault, never commit secrets to git.</li><li>Rotate DB passwords; mask in console logs.</li></ul>
+            <h4>From your experience</h4>
+            <p>After wrong-env config mistake, added pipeline env checks and peer review on infra merges.</p>
+            <h4>Keep them out of Git</h4>
+<p>Use a secrets manager / vault (Vault, AWS Secrets Manager) or the CI's encrypted credentials store; inject at runtime, never print in logs, rotate regularly, and scope to least privilege. Scan repos for accidentally committed secrets.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="git-flow" data-level="easy">
+          <div class="qa-question"><h3>Git branching and PR workflow</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Git</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CI</span></li></ul></div>
+            <ul class="brief-bullets"><li>Feature branch → PR → review + CI green → merge to main/develop → release tag.</li><li>Trunk-based for mature teams with feature flags.</li></ul>
+            <h4>Detailed explanation</h4>
+            <p>Vodafone/Optima: Git + Maven; PR description includes rollback plan for integration changes.</p>
+            <h4>Modern workflow</h4>
+<p>Short-lived feature branches off <code class="kw-code">main</code> → PR with CI checks + review → squash merge → deploy. <strong class="kw">Trunk-based development</strong> (small frequent merges behind feature flags) suits CD better than long-lived release branches. Protect <code class="kw-code">main</code> with required checks.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sm-tool" data-level="hard">
+          <div class="qa-question"><h3>SM Tool — deployment automation beyond Jenkins</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">Tool</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Jenkins</span></li><li><span class="kw">Camel</span></li><li><span class="kw">Idempotent</span></li></ul></div>
+            <p>Orchestrates Fuse/Camel deploy steps: pre-checks, artifact, config template, rolling restart, smoke, rollback on failure.</p>
+            <h4>Detailed explanation</h4>
+            <p>Idempotent steps, deploy lock per env, secrets from vault. Complements Jenkins which builds; SM Tool knows route-specific validation.</p>
+            <h4>Follow-ups</h4>
+            <p>Blue-green vs rolling? Trade availability vs resource cost.</p>
+            <h4>Frame it</h4>
+<p>Position SM Tool as deployment/release automation layered on top of Jenkins — standardizing and orchestrating multi-step releases (config, approvals, environment promotion) to reduce manual steps and human error. Shows initiative in improving the delivery process itself.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ci-vs-cd" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>CI vs CD — explain in your own Jenkins pipeline</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">CI/CD</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CI:</span></li><li><span class="kw">CD:</span></li><li><span class="kw">CI</span></li><li><span class="kw">CD</span></li><li><span class="kw">Jenkins</span></li></ul></div><p><strong class="kw">CI:</strong> every merge runs build + tests automatically. <strong class="kw">CD:</strong> artifact is always deployable; pipeline promotes to staging/prod with checks. Your Optima work: CI catches bad code early; CD removed ~60% manual deploy steps.</p>
+            <h4>In your pipeline</h4>
+<p>CI = the build+test stages that run on every commit and gate the merge. CD = the stages after merge that package and promote the artifact through environments to prod (with smoke tests + rollback). One catches bugs; the other delivers value safely.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="docker-vs-vm" data-level="medium">
+          <div class="qa-question"><h3>Container vs virtual machine — simple comparison</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Docker</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">trade-offs</span></li></ul></div><ul class="brief-bullets"><li>VM runs full OS per instance — heavy.</li><li>Container shares host kernel — lighter, starts in seconds.</li><li>Both package apps; containers pack more per server.</li><li>K8s orchestrates containers at scale.</li></ul>
+            <h4>The key difference</h4>
+<p>A <strong>VM</strong> virtualizes hardware and ships a full guest OS (heavy, slow boot, strong isolation). A <strong>container</strong> shares the host kernel and packages just the app + deps (lightweight, fast, denser). Containers = faster scaling/deploys; VMs = stronger isolation/multi-OS.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+      </div>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

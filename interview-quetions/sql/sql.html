@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="sql">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>SQL Interview Prep</h1>
+        <p><strong>66</strong> items in <strong>2 sections</strong> — interview Q&amp;A plus <strong>50 basic SQL queries</strong> to practice. Filter by level or ⭐ Very Important. Vodafone &amp; XL Axiata tuning stories.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> fundamentals</span>
+        <span><span class="level level-medium">Medium</span> 3 YOE depth</span>
+        <span><span class="level level-hard">Hard</span> senior / tricky</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+      <nav class="section-nav" aria-label="SQL sections">
+        <a href="#section-interview">Interview Questions</a>
+        <a href="#section-basic-queries">50 Basic SQL Queries</a>
+      </nav>
+
+      <section class="topic-section" id="section-interview">
+        <h2>Interview Questions</h2>
+        <p class="section-desc">Indexing, joins, transactions, and your telecom reporting experience.</p>
+        <p class="section-meta">16 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-section="interview" data-id="explain" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>How do you use EXPLAIN to tune a slow query?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Tuning</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">EXPLAIN ANALYZE</span></li><li><span class="kw">EXPLAIN FORMAT=JSON</span></li><li><span class="kw">type</span></li><li><span class="kw">key</span></li><li><span class="kw">rows</span></li><li><span class="kw">Extra</span></li><li><span class="kw">JSON</span></li></ul></div>
+            <p>Run <code class="kw-code">EXPLAIN ANALYZE</code> (or <code class="kw-code">EXPLAIN FORMAT=JSON</code>), look for full table scans, high rows examined, filesort, temporary tables, bad join order — then index or rewrite.</p>
+            <h4>Detailed explanation</h4>
+            <p>MySQL: check <code class="kw-code">type</code> (ALL vs range vs ref), <code class="kw-code">key</code>, <code class="kw-code">rows</code>, <code class="kw-code">Extra</code> (Using filesort). Compare before/after row counts and actual time. Validate on prod-like data volume, not empty dev DB.</p>
+            <h4>Example</h4>
+            <pre><code class="kw-code">EXPLAIN SELECT r.* FROM report_fact r
+JOIN account a ON r.account_id = a.id
+WHERE r.report_date BETWEEN '2025-01-01' AND '2025-01-31'
+  AND a.region = 'DE';
+-- Add: INDEX idx_report_date_account (report_date, account_id)</code></pre>
+            <h4>From your experience</h4>
+            <p>Vodafone Germany reporting: EXPLAIN showed full scans on date filters — composite indexes + join rewrite → report time &gt;10% faster, lower peak CPU.</p>
+            <h4>Follow-ups</h4>
+            <p>Covering index? Index includes all SELECT columns — avoids table lookup.</p>
+            <h4>Reading it well</h4>
+<p>Compare <strong>estimated vs actual rows</strong> — a big gap means stale statistics (run <code class="kw-code">ANALYZE TABLE</code>). Note: <code class="kw-code">EXPLAIN ANALYZE</code> <em>executes</em> the query, so be careful with writes. An <strong class="kw">index-only / covering</strong> scan ("Using index") is ideal — no table lookup.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="indexes" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>B-tree indexes, composite indexes, and leftmost prefix rule</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Indexes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">(a, b, c)</span></li><li><span class="kw">a</span></li><li><span class="kw">a,b</span></li><li><span class="kw">b</span></li><li><span class="kw">(report_date, account_id)</span></li></ul></div>
+            <ul class="brief-bullets key-points"><li>(customer_id, created_at) for customer + date queries</li><li>Column order matters</li></ul><p>Composite index <code class="kw-code">(a, b, c)</code> helps queries filtering on <code class="kw-code">a</code>, or <code class="kw-code">a,b</code>, not usually on <code class="kw-code">b</code> alone. Order columns by selectivity and equality-before-range.</p>
+            <h4>Detailed explanation</h4>
+            <p>Too many indexes slow writes. Duplicate/redundant indexes waste space. For reporting: often <code class="kw-code">(report_date, account_id)</code> matches WHERE + JOIN. Avoid indexing low-cardinality alone unless combined.</p>
+            <h4>Example</h4>
+            <pre><code class="kw-code">CREATE INDEX idx_fact_date_acct ON report_fact (report_date, account_id);</code></pre>
+            <h4>From your experience</h4>
+            <p>XL Axiata: indexing on hot lookup keys cut response ~10% and reduced fallouts from timeouts.</p>
+            <h4>Follow-ups</h4>
+            <p>When not to index? Small tables, heavy write tables with rare reads, columns updated constantly.</p>
+            <h4>Covering index</h4>
+<p>If an index contains <em>every</em> column the query needs (filter + select), the DB answers from the index alone — an "index-only scan". Watch for <strong>redundant</strong> indexes (a prefix of another) and remember each index adds write/maintenance cost.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="joins" data-level="easy">
+          <div class="qa-question"><h3>INNER vs LEFT JOIN — practical difference?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Basics</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">trade-offs</span></li></ul></div>
+            <ul class="brief-bullets key-points"><li>Find orphans: LEFT JOIN + WHERE right.id IS NULL</li><li>WHERE on right can act like INNER</li></ul><ul class="brief-bullets"><li>INNER keeps only matching rows both sides.</li><li>LEFT keeps all left rows; NULLs on right when no match — useful for optional dimensions but can hide data issues if not intended.</li></ul>
+            <h4>Example</h4>
+            <pre><code class="kw-code">-- Reports only for accounts that exist
+SELECT * FROM report_fact r
+INNER JOIN account a ON r.account_id = a.id;
+
+-- All accounts even without reports this month
+SELECT * FROM account a
+LEFT JOIN report_fact r ON a.id = r.account_id AND r.report_date = CURDATE();</code></pre>
+            <h4>Follow-ups</h4>
+            <p>LEFT JOIN + WHERE on right table turns into INNER effectively — filter in ON vs WHERE carefully.</p>
+            <h4>How the DB executes a join</h4>
+<p>Optimizer picks <strong class="kw">nested-loop</strong> (good with an index on the inner table), <strong class="kw">hash join</strong> (large unindexed sets), or <strong class="kw">merge join</strong> (pre-sorted). Make sure join keys are indexed and of the <strong>same type</strong> — a type mismatch silently disables index use.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="vodafone-story" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>STAR story: Vodafone reporting SQL optimization (&gt;10% faster)</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Vodafone</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Situation:</span></li><li><span class="kw">Task:</span></li><li><span class="kw">Action:</span></li><li><span class="kw">Result:</span></li><li><span class="kw">SQL</span></li></ul></div>
+            <p>Slow reports at peak → EXPLAIN + indexes + query rewrite → &gt;10% faster generation, lower DB CPU — no business logic change.</p>
+            <h4>Detailed explanation</h4>
+            <ul>
+              <li><strong class="kw">Situation:</strong> Large MySQL datasets, business users waiting on monthly/daily reports</li>
+              <li><strong class="kw">Task:</strong> Improve time and peak resource use</li>
+              <li><strong class="kw">Action:</strong> Identified full scans, added composite indexes, tuned JOIN order and filters, validated in lower env, monitored post-release</li>
+              <li><strong class="kw">Result:</strong> Measurable &gt;10% improvement; repeatable playbook for future reports</li>
+            </ul>
+            <h4>Follow-ups</h4>
+            <p>How prove improvement? Before/after p95 query time, rows examined, DB CPU during batch window.</p>
+            <h4>Proving the win</h4>
+<p>Quantify with before/after: p95 query time, <code class="kw-code">rows examined</code> from EXPLAIN, and DB CPU during the batch window. "Measured, not felt" is what makes the story credible to a senior interviewer.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="normalization" data-level="easy">
+          <div class="qa-question"><h3>Normalization vs denormalization for reporting</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Design</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">trade-offs</span></li></ul></div>
+            <ul class="brief-bullets"><li>OLTP: normalize (3NF) to reduce redundancy.</li><li>Reporting: often denormalized fact tables or materialized summaries for read performance.</li></ul>
+            <h4>Detailed explanation</h4>
+            <p>Telecom reporting may use star schema: fact (usage, charges) + dimensions (account, product). ETL nightly populates facts — trades storage for fast dashboards.</p>
+            <h4>From your experience</h4>
+            <p>Vodafone reporting paths hit pre-aggregated tables where possible instead of joining 10 OLTP tables live.</p>
+            <h4>Practical rule</h4>
+<p>Keep the <strong>source of truth normalized</strong> (3NF) for integrity; denormalize only for read paths via summary/materialized tables refreshed by ETL or triggers. State the refresh/staleness trade-off — that's what interviewers probe.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="transactions-isolation" data-level="medium">
+          <div class="qa-question"><h3>ACID and isolation levels — what breaks at each level?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Transactions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ACID</span></li></ul></div>
+            <ul class="brief-bullets"><li>READ UNCOMMITTED: dirty reads.</li><li>READ COMMITTED: non-repeatable reads.</li><li>REPEATABLE READ (MySQL InnoDB default): phantoms possible.</li><li>SERIALIZABLE: safest, slowest.</li></ul>
+            <h4>Detailed explanation</h4>
+            <p>Long-running report in REPEATABLE READ may hold gap locks — impacts writes. Use read-only replica or snapshot isolation for heavy analytics off primary OLTP.</p>
+            <h4>Follow-ups</h4>
+            <p>Deadlock? InnoDB picks victim — retry with backoff; keep transactions short.</p>
+            <h4>MVCC &amp; setting it</h4>
+<p>InnoDB uses <strong class="kw">MVCC</strong> so reads don't block writes (consistent snapshot). Set per transaction with <code class="kw-code">SET TRANSACTION ISOLATION LEVEL READ COMMITTED;</code>. Higher isolation = more locking/blocking — pick the lowest level that's correct for the use case.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="pagination" data-level="medium">
+          <div class="qa-question"><h3>OFFSET vs keyset pagination for large tables</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">API</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">LIMIT 100000, 50</span></li><li><span class="kw">WHERE id &gt; :lastId ORDER BY id LIMIT 50</span></li></ul></div>
+            <p><code class="kw-code">LIMIT 100000, 50</code> scans/skips 100k rows — slow. Keyset: <code class="kw-code">WHERE id &gt; :lastId ORDER BY id LIMIT 50</code> uses index.</p>
+            <h4>Example</h4>
+            <pre><code class="kw-code">SELECT * FROM subscriber_event
+WHERE id &gt; :cursor
+ORDER BY id
+LIMIT 50;</code></pre>
+            <h4>Follow-ups</h4>
+            <p>Multi-column sort cursor? Encode (created_at, id) tuple in opaque cursor token.</p>
+            <h4>One more OFFSET pitfall</h4>
+<p>Beyond being slow, OFFSET can <strong>skip or duplicate</strong> rows when data is inserted/deleted between page loads. Keyset (cursor) pagination is stable because it anchors on the last seen key.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="n-plus-one" data-level="medium">
+          <div class="qa-question"><h3>N+1 query problem — how do you fix it in apps?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">ORM</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SQL</span></li><li><span class="kw">Spring</span></li><li><span class="kw">JPA</span></li></ul></div>
+            <ul class="brief-bullets"><li>One query loads parents, then N queries for children.</li><li>Fix: JOIN fetch, batch IN query, or single SQL with aggregation.</li></ul>
+            <h4>Example</h4>
+            <pre><code class="kw-code">-- Bad: loop accounts, query reports each time
+-- Good:
+SELECT * FROM report_fact WHERE account_id IN (...);</code></pre>
+            <h4>From your experience</h4>
+            <p>Spring/JPA paths for reporting preferred explicit SQL over lazy collections — predictable performance under load.</p>
+            <h4>Detecting it</h4>
+<p>Log the SQL count per request (Hibernate statistics / a query counter) — a burst of identical SELECTs is the tell. Fixes: <code class="kw-code">JOIN FETCH</code>/<code class="kw-code">@EntityGraph</code>, a batched <code class="kw-code">IN (...)</code> query, or a DTO projection that selects only what you need.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="locking" data-level="hard">
+          <div class="qa-question"><h3>Row locks, gap locks, and hot-row contention</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">InnoDB</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">INSERT ... ON DUPLICATE KEY UPDATE</span></li><li><span class="kw">SELECT FOR UPDATE</span></li></ul></div>
+            <p>Updates on same index range serialize. High-contention counters: avoid updating single row — shard counters or use atomic <code class="kw-code">INSERT ... ON DUPLICATE KEY UPDATE</code> per bucket.</p>
+            <h4>Detailed explanation</h4>
+            <p>Integration fallout queues sometimes hammer one status row — spread by partition key or batch status updates.</p>
+            <h4>Follow-ups</h4>
+            <p><code class="kw-code">SELECT FOR UPDATE</code> in reporting job? Hold locks minimal time; prefer MVCC read without lock for pure reads.</p>
+            <h4>Diagnosing &amp; recovering</h4>
+<p>Inspect with <code class="kw-code">SHOW ENGINE INNODB STATUS</code> (latest deadlock) and <code class="kw-code">performance_schema</code>. On deadlock, InnoDB rolls back one victim — the app should <strong>retry with backoff</strong>. Keep transactions short and touch rows in a consistent order to avoid cycles.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="subscriber-lookup" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>Safe production lookups by MIN / accountId (Subscriber Tool angle)</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Production</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">LIKE '%...%'</span></li><li><span class="kw">SQL</span></li></ul></div>
+            <p>Read-only DB user, indexed equality lookups only, query timeout, audit log, optional read replica — no ad-hoc wildcard SQL on prod.</p>
+            <h4>Detailed explanation</h4>
+            <p>Telecom IDs (MIN, MSISDN, accountId) need exact match indexes. Reject <code class="kw-code">LIKE '%...%'</code> patterns that scan millions of subscribers.</p>
+            <h4>Example</h4>
+            <pre><code class="kw-code">SELECT col1, col2 FROM subscriber
+WHERE account_id = :id
+LIMIT 1;
+-- max_execution_time = 5000</code></pre>
+            <h4>From your experience</h4>
+            <p>Built Subscriber Tool at Optima so support stops writing risky manual SQL — same principles apply in interviews as production maturity.</p>
+            <h4>Safety details</h4>
+<p>Always use <strong>parameterized</strong> queries (never string-concat user input — SQL injection). Combine: read-only role, statement timeout, row <code class="kw-code">LIMIT</code>, audit logging, and a read replica so support tooling can't impact the OLTP primary.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="aggregate-window" data-level="hard">
+          <div class="qa-question"><h3>Aggregations and window functions for reporting</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">Analytics</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">GROUP BY</span></li><li><span class="kw">ROW_NUMBER</span></li><li><span class="kw">SUM() OVER</span></li></ul></div>
+            <p><code class="kw-code">GROUP BY</code> for totals; window functions (<code class="kw-code">ROW_NUMBER</code>, <code class="kw-code">SUM() OVER</code>) for rankings and running totals without self-joins.</p>
+            <h4>Example</h4>
+            <pre><code class="kw-code">SELECT account_id, report_date, revenue,
+  SUM(revenue) OVER (PARTITION BY account_id ORDER BY report_date) AS running_total
+FROM report_fact;</code></pre>
+            <h4>Follow-ups</h4>
+            <p>MySQL 8+ window support — confirm version in interview; mention alternative subqueries on older DBs.</p>
+            <h4>Window vs GROUP BY</h4>
+<p>GROUP BY <em>collapses</em> rows; a window function keeps every row and adds a computed column. Control the window with a <strong class="kw">frame</strong>: <code class="kw-code">ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW</code> for running totals, or <code class="kw-code">PARTITION BY</code> + <code class="kw-code">ROW_NUMBER()</code> for "top-N per group".</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="axiata-story" data-level="medium">
+          <div class="qa-question"><h3>XL Axiata: query tuning and fallout reduction (~10%)</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">XL Axiata</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div>
+            <p>Profiled slow queries with team, added indexes, peer-reviewed changes, monitored prod — ~10% faster responses, fewer operational fallouts.</p>
+            <h4>Detailed explanation</h4>
+            <p>Collaboration mattered: DBAs owned capacity; devs owned query shape. Documented before/after metrics for release notes.</p>
+            <h4>Follow-ups</h4>
+            <p>How prioritize which queries? Error rate × latency × business criticality.</p>
+            <h4>Prioritization</h4>
+<p>Rank candidates by <strong>error rate × latency × business criticality</strong> so effort goes where it moves the needle. Pair with DBAs on capacity, peer-review query-shape changes, and document before/after metrics in the release notes.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="group-by-having" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>WHERE vs GROUP BY vs HAVING — order of execution?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">SQL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">COUNT(*) &gt; 5</span></li><li><span class="kw">WHERE</span></li><li><span class="kw">GROUP BY</span></li><li><span class="kw">HAVING</span></li></ul></div><p><strong class="kw">WHERE</strong> filters rows before grouping. <strong class="kw">GROUP BY</strong> aggregates. <strong class="kw">HAVING</strong> filters groups after aggregation.</p>
+            <pre><code class="kw-code">SELECT dept, COUNT(*) AS cnt FROM employees
+WHERE active = 1
+GROUP BY dept
+HAVING COUNT(*) &gt; 5;</code></pre>
+            <p>Common mistake: putting aggregate condition in WHERE — use HAVING for <code class="kw-code">COUNT(*) &gt; 5</code>.</p>
+            <h4>Logical execution order</h4>
+<pre><code class="kw-code">FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT</code></pre>
+<p>That's why a column alias defined in SELECT can't be used in WHERE (SELECT runs later) but can be used in ORDER BY.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="union-all" data-level="easy">
+          <div class="qa-question"><h3>UNION vs UNION ALL?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">SQL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">UNION</span></li><li><span class="kw">UNION ALL</span></li></ul></div><ul class="brief-bullets key-points"><li>Faster than UNION</li><li>Columns must align in count/type</li></ul><p><strong class="kw">UNION</strong> merges two result sets and removes duplicate rows (extra sort/distinct cost). <strong class="kw">UNION ALL</strong> keeps duplicates — faster when you know sets don't overlap (e.g. Jan sales UNION ALL Feb sales).</p>
+            <h4>Details</h4>
+<p>Column names/aliases come from the <strong>first</strong> SELECT; a single <code class="kw-code">ORDER BY</code> at the end sorts the combined result. Prefer <code class="kw-code">UNION ALL</code> unless you specifically need de-duplication (which forces an extra sort/distinct pass).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="delete-truncate-drop" data-level="medium">
+          <div class="qa-question"><h3>DELETE vs TRUNCATE vs DROP?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">SQL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">DELETE</span></li><li><span class="kw">TRUNCATE</span></li><li><span class="kw">DROP</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">DELETE</strong> — row-level, can use WHERE, triggers fire, rollback possible</li>
+              <li><strong class="kw">TRUNCATE</strong> — all rows fast, resets auto-increment, minimal logging</li>
+              <li><strong class="kw">DROP</strong> — removes table structure and data entirely</li>
+            </ul>
+            <p>In prod telecom DBs: never TRUNCATE without change ticket — billing tables are sensitive.</p>
+            <h4>More gotchas</h4>
+<ul>
+<li><code class="kw-code">TRUNCATE</code> can't have a <code class="kw-code">WHERE</code>, doesn't fire row triggers, and (in MySQL) auto-commits — not easily rolled back.</li>
+<li><code class="kw-code">TRUNCATE</code> is blocked if other tables have FKs referencing the table.</li>
+<li>For huge <code class="kw-code">DELETE</code>s, batch in chunks to avoid long locks and replication lag.</li>
+</ul>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-section="interview" data-id="subquery-types" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>What is a correlated subquery?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">SQL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">a correlated subquery</span></li></ul></div><ul class="brief-bullets"><li>Inner query references outer query row — runs per outer row (can be slow).</li><li>Example: customers who placed an order in last 30 days.</li></ul>
+            <pre><code class="kw-code">SELECT c.name FROM customers c
+WHERE EXISTS (
+  SELECT 1 FROM orders o
+  WHERE o.customer_id = c.id AND o.created_at &gt; NOW() - INTERVAL 30 DAY
+);</code></pre>
+            <p>Often rewrite as JOIN for performance on large reporting tables — your Vodafone tuning experience.</p>
+            <h4>The taxonomy</h4>
+<ul>
+<li><strong class="kw">Scalar</strong> — returns one value (usable in SELECT).</li>
+<li><strong class="kw">Correlated</strong> — references the outer row, runs per row.</li>
+<li><strong class="kw">Derived table</strong> — a subquery in FROM (alias required).</li>
+</ul>
+<p>For "does a related row exist?", <code class="kw-code">EXISTS</code> usually beats <code class="kw-code">IN</code> (short-circuits) and is NULL-safe unlike <code class="kw-code">NOT IN</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+      </div>
+      </section>
+
+      <section class="topic-section" id="section-basic-queries">
+        <h2>50 Basic SQL Queries</h2>
+        <p class="section-desc">Hands-on patterns: SELECT, JOINs, aggregates, DML, DDL, windows, and transactions. Sample tables: employees, departments, customers, orders, products.</p>
+        <p class="section-meta">50 queries in this section</p>
+        <div class="qa-list">
+        <article class="qa-card" data-id="bq-01" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>SELECT all rows from a table</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">SELECT</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><ul class="brief-bullets key-points"><li>Use SELECT * only for exploration; in production list columns you need</li><li>Reads full table — can be slow on large tables without LIMIT</li></ul><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SELECT * FROM employees;</span></li></ul></div>
+            <pre><code class="kw-code">SELECT * FROM employees;</code></pre>
+            <p><strong>Tip:</strong> In production prefer listing columns over <code class="kw-code">SELECT *</code> — schema changes won't surprise you and you transfer less data. Add <code class="kw-code">LIMIT</code> when exploring big tables.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-02" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>SELECT specific columns</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">SELECT</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Reduces network and memory</li><li>Makes query intent obvious to other developers</li></ul><pre><code class="kw-code">SELECT id, name, dept, salary FROM employees;</code></pre>
+            <p><strong>Tip:</strong> Selecting only needed columns enables <strong>covering indexes</strong> (index-only scans) and reduces network/memory.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-03" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>SELECT DISTINCT values</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">SELECT</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><ul class="brief-bullets key-points"><li>Useful for unique departments, cities, statuses</li><li>DISTINCT applies to the full selected row combination</li></ul><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SELECT DISTINCT dept FROM employees;</span></li></ul></div>
+            <pre><code class="kw-code">SELECT DISTINCT dept FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">DISTINCT</code> applies to the whole selected row, not one column. It sorts/hashes to dedupe — on large data a <code class="kw-code">GROUP BY</code> can be clearer and similarly costed.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-04" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>WHERE — filter by equality</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">WHERE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Only rows matching the condition are returned</li><li>Combine with AND/OR for multiple conditions</li></ul><pre><code class="kw-code">SELECT * FROM employees WHERE dept = 'Engineering';</code></pre>
+            <p><strong>Tip:</strong> Equality on an indexed column is the fastest filter. Avoid wrapping the column in a function (e.g. <code class="kw-code">WHERE UPPER(dept)=...</code>) — it disables the index.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-05" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>WHERE — AND / OR conditions</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">WHERE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Use parentheses when mixing AND and OR</li><li>AND is evaluated before OR unless grouped</li></ul><pre><code class="kw-code">SELECT * FROM employees
+WHERE dept = 'Sales' AND salary > 50000
+   OR (dept = 'HR' AND active = 1);</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">AND</code> binds tighter than <code class="kw-code">OR</code> — always parenthesize mixed conditions to avoid logic bugs.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-06" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>WHERE — IN list</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">WHERE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Cleaner than many OR conditions</li><li>NOT IN excludes listed values</li></ul><pre><code class="kw-code">SELECT * FROM employees WHERE dept IN ('HR', 'Finance', 'IT');</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">IN</code> is cleaner than many ORs. Beware <code class="kw-code">NOT IN</code> with a list that contains <code class="kw-code">NULL</code> — it returns no rows; use <code class="kw-code">NOT EXISTS</code> instead.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-07" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>WHERE — BETWEEN range</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">WHERE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Works on dates, numbers, strings</li><li>Use consistent date format/timezone</li></ul><pre><code class="kw-code">SELECT * FROM orders
+WHERE created_at BETWEEN '2025-01-01' AND '2025-01-31';</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">BETWEEN</code> is inclusive on both ends. For timestamps prefer <code class="kw-code">&gt;= start AND &lt; next_day</code> to avoid missing/duplicating boundary rows.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-08" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>WHERE — LIKE pattern match</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">WHERE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>&#x27;A%&#x27; = starts with A</li><li>Leading % often prevents index use</li></ul><pre><code class="kw-code">SELECT * FROM customers WHERE name LIKE 'A%';</code></pre>
+            <p><strong>Tip:</strong> A leading wildcard (<code class="kw-code">'%abc'</code>) can't use a normal B-tree index → full scan. For substring search use a full-text index or trigram index.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-09" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>WHERE — IS NULL / IS NOT NULL</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">WHERE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Use IS NULL / IS NOT NULL</li><li>COALESCE gives default for NULL</li></ul><pre><code class="kw-code">SELECT * FROM employees WHERE manager_id IS NULL;
+SELECT * FROM employees WHERE email IS NOT NULL;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">= NULL</code> never matches — always use <code class="kw-code">IS NULL</code>/<code class="kw-code">IS NOT NULL</code>. <code class="kw-code">COALESCE(col, default)</code> substitutes a value.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-10" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>ORDER BY ascending</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">ORDER BY</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Apply after WHERE filter</li><li>Can sort by multiple columns</li></ul><pre><code class="kw-code">SELECT * FROM employees ORDER BY hire_date ASC;</code></pre>
+            <p><strong>Tip:</strong> Sorting is cheap when an index already provides the order; otherwise the DB does a filesort. Index <code class="kw-code">(filter_col, sort_col)</code> to serve WHERE + ORDER BY together.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-11" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>ORDER BY descending (multiple columns)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">ORDER BY</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Common for newest-first dates</li><li>Tie-break with second column</li></ul><pre><code class="kw-code">SELECT * FROM employees ORDER BY dept ASC, salary DESC;</code></pre>
+            <p><strong>Tip:</strong> You can mix directions per column (<code class="kw-code">ORDER BY dept ASC, salary DESC</code>). NULL ordering differs by DB — use <code class="kw-code">NULLS FIRST/LAST</code> (Postgres) when it matters.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-12" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>LIMIT and OFFSET (pagination)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">LIMIT</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Page 3 size 10: LIMIT 10 OFFSET 20</li><li>Large OFFSET on big tables can be slow</li></ul><pre><code class="kw-code">SELECT * FROM orders ORDER BY id LIMIT 10 OFFSET 20;
+-- MySQL: LIMIT offset, count → LIMIT 20, 10</code></pre>
+            <p><strong>Tip:</strong> Large <code class="kw-code">OFFSET</code> scans and discards all skipped rows — switch to keyset pagination (<code class="kw-code">WHERE id &gt; :last ORDER BY id LIMIT n</code>) for deep pages.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-13" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>COUNT rows</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Aggregate</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>COUNT(*) counts all rows</li><li>COUNT(col) ignores NULL in col</li></ul><pre><code class="kw-code">SELECT COUNT(*) AS total_employees FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">COUNT(*)</code> counts rows (incl. NULLs); <code class="kw-code">COUNT(col)</code> skips NULLs; <code class="kw-code">COUNT(DISTINCT col)</code> counts uniques.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-14" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>SUM — total amount</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Aggregate</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>NULLs ignored</li><li>Use with GROUP BY for per-group totals</li></ul><pre><code class="kw-code">SELECT SUM(amount) AS total_revenue FROM orders;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">SUM</code> ignores NULLs and returns NULL for an empty set — wrap with <code class="kw-code">COALESCE(SUM(x), 0)</code> if you want 0.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-15" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>AVG — average salary</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Aggregate</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>NULLs excluded from average</li><li>Watch integer division in some DBs</li></ul><pre><code class="kw-code">SELECT AVG(salary) AS avg_salary FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">AVG</code> excludes NULLs from <em>both</em> numerator and denominator — if you want NULLs treated as 0, <code class="kw-code">AVG(COALESCE(x,0))</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-16" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>MIN and MAX</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Aggregate</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Works on numbers, dates, strings</li><li>Useful in dashboards and range checks</li></ul><pre><code class="kw-code">SELECT MIN(salary) AS min_sal, MAX(salary) AS max_sal FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">MIN</code>/<code class="kw-code">MAX</code> work on dates and strings too, and can be answered instantly from an index on that column.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-17" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>GROUP BY — count per department</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">GROUP BY</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Non-aggregated SELECT cols must be in GROUP BY</li><li>Example: employees per department</li></ul><pre><code class="kw-code">SELECT dept, COUNT(*) AS headcount
+FROM employees
+GROUP BY dept;</code></pre>
+            <p><strong>Tip:</strong> Every non-aggregated column in SELECT must appear in <code class="kw-code">GROUP BY</code> (MySQL's <code class="kw-code">ONLY_FULL_GROUP_BY</code> enforces this).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-18" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>HAVING — filter grouped results</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">HAVING</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>HAVING AVG(salary) &gt; 60000 style filters</li><li>Use WHERE for row-level filters first</li></ul><pre><code class="kw-code">SELECT dept, AVG(salary) AS avg_sal
+FROM employees
+GROUP BY dept
+HAVING AVG(salary) > 60000;</code></pre>
+            <p><strong>Tip:</strong> Put row filters in <code class="kw-code">WHERE</code> (runs before grouping = less work) and group filters in <code class="kw-code">HAVING</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-19" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>INNER JOIN — employees and departments</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">JOIN</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>No match = row dropped</li><li>Most common join type</li></ul><pre><code class="kw-code">SELECT e.name, d.name AS dept_name
+FROM employees e
+INNER JOIN departments d ON e.dept_id = d.id;</code></pre>
+            <p><strong>Tip:</strong> Alias tables and qualify columns (<code class="kw-code">e.id</code>, <code class="kw-code">d.name</code>) for readability and to avoid ambiguous-column errors. Index both join keys.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-20" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>LEFT JOIN — all customers, even without orders</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">JOIN</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Find orphans: LEFT JOIN + WHERE right.id IS NULL</li><li>WHERE on right can act like INNER</li></ul><pre><code class="kw-code">SELECT c.name, o.id AS order_id
+FROM customers c
+LEFT JOIN orders o ON c.id = o.customer_id;</code></pre>
+            <p><strong>Tip:</strong> To find "rows on the left with no match", use <code class="kw-code">LEFT JOIN ... WHERE right.id IS NULL</code>. Putting a right-table filter in <code class="kw-code">WHERE</code> turns a LEFT JOIN back into an INNER.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-21" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>RIGHT JOIN — all orders with customer info</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">JOIN</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Same NULL fill behavior as LEFT on non-matching side</li><li>Interview: mention LEFT is preferred</li></ul><pre><code class="kw-code">SELECT c.name, o.amount
+FROM customers c
+RIGHT JOIN orders o ON c.id = o.customer_id;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">RIGHT JOIN</code> is rare in practice — most teams rewrite it as a <code class="kw-code">LEFT JOIN</code> with the tables swapped for readability.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-22" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>JOIN three tables</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">JOIN</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Always specify ON conditions</li><li>Wrong join order can explode row count</li></ul><pre><code class="kw-code">SELECT c.name, o.id, p.name AS product
+FROM orders o
+JOIN customers c ON o.customer_id = c.id
+JOIN order_items oi ON o.id = oi.order_id
+JOIN products p ON oi.product_id = p.id;</code></pre>
+            <p><strong>Tip:</strong> The written join order doesn't fix execution order — the optimizer reorders based on stats. What matters is that every join key is indexed.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-23" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>Self JOIN — employee and manager names</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">JOIN</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Use aliases (e, m)</li><li>Common for hierarchies</li></ul><pre><code class="kw-code">SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;</code></pre>
+            <p><strong>Tip:</strong> A self join needs two aliases of the same table (<code class="kw-code">e</code> and <code class="kw-code">m</code>) — perfect for parent/child like employee→manager. Use <code class="kw-code">LEFT JOIN</code> so top-level rows (no manager) still show.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-24" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>CROSS JOIN — every combination</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">JOIN</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>No ON clause</li><li>Accidental cross join = huge result set</li></ul><pre><code class="kw-code">SELECT e.name, d.name AS dept
+FROM employees e
+CROSS JOIN departments d;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">CROSS JOIN</code> produces N×M rows (Cartesian product). Usually accidental (a missing ON clause); intentional only for generating combinations/calendars.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-25" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>UNION — combine two result sets (dedupe)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Set ops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Same column count and types required</li><li>UNION ALL is faster when dupes OK</li></ul><pre><code class="kw-code">SELECT name FROM employees WHERE dept = 'IT'
+UNION
+SELECT name FROM contractors WHERE team = 'IT';</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">UNION</code> removes duplicates (extra sort/distinct cost) and requires matching column counts/types across selects.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-26" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>UNION ALL — keep duplicates</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Set ops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Faster than UNION</li><li>Columns must align in count/type</li></ul><pre><code class="kw-code">SELECT city FROM customers
+UNION ALL
+SELECT city FROM suppliers;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">UNION ALL</code> keeps duplicates and is faster — use it when the result sets can't overlap (e.g. month partitions).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-27" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>Scalar subquery in SELECT</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Subquery</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Must return one row, one column</li><li>Can be slow if run per row — profile it</li></ul><pre><code class="kw-code">SELECT name, salary,
+  (SELECT AVG(salary) FROM employees) AS company_avg
+FROM employees;</code></pre>
+            <p><strong>Tip:</strong> A scalar subquery in SELECT must return exactly one row/one column and runs per outer row — for large sets a JOIN or window function is usually faster.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-28" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>Subquery with IN</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Subquery</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Often clearer than complex JOIN</li><li>Watch NULL behavior in IN lists</li></ul><pre><code class="kw-code">SELECT name FROM customers
+WHERE id IN (SELECT customer_id FROM orders WHERE amount > 1000);</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">IN (subquery)</code> is readable, but watch NULLs with <code class="kw-code">NOT IN</code> (a single NULL makes it return nothing) — prefer <code class="kw-code">NOT EXISTS</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-29" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>EXISTS — customers who placed orders</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Subquery</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Stops at first match</li><li>SELECT 1 inside EXISTS is idiomatic</li></ul><pre><code class="kw-code">SELECT name FROM customers c
+WHERE EXISTS (
+  SELECT 1 FROM orders o WHERE o.customer_id = c.id
+);</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">EXISTS</code> short-circuits on the first matching row, so it's often faster than <code class="kw-code">IN</code> for correlated existence checks.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-30" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>NOT EXISTS — customers with no orders</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Subquery</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Stops at first match</li><li>SELECT 1 inside EXISTS is idiomatic</li></ul><pre><code class="kw-code">SELECT name FROM customers c
+WHERE NOT EXISTS (
+  SELECT 1 FROM orders o WHERE o.customer_id = c.id
+);</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">NOT EXISTS</code> is the NULL-safe, index-friendly way to find "rows with no related row" (e.g. customers with no orders).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-31" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>INSERT — single row</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DML</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>List columns explicitly</li><li>Auto-increment id usually omitted</li></ul><pre><code class="kw-code">INSERT INTO employees (name, dept, salary)
+VALUES ('Alice', 'Engineering', 75000);</code></pre>
+            <p><strong>Tip:</strong> Always list target columns explicitly so a future column reorder/addition doesn't break the insert. Use parameters, never string concatenation.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-32" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>INSERT — multiple rows</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DML</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Faster than many single INSERTs</li><li>Watch transaction/batch size</li></ul><pre><code class="kw-code">INSERT INTO employees (name, dept, salary) VALUES
+  ('Bob', 'Sales', 55000),
+  ('Carol', 'HR', 48000);</code></pre>
+            <p><strong>Tip:</strong> One multi-row <code class="kw-code">INSERT</code> is dramatically faster than N single inserts (one round-trip, one transaction). For bulk loads use <code class="kw-code">LOAD DATA</code> / <code class="kw-code">COPY</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-33" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>UPDATE — change salary</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DML</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Always use WHERE in production</li><li>Test with SELECT first</li></ul><pre><code class="kw-code">UPDATE employees SET salary = salary * 1.05 WHERE dept = 'Engineering';</code></pre>
+            <p><strong>Tip:</strong> Test the <code class="kw-code">WHERE</code> as a <code class="kw-code">SELECT</code> first — an <code class="kw-code">UPDATE</code> without a WHERE rewrites every row. Wrap risky updates in a transaction.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-34" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>UPDATE with JOIN (MySQL)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DML</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Powerful — easy to mis-update rows</li><li>Use transaction; check rows affected</li></ul><pre><code class="kw-code">UPDATE orders o
+JOIN customers c ON o.customer_id = c.id
+SET o.status = 'VIP'
+WHERE c.country = 'DE';</code></pre>
+            <p><strong>Tip:</strong> Update-with-join syntax differs by DB: MySQL uses <code class="kw-code">UPDATE a JOIN b ... SET ...</code>; Postgres uses <code class="kw-code">UPDATE a SET ... FROM b WHERE ...</code>. Know your dialect.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-35" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>DELETE — remove old rows</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DML</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Soft delete often preferred in apps</li><li>FK constraints may block delete</li></ul><pre><code class="kw-code">DELETE FROM orders WHERE status = 'CANCELLED' AND created_at < '2024-01-01';</code></pre>
+            <p><strong>Tip:</strong> For very large deletes, loop in batches (<code class="kw-code">DELETE ... LIMIT 10000</code>) to avoid long locks, huge undo logs, and replication lag.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-36" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>CREATE TABLE</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DDL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>DECIMAL for money, VARCHAR for text</li><li>Add PRIMARY KEY and needed indexes</li></ul><pre><code class="kw-code">CREATE TABLE employees (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  dept VARCHAR(50),
+  salary DECIMAL(10,2),
+  hire_date DATE
+);</code></pre>
+            <p><strong>Tip:</strong> Pick precise types, add <code class="kw-code">NOT NULL</code> + sensible defaults, define a primary key, and use <code class="kw-code">utf8mb4</code>. Constraints at the DB level are your last line of defense.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-37" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>ALTER TABLE — add column</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DDL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Can lock large tables — plan maintenance</li><li>Version with Flyway/Liquibase</li></ul><pre><code class="kw-code">ALTER TABLE employees ADD COLUMN email VARCHAR(150) AFTER name;</code></pre>
+            <p><strong>Tip:</strong> On large tables, <code class="kw-code">ALTER</code> may lock/rebuild — use online DDL (<code class="kw-code">ALGORITHM=INPLACE</code>) or tools like <code class="kw-code">pt-online-schema-change</code>/<code class="kw-code">gh-ost</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-38" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>DROP TABLE</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DDL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><ul class="brief-bullets key-points"><li>DROP TABLE IF EXISTS</li><li>Backup before drop in prod</li></ul><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">DROP TABLE IF EXISTS temp_import_staging;</span></li></ul></div>
+            <pre><code class="kw-code">DROP TABLE IF EXISTS temp_import_staging;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">DROP</code> is irreversible and removes structure + data — back up and use <code class="kw-code">DROP TABLE IF EXISTS</code> in scripts to stay idempotent.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-39" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>CREATE INDEX</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DDL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Slower writes as trade-off</li><li>Index WHERE/JOIN/ORDER BY columns</li></ul><pre><code class="kw-code">CREATE INDEX idx_emp_dept ON employees (dept);</code></pre>
+            <p><strong>Tip:</strong> Indexes speed reads but slow writes and use space. Index columns used in <code class="kw-code">WHERE</code>/<code class="kw-code">JOIN</code>/<code class="kw-code">ORDER BY</code>; avoid indexing low-cardinality columns alone.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-40" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>Composite index</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DDL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>(customer_id, created_at) for customer + date queries</li><li>Column order matters</li></ul><pre><code class="kw-code">CREATE INDEX idx_orders_cust_date ON orders (customer_id, created_at);</code></pre>
+            <p><strong>Tip:</strong> Composite indexes follow the <strong>leftmost-prefix</strong> rule — <code class="kw-code">(a,b)</code> helps <code class="kw-code">a</code> and <code class="kw-code">a,b</code> but not <code class="kw-code">b</code> alone. Put equality columns before range columns.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-41" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>FOREIGN KEY constraint</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">DDL</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>ON DELETE CASCADE / SET NULL</li><li>Prevents orphan child rows</li></ul><pre><code class="kw-code">ALTER TABLE orders
+ADD CONSTRAINT fk_orders_customer
+FOREIGN KEY (customer_id) REFERENCES customers(id);</code></pre>
+            <p><strong>Tip:</strong> FKs enforce referential integrity. Index the FK column (MySQL does automatically) and choose <code class="kw-code">ON DELETE</code> behavior deliberately (<code class="kw-code">CASCADE</code> vs <code class="kw-code">RESTRICT</code>).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-42" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>CASE WHEN — salary band label</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Functions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">SQL</span></li></ul></div><ul class="brief-bullets key-points"><li>No data change required</li><li>Can nest CASE</li></ul><pre><code class="kw-code">SELECT name, salary,
+  CASE
+    WHEN salary >= 80000 THEN 'Senior'
+    WHEN salary >= 50000 THEN 'Mid'
+    ELSE 'Junior'
+  END AS band
+FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">CASE</code> is SQL's if/else — usable in SELECT, ORDER BY, and even inside aggregates (<code class="kw-code">SUM(CASE WHEN ... THEN 1 ELSE 0 END)</code> for conditional counts).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-43" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>COALESCE / IFNULL — default value</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Functions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>COALESCE(phone, &#x27;N/A&#x27;)</li><li>IFNULL is MySQL alias</li></ul><pre><code class="kw-code">SELECT name, COALESCE(phone, 'N/A') AS phone FROM customers;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">COALESCE</code> is standard SQL and takes many args (returns first non-NULL); <code class="kw-code">IFNULL</code> is MySQL-only and takes two. Prefer COALESCE for portability.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-44" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>Date functions — filter and format</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Functions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>Avoid function on indexed column in WHERE</li><li>Store UTC, display local in app</li></ul><pre><code class="kw-code">SELECT * FROM orders WHERE YEAR(created_at) = 2025;
+SELECT DATE_FORMAT(hire_date, '%Y-%m') AS hire_month FROM employees;</code></pre>
+            <p><strong>Tip:</strong> Store timestamps in UTC and format on display. Don't wrap an indexed date column in a function in <code class="kw-code">WHERE</code> — it kills the index; filter on a range instead.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-45" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>CONCAT — full name</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Functions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>NULL poisons CONCAT — use COALESCE</li><li>CONCAT_WS skips NULLs in MySQL</li></ul><pre><code class="kw-code">SELECT CONCAT(first_name, ' ', last_name) AS full_name FROM employees;</code></pre>
+            <p><strong>Tip:</strong> In some DBs <code class="kw-code">CONCAT</code> with a NULL yields NULL — use <code class="kw-code">CONCAT_WS</code> (skips NULLs with a separator) or <code class="kw-code">COALESCE</code> each part.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-46" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>UPPER, LOWER, TRIM</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Functions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>TRIM removes leading/trailing spaces</li><li>UPPER/LOWER for case-insensitive compare</li></ul><pre><code class="kw-code">SELECT UPPER(dept), LOWER(email), TRIM(name) FROM employees;</code></pre>
+            <p><strong>Tip:</strong> For case-insensitive search, comparing <code class="kw-code">LOWER(col)=LOWER(:x)</code> disables a normal index — add a functional index or a normalized/generated column.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-47" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>ROW_NUMBER — rank employees by salary per dept</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Window</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>PARTITION BY dept ORDER BY salary</li><li>Keeps all rows unlike GROUP BY</li></ul><pre><code class="kw-code">SELECT name, dept, salary,
+  ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) AS rn
+FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">ROW_NUMBER() OVER (PARTITION BY g ORDER BY x)</code> gives a unique rank per group — perfect for "top-N per group" or deduping (keep <code class="kw-code">rn = 1</code>).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-48" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>RANK and DENSE_RANK</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Window</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>OVER (ORDER BY salary DESC)</li><li>Top-N per group pattern</li></ul><pre><code class="kw-code">SELECT name, salary,
+  RANK() OVER (ORDER BY salary DESC) AS rnk,
+  DENSE_RANK() OVER (ORDER BY salary DESC) AS drnk
+FROM employees;</code></pre>
+            <p><strong>Tip:</strong> <code class="kw-code">RANK</code> leaves gaps after ties (1,1,3); <code class="kw-code">DENSE_RANK</code> doesn't (1,1,2); <code class="kw-code">ROW_NUMBER</code> is always unique. Pick based on how you want ties handled.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-49" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>CTE (WITH clause)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">CTE</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets key-points"><li>WITH x AS (...) SELECT FROM x</li><li>Can be recursive for hierarchies</li></ul><pre><code class="kw-code">WITH dept_avg AS (
+  SELECT dept, AVG(salary) AS avg_sal FROM employees GROUP BY dept
+)
+SELECT e.name, e.salary, d.avg_sal
+FROM employees e
+JOIN dept_avg d ON e.dept = d.dept
+WHERE e.salary > d.avg_sal;</code></pre>
+            <p><strong>Tip:</strong> CTEs (<code class="kw-code">WITH</code>) make complex queries readable and can be referenced multiple times; a <strong>recursive</strong> CTE walks hierarchies/graphs (org charts, category trees).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+        <article class="qa-card" data-id="bq-50" data-level="easy" data-section="basic-queries">
+          <div class="qa-question"><h3>Transaction — BEGIN, COMMIT, ROLLBACK</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Transaction</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">SQL</span></li><li><span class="kw">ACID</span></li></ul></div><ul class="brief-bullets key-points"><li>ACID for money transfers</li><li>START TRANSACTION ... COMMIT/ROLLBACK</li></ul><pre><code class="kw-code">START TRANSACTION;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+-- On error: ROLLBACK;</code></pre>
+            <p><strong>Tip:</strong> Keep transactions short, do all reads/writes then commit fast, and always handle the error path with <code class="kw-code">ROLLBACK</code>. Choose the isolation level that's correct for the work.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

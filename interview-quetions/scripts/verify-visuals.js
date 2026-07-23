@@ -1,0 +1,14 @@
+const fs = require("fs");
+const path = require("path");
+const root = path.join(__dirname, "..");
+const html = fs.readFileSync(path.join(root, "dsa/dsa-visuals.html"), "utf8");
+const js = fs.readFileSync(path.join(root, "assets/dsa-visuals.js"), "utf8");
+const ids = [...html.matchAll(/class="visual-card[^"]*" id="(visual-[^"]+)"/g)].map((m) => m[1]);
+const inits = [...js.matchAll(/"(visual-[^"]+)":/g)].map((m) => m[1]);
+const missing = ids.filter((id) => !inits.includes(id));
+const extra = inits.filter((id) => !ids.includes(id));
+console.log("HTML cards:", ids.length);
+console.log("JS inits:", inits.length);
+if (missing.length) console.log("Missing inits:", missing);
+if (extra.length) console.log("Extra inits (ok):", extra);
+process.exit(missing.length ? 1 : 0);

@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projects — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="projects">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>Your Projects — Interview Answers</h1>
+        <p>Original answers written for your resume — click to expand. Filter by <strong>Easy / Medium / Hard</strong> or <strong>⭐ Very Important</strong>.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> quick pitch / overview</span>
+        <span><span class="level level-medium">Medium</span> architecture & impact</span>
+        <span><span class="level level-hard">Hard</span> deep technical + trade-offs</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+      <div class="qa-list">
+
+        <article class="qa-card" data-id="deskmingle-pitch" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>DeskMingle — WiFi social discovery app (elevator pitch)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Side project</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">deskmingle.com</span></li><li><span class="kw">Spring Boot</span></li><li><span class="kw">WebSocket</span></li><li><span class="kw">OAuth2/JWT</span></li><li><span class="kw">React</span></li><li><span class="kw">PostgreSQL</span></li><li><span class="kw">Docker</span></li></ul></div>
+            <p><strong class="kw">Quick script (~30s):</strong> "DeskMingle is a live app at deskmingle.com that connects people on the same office or shared WiFi for real-time discovery, matching, chat, and hangouts. I built it full-stack with Spring Boot, Spring Security, OAuth2/JWT, PostgreSQL, WebSocket messaging, React, OpenAPI/Swagger, and deployed on Linux via Docker with HTTPS."</p>
+            <h4>Problem</h4>
+            <p>People in co-working or office WiFi want to meet nearby colleagues or peers without awkward cold outreach — need discovery tied to network context, not just location GPS.</p>
+            <h4>Architecture (high level)</h4>
+            <ul>
+              <li><strong class="kw">Backend:</strong> Spring Boot REST + WebSocket for realtime chat; OAuth2/JWT via Spring Security</li>
+              <li><strong class="kw">Data:</strong> PostgreSQL for users, matches, sessions</li>
+              <li><strong class="kw">Frontend:</strong> React for discovery UI, matching, chat</li>
+              <li><strong class="kw">Ops:</strong> Docker on Linux, HTTPS termination</li>
+            </ul>
+            <h4>Why mention it</h4>
+            <p>Shows end-to-end ownership beyond enterprise tickets — auth, realtime, deployment — strong for full-stack or product-engineering roles.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="apna-shop-pitch" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>Apna Shop — retail management app (elevator pitch)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Side project</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">apna-shop-zeta.vercel.app</span></li><li><span class="kw">3 shop owners</span></li><li><span class="kw">udhaar</span></li><li><span class="kw">OTP/JWT</span></li><li><span class="kw">TypeScript</span></li><li><span class="kw">JPA/Hibernate</span></li></ul></div>
+            <p><strong class="kw">Quick script (~30s):</strong> "Apna Shop is a live retail app at apna-shop-zeta.vercel.app used by 3 shop owners for inventory, sales, customer credit (udhaar), and analytics. Stack: Spring Boot, JPA/Hibernate, PostgreSQL, React, TypeScript, OTP/JWT auth, customer trust scores, revenue and udhaar dashboards."</p>
+            <h4>Problem</h4>
+            <p>Small shop owners track inventory, daily sales, and credit (udhaar) on paper or WhatsApp — hard to see who owes what and what's in stock.</p>
+            <h4>Features you built</h4>
+            <ul>
+              <li>Inventory + sales tracking with PostgreSQL-backed persistence</li>
+              <li>Customer credit (udhaar) ledger with trust scores</li>
+              <li>Revenue and udhaar insight dashboards for day-to-day decisions</li>
+              <li>OTP/JWT authentication for shop-owner access</li>
+            </ul>
+            <h4>Impact</h4>
+            <p>Real users (3 shops) — stronger than a demo-only portfolio piece. Shows product thinking and domain modeling (retail + credit).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="deskmingle-websocket" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>DeskMingle — how did you implement realtime chat?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">WebSocket</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">WebSocket</span></li><li><span class="kw">STOMP</span></li><li><span class="kw">JWT on connect</span></li><li><span class="kw">React</span></li></ul></div>
+            <h4>Approach</h4>
+            <ul>
+              <li>Spring WebSocket (or STOMP over WebSocket) for bidirectional chat after match</li>
+              <li>Authenticate socket handshake with JWT from OAuth2 login — reject unauthenticated sessions</li>
+              <li>Room/channel per conversation; persist messages in PostgreSQL for history</li>
+              <li>React client subscribes on match; reconnect handling for flaky WiFi</li>
+            </ul>
+            <h4>Trade-offs</h4>
+            <p>WebSocket vs polling — chose WebSocket for latency and battery on mobile. Fallback: long-poll or SSE if proxies block WS (mention if you added it).</p>
+            <h4>Follow-up</h4>
+            <p>"How scale chat?" → horizontal app instances + sticky sessions or Redis pub/sub for cross-node message fan-out.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="apna-shop-udhaar" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>Apna Shop — how does udhaar (credit) tracking work?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Domain</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ledger</span></li><li><span class="kw">trust score</span></li><li><span class="kw">JPA</span></li><li><span class="kw">transactional</span></li></ul></div>
+            <h4>Domain model</h4>
+            <ul>
+              <li><strong class="kw">Customer</strong> linked to shop; running balance for credit taken (udhaar)</li>
+              <li><strong class="kw">Sales / payments</strong> recorded as transactions — credit increases balance, payment decreases</li>
+              <li><strong class="kw">Trust score</strong> derived from payment history and outstanding days — helps owner decide credit limits</li>
+            </ul>
+            <h4>Technical</h4>
+            <p>Spring Boot + JPA/Hibernate with <code class="kw-code">@Transactional</code> updates so sale + ledger stay consistent. Dashboards aggregate revenue vs outstanding udhaar.</p>
+            <h4>Why interviewers care</h4>
+            <p>Shows you can model real business rules, not just CRUD — similar to billing/credit patterns in enterprise systems.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="side-projects-vs-work" data-level="medium">
+          <div class="qa-question"><h3>How do your side projects complement your Amdocs work?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Meta</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ownership</span></li><li><span class="kw">OAuth2</span></li><li><span class="kw">React</span></li><li><span class="kw">Docker</span></li></ul></div>
+            <p>At Amdocs I excel at scale, integrations, and team tooling (1M+ txn/day, CI/CD, Fuse Logger). Side projects let me own the <em>full</em> stack — product decisions, auth, frontend, deployment — with real users validating the result.</p>
+            <p>Skills transfer both ways: production discipline from telco (monitoring, safe DB access) into Apna Shop; OAuth2/WebSocket/React depth from DeskMingle back into client microservices at Vodafone/XL.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="fuse-logger" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>Fuse Logger — what problem, architecture, and impact?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Tool</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">UI:</span></li><li><span class="kw">API:</span></li><li><span class="kw">Data:</span></li><li><span class="kw">Security:</span></li><li><span class="kw">Camel</span></li><li><span class="kw">API</span></li><li><span class="kw">Spring</span></li><li><span class="kw">Boot</span></li></ul></div><p>Multi-environment log search tool for Fuse/Camel integrations so engineers find errors by correlation ID without SSH to every server.</p>
+            <h4>Problem (detailed)</h4>
+            <p>At Optima, production issues required grep across dev/test/prod servers. Average triage took 30–60 minutes. Senior engineers became bottlenecks. New joiners couldn't debug integration chains alone.</p>
+            <h4>Solution architecture</h4>
+            <ul>
+              <li><strong class="kw">UI:</strong> filters — env, time range, correlation ID, route name, log level, keyword</li>
+              <li><strong class="kw">API:</strong> Spring Boot service — auth, query orchestration, pagination</li>
+              <li><strong class="kw">Data:</strong> log aggregator (ELK / SSH tail / file agents — state your real stack)</li>
+              <li><strong class="kw">Security:</strong> prod access only for authorized roles; audit who queried what</li>
+            </ul>
+            <h4>Technical challenges</h4>
+            <ul>
+              <li>Large log volume → time-bounded queries, max rows, async search</li>
+              <li>Consistent correlation ID across Camel hops — documented standard for teams</li>
+            </ul>
+            <h4>Impact</h4>
+            <p>Lower MTTR, fewer escalations, daily use by integration team — strong "ownership beyond tickets" story.</p>
+            <h4>Follow-ups</h4>
+            <p>How handle PII in logs? How scale if QPS on search grows? → caching recent queries, read replicas on log store.</p>
+            <h4>Likely follow-up</h4>
+<p>Expect "how did you mask PII / handle log volume?" — answer: masking at the logging layer (MSISDN/email patterns), correlation IDs for traceability, and structured JSON to an aggregator. Bridge: audit-friendly, compliant logging matters in telecom and regulated domains.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="subscriber-tool" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>Subscriber Tool — safe production lookups by MIN / accountId</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Tool</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SQL</span></li><li><span class="kw">Read</span></li><li><span class="kw">Input validation</span></li><li><span class="kw">PII masking in UI</span></li></ul></div>
+            <p>Read-only tool for support/dev to fetch subscriber data by MIN or accountId without writing ad-hoc SQL on production.</p>
+            <h4>Why it was needed</h4>
+            <p>Telecom identifiers (MIN, MSISDN, accountId) are confusing. Wrong manual SQL caused slow incidents and compliance risk.</p>
+            <h4>Design details</h4>
+            <ul>
+              <li>Read-only DB user + connection pool limits + query timeout (e.g. 5s)</li>
+              <li>Input validation — reject wildcards that scan full table</li>
+              <li>Audit log: user, timestamp, ID searched</li>
+              <li>PII masking in UI — partial phone, no full dump export by default</li>
+              <li>Optional: hit read replica not primary OLTP</li>
+            </ul>
+            <h4>Interview tip</h4>
+            <p>Shows production maturity — "I think about safety, not only features."</p>
+            <h4>Likely follow-up</h4>
+<p>"How did you keep it safe on prod?" — read-only DB role, parameterized indexed-equality lookups only (reject <code class="kw-code">LIKE '%..%'</code>), statement timeout, row limit, audit log, read replica. The theme: turning risky manual SQL into a safe, governed tool.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sm-tool" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>SM Tool — deployment automation (deep dive)</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Tool</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Before:</span></li><li><span class="kw">After:</span></li><li><span class="kw">Idempotency:</span></li><li><span class="kw">Secrets:</span></li><li><span class="kw">Concurrency:</span></li><li><span class="kw">Camel</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">Pre</span></li></ul></div>
+            <p>Orchestrates repeatable deploy steps for Fuse/Camel services — complements Jenkins; part of 60% manual effort reduction.</p>
+            <h4>Before vs after</h4>
+            <p><strong class="kw">Before:</strong> manual JAR copy, config edit, restart, smoke check — 45+ min, error-prone. <strong class="kw">After:</strong> one workflow with checks and rollback.</p>
+            <h4>Pipeline steps (example)</h4>
+            <ol>
+              <li>Validate env + maintenance window</li>
+              <li>Pre-check: disk, current version, running health</li>
+              <li>Deploy artifact from Jenkins/Nexus</li>
+              <li>Apply config from template per env</li>
+              <li>Rolling restart / blue-green if available</li>
+              <li>Post-deploy smoke: health URL + sample test transaction</li>
+              <li>Auto-rollback on smoke failure</li>
+            </ol>
+            <h4>Hard topics</h4>
+            <ul>
+              <li><strong class="kw">Idempotency:</strong> re-run deploy doesn't double-apply</li>
+              <li><strong class="kw">Secrets:</strong> not in repo — vault or Jenkins credentials</li>
+              <li><strong class="kw">Concurrency:</strong> lock so two deploys don't hit same env</li>
+            </ul>
+            <h4>Position it</h4>
+<p>Frame as release automation on top of Jenkins — standardizing multi-step deploys (config, approvals, env promotion) to cut manual steps + human error. Be ready to compare with off-the-shelf CD tools and justify building it (fit + integration with legacy).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="api-visualizer" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>API Visualizer — mapping distributed flows (system design angle)</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Tool</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">API</span></li><li><span class="kw">Camel</span></li><li><span class="kw">REST</span></li><li><span class="kw">JMS</span></li><li><span class="kw">Update process: PR when route changes</span></li></ul></div>
+            <p>End-to-end map of API/Camel hops for onboarding, design reviews, and incident triage — living documentation.</p>
+            <h4>Problem</h4>
+            <p>10+ services per flow; wiki outdated; new engineers asked seniors "which service fails after payment?"</p>
+            <h4>How you built it</h4>
+            <ul>
+              <li>Metadata: service name, protocol (REST/JMS), endpoint, owner team</li>
+              <li>Sources: Camel route definitions, OpenAPI, manual curation for externals</li>
+              <li>UI: graph or step list; link to logs (Fuse Logger) by correlation ID</li>
+              <li>Update process: PR when route changes — doc doesn't rot</li>
+            </ul>
+            <h4>Use in system design interviews</h4>
+            <p>"Same as drawing LB → API → workflow → integration → partner — I operationalized it as a tool."</p>
+            <h4>Metrics</h4>
+            <p>Faster onboarding (qualitative), faster incident hop identification.</p>
+            <h4>System-design angle</h4>
+<p>Talk about parsing OpenAPI specs robustly (version differences, edge cases), building the endpoint/flow graph, and how it sped frontend/backend contract agreement and onboarding. Shows you think about developer experience and distributed-system clarity.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ms-builder" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>MS-Builder — what is it, architecture, and impact?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Project</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">OpenAPI → code</span></li><li><span class="kw">contract-first</span></li><li><span class="kw">templating</span></li><li><span class="kw">Docker + Jenkins generated</span></li><li><span class="kw">scaffolding</span></li></ul></div>
+            
+            <h4>Problem it solves</h4>
+            <p>Every new microservice needed the same repetitive setup: project skeleton, REST controllers/DTOs, Dockerfile, deployment config, CI/CD pipeline. That was slow and inconsistent across teams.</p>
+            <h4>Architecture (high level)</h4>
+            <ol>
+              <li><strong class="kw">Input:</strong> an OpenAPI (Swagger) spec — contract-first.</li>
+              <li><strong class="kw">Parser:</strong> reads paths, operations, and schemas into an internal model.</li>
+              <li><strong class="kw">Template engine:</strong> applies templates to emit Java code (<code class="kw-code">@RestController</code>, request/response models, service stubs).</li>
+              <li><strong class="kw">Infra generation:</strong> also emits a <strong class="kw">Dockerfile</strong>, deployment config, and a <strong class="kw">Jenkinsfile</strong>.</li>
+              <li><strong class="kw">Output:</strong> a complete, runnable service repo.</li>
+            </ol>
+            <h4>Impact</h4>
+            <p>New services bootstrap in minutes instead of days, with a consistent structure and CI/CD out of the box — fewer setup mistakes, faster onboarding.</p>
+            <h4>Why it's a strong interview project</h4>
+            <p>Shows you understand <strong class="kw">contract-first API design</strong>, code generation, and the full path from spec → service → container → pipeline — same OpenAPI/Swagger skills used in DeskMingle and API Visualizer.</p>
+            <h4>Sell the value</h4>
+<p>It codifies your team's conventions (layering, error handling, observability) into a generator — new services start consistent and production-ready in minutes. Emphasize standardization + speed; be ready to discuss how you keep generated code maintainable.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ms-builder-openapi" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>MS-Builder — how does OpenAPI → Spring Boot generation work?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Project</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">parse spec</span></li><li><span class="kw">model</span></li><li><span class="kw">templates (Mustache/Freemarker)</span></li><li><span class="kw">emit controllers + DTOs</span></li></ul></div>
+            
+            <h4>The pipeline</h4>
+            <ol>
+              <li><strong class="kw">Parse</strong> the OpenAPI YAML/JSON (paths, operations, parameters, schemas).</li>
+              <li>Build an internal <strong class="kw">model</strong> (each operation → a method; each schema → a DTO).</li>
+              <li>Run the model through <strong class="kw">templates</strong> (e.g. Mustache/Freemarker) to emit controllers, models, and service interfaces.</li>
+            </ol>
+            <h4>Example — spec in</h4>
+<pre><code class="kw-code">paths:
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'</code></pre>
+            <h4>Generated controller out</h4>
+<pre><code class="kw-code">@RestController
+public class OrdersApiController implements OrdersApi {
+  @Override
+  public ResponseEntity&lt;Order&gt; getOrder(String id) {
+    // delegate to a service impl you fill in
+  }
+}</code></pre>
+            <p>This is the same idea as the open-source <strong class="kw">OpenAPI Generator</strong> — I built a version tuned to our org's conventions (our Docker base image, Jenkins stages, package layout).</p>
+            <h4>Be precise</h4>
+<p>Walk the pipeline: parse the OpenAPI spec → model (paths, schemas, operations) → templates (controllers, DTOs, validation, error advice) → generated Spring Boot project. Mention contract-first benefits and how you handle spec changes/regeneration without clobbering custom code.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ms-builder-challenges" data-level="hard">
+          <div class="qa-question"><h3>MS-Builder — design decisions &amp; hardest challenges?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">Project</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">regeneration vs custom code</span></li><li><span class="kw">template versioning</span></li><li><span class="kw">spec validation</span></li><li><span class="kw">build vs buy</span></li></ul></div>
+            
+            <h4>Key challenges &amp; how I handled them</h4>
+            <ul>
+              <li><strong class="kw">Don't overwrite custom logic:</strong> separate <em>generated</em> code (interfaces/DTOs) from <em>hand-written</em> implementations, so re-running the generator is safe.</li>
+              <li><strong class="kw">Spec validation:</strong> reject invalid OpenAPI early with clear errors, rather than emitting broken code.</li>
+              <li><strong class="kw">Template versioning:</strong> templates evolve — version them so old services can regenerate predictably.</li>
+              <li><strong class="kw">Consistency:</strong> enforce naming/package conventions so every generated service looks the same.</li>
+            </ul>
+            <h4>Build vs buy</h4>
+            <p>OpenAPI Generator exists, but I needed our specific Docker base image, Jenkins stages, and deploy configs baked in — so a tailored builder gave a true one-click, org-standard service.</p>
+            <h4>Likely follow-up</h4>
+            <p><em>"What would you improve?"</em> → plug in schema-compatibility checks, support gRPC/async (Kafka) templates, and a web UI to submit specs.</p>
+            <h4>Show engineering judgment</h4>
+<p>Good challenges to cite: keeping generated + hand-written code separate (so regen is safe), supporting spec evolution/versioning, template maintainability, and validating output. Discussing trade-offs here signals senior-level design thinking.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="resume-aws-cloud" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>You're AWS certified — how would you deploy a microservice on AWS?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Cloud</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">AWS Cloud Practitioner</span></li><li><span class="kw">Docker → ECR</span></li><li><span class="kw">ECS / EKS</span></li><li><span class="kw">ALB</span></li><li><span class="kw">RDS / Aurora</span></li><li><span class="kw">secrets</span></li></ul></div>
+            
+            <h4>A clean answer</h4>
+            <ul>
+              <li>Build a <strong class="kw">Docker</strong> image (Jenkins) and push to <strong class="kw">ECR</strong>.</li>
+              <li>Run it on <strong class="kw">ECS</strong> (Fargate) or <strong class="kw">EKS</strong> (Kubernetes) — both isolate and scale the service.</li>
+              <li>Front it with an <strong class="kw">Application Load Balancer</strong>; auto-scale on CPU/requests.</li>
+              <li>Data in <strong class="kw">RDS / Aurora (PostgreSQL)</strong>; async work via <strong class="kw">SQS</strong> or Kafka.</li>
+              <li><strong class="kw">Secrets</strong> in AWS Secrets Manager / SSM (not in the repo).</li>
+              <li>Logs/metrics to <strong class="kw">CloudWatch</strong>.</li>
+            </ul>
+            <p><strong class="kw">Be honest about depth:</strong> "I'm AWS Cloud Practitioner certified (plus Kubernetes for Beginners and YAML certs), have deployed side projects with Docker on Linux, and built Jenkins CI/CD at work — I know the deployment path conceptually and am hands-on with containers."</p>
+            <h4>Give a concrete plan</h4>
+<p>Containerize → push to ECR → run on ECS/EKS behind an ALB, with autoscaling, secrets in Secrets Manager, RDS for data, CloudWatch for logs/metrics, and a CI/CD pipeline (CodePipeline/Jenkins) doing rolling/blue-green deploys. Tie each choice to a reason (scaling, security, observability).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="resume-couchbase-kafka" data-level="medium">
+          <div class="qa-question"><h3>Your resume lists Couchbase and Kafka — tell me about that.</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Stack</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Couchbase = NoSQL doc store</span></li><li><span class="kw">Kafka = event streaming</span></li><li><span class="kw">be honest about depth</span></li></ul></div>
+            
+            <h4>Couchbase</h4>
+            <p>A distributed <strong class="kw">NoSQL document database</strong> (JSON docs, key-value speed, N1QL query language). Good for low-latency lookups and caching — in telecom BSS, fast subscriber/session reads.</p>
+            <h4>Kafka</h4>
+            <p>A <strong class="kw">distributed event log</strong> for async, decoupled communication — the modern successor to the Camel/JMS hops I worked on. (See the full Spring Boot + Kafka example on the Kafka page.)</p>
+            <h4>Honest framing</h4>
+            <p>"I've worked alongside these in the BSS stack and studied them deeply; my hands-on production depth is strongest in Java/Spring Boot/Camel/SQL, and I'm actively building Kafka projects." Honesty beats getting caught overstating.</p>
+            <h4>Be honest about depth</h4>
+<p>State exactly what you did (e.g. Couchbase as a KV/document store, Kafka for async events via Camel) and the concepts you understand (partitions, consumer groups, idempotency, N1QL). Honesty + solid fundamentals beats overstating hands-on operation.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="resume-achievements" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>Walk me through your achievements (CodinGame, Coding Champion, NIMCET).</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Meta</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CodinGame 1st / 10,000+</span></li><li><span class="kw">Amdocs Coding Champion</span></li><li><span class="kw">AIR-177 NIMCET</span></li><li><span class="kw">NITW Hackathon 4th</span></li><li><span class="kw">AWS Cloud Practitioner</span></li><li><span class="kw">Kubernetes for Beginners</span></li><li><span class="kw">MCA NIT Warangal</span></li></ul></div>
+            
+            <h4>Short script</h4>
+            <p>"I enjoy competitive problem-solving — I won Amdocs' CodinGame Q4'23 ranking <strong class="kw">1st among 10,000+</strong> participants globally, was an Amdocs India Coding Champion, scored <strong class="kw">AIR-177 in NIMCET</strong> (MCA at <strong class="kw">NIT Warangal</strong>), and placed <strong class="kw">4th in the NITW Hackathon</strong>. I'm also certified in <strong class="kw">AWS Cloud Practitioner</strong>, <strong class="kw">Kubernetes for Beginners</strong>, and <strong class="kw">YAML: Zero to Master</strong>. That problem-solving strength shows up in backend debugging and shipping products like DeskMingle and Apna Shop."</p>
+            <h4>Why mention it</h4>
+            <p>Signals raw coding ability for the DSA round and that you ramp fast — but keep it to ~20 seconds and pivot back to engineering.</p>
+            <h4>Connect to the role</h4>
+<p>Use these (CodinGame, Coding Champion, NIMCET rank) to evidence problem-solving and competitive aptitude — briefly. Pivot quickly to how that translates into shipping reliable backend systems; don't dwell on student-era items.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="vodafone-pitch" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>Vodafone Germany — 2-minute elevator pitch</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Client</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Script:</span></li><li><span class="kw">Spring Boot</span></li><li><span class="kw">React</span></li><li><span class="kw">REST</span></li><li><span class="kw">TestNG</span></li><li><span class="kw">PostgreSQL</span></li><li><span class="kw">SQL</span></li></ul></div><p><strong class="kw">Quick script (~30s):</strong> "On Vodafone Germany I built Spring Boot REST microservices and React features for telecom reporting and operations. I optimized heavy SQL reporting queries using EXPLAIN and indexing — reports became more than 10% faster. I raised TestNG coverage from 60% to 90% on critical paths and applied OOP design patterns for ~5% faster delivery. Stack: Java, Spring Boot, React, REST, PostgreSQL/SQL, TestNG, Jenkins, Git, Maven."</p>
+
+            <h4>Detailed pitch (STAR — use in deep-dive rounds)</h4>
+            <p><strong class="kw">Situation:</strong> Vodafone Germany's operations and reporting depended on backend services that pulled large volumes of subscriber and usage data from PostgreSQL/SQL stores. Some reports were slow during peak hours and put pressure on the database, and test coverage on critical paths was low enough to make releases risky.</p>
+            <p><strong class="kw">Task:</strong> As a backend engineer I owned building and maintaining the reporting/operations microservices, improving query performance, and raising confidence in releases through better tests.</p>
+            <p><strong class="kw">Action:</strong></p>
+            <ul>
+              <li>Built <strong class="kw">Spring Boot REST microservices</strong> and <strong class="kw">React</strong> features for reporting/operations APIs, with clear contracts and pagination for large result sets.</li>
+              <li>Profiled the slow reports with <code class="kw-code">EXPLAIN</code>, found full table scans and bad join orders, and added the right <strong class="kw">composite indexes</strong> and query rewrites (selective WHEREs, avoiding SELECT *, limiting date ranges).</li>
+              <li>Reduced DB load further by returning only needed columns and paginating, so peak-hour CPU dropped.</li>
+              <li>Raised <strong class="kw">TestNG</strong> coverage from <strong class="kw">60% to 90%</strong> on critical paths — added unit + integration tests so regressions were caught in CI, not prod.</li>
+              <li>Used <strong class="kw">Jenkins, Git, Maven</strong> for repeatable builds and faster, safer delivery.</li>
+            </ul>
+            <p><strong class="kw">Result:</strong> Reports ran <strong class="kw">10%+ faster</strong> with lower DB CPU at peak, releases got safer (90% coverage on critical paths), and overall delivery sped up ~5%.</p>
+
+            <h4>Likely follow-ups</h4>
+            <ul>
+              <li><em>"How exactly did you find the slow query?"</em> → "EXPLAIN showed a full scan + filesort; I added a composite index on the filter+sort columns and rewrote the join."</li>
+              <li><em>"Why only 90% coverage, not 100%?"</em> → "I prioritized critical business paths; chasing 100% has diminishing returns vs trivial getters."</li>
+              <li><em>"Why PostgreSQL vs MySQL?"</em> → honest: "Platform used relational SQL; optimization concepts (EXPLAIN, indexing, cardinality) transfer across engines."</li>
+            </ul>
+
+            <h4>Relevance</h4>
+            <p>Maps to backend roles needing REST microservices + relational DB performance tuning + test discipline on business-critical platforms.</p>
+
+            <h4>Memorize these numbers</h4>
+            <p>10% SQL, 60→90% coverage, ~5% faster delivery.</p>
+            <h4>Delivery tip</h4>
+<p>Keep it ~2 min: context (telco BSS reporting), your role + stack (Java/Spring/React/SQL), one quantified win (>10% faster reports, 60%→90% coverage), and why you're a fit for the role. Practice it out loud until it's tight and natural.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="optima-pitch" data-level="easy" data-vimp="true">
+          <div class="qa-question"><h3>Optima Philippines — 2-minute elevator pitch</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">Client</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Script:</span></li><li><span class="kw">Camel</span></li><li><span class="kw">SonarQube</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">CI/CD</span></li><li><span class="kw">API</span></li></ul></div><p><strong class="kw">Quick script (~30s):</strong> "I maintained Apache Camel services doing 1M+ transactions per day between BSS systems — reliability, monitoring, error handling. I built Jenkins CI/CD with SonarQube quality gates, cutting manual deploy ~60%. I created Fuse Logger, Subscriber Tool, SM Tool, and API Visualizer used daily by the team. Stack: Java, Camel, Jenkins, SonarQube, PostgreSQL/SQL, REST."</p>
+
+            <h4>Detailed pitch (STAR — your strongest story)</h4>
+            <p><strong class="kw">Situation:</strong> Optima Philippines runs telecom BSS systems where multiple platforms (ordering, billing, provisioning, partners) must talk to each other reliably. The integration layer handled <strong class="kw">1M+ transactions per day</strong>, and any failed hop could delay customer activations. Debugging meant SSH-ing across dev/test/prod servers, and deployments were manual and error-prone.</p>
+            <p><strong class="kw">Task:</strong> Keep these Apache Camel integration flows reliable, cut the time to debug production issues, and make deployments repeatable — while also reducing the senior-engineer bottleneck for the whole team.</p>
+            <p><strong class="kw">Action:</strong></p>
+            <ul>
+              <li>Maintained and hardened <strong class="kw">Apache Camel</strong> routes between BSS systems — added monitoring, robust error handling, retries and clear failure paths.</li>
+              <li>Built <strong class="kw">Jenkins CI/CD</strong> pipelines with <strong class="kw">SonarQube</strong> quality gates that cut manual deployment effort by <strong class="kw">~60%</strong> and reduced wrong-environment mistakes.</li>
+              <li>Owned four internal tools used daily by the team:
+                <ul>
+                  <li><strong class="kw">Fuse Logger</strong> — search logs across environments by correlation ID (no more SSH to every server).</li>
+                  <li><strong class="kw">Subscriber Tool</strong> — safe, read-only production lookups by MIN/accountId with PII masking + audit.</li>
+                  <li><strong class="kw">SM Tool</strong> — deployment automation with pre-checks, smoke tests, and rollback.</li>
+                  <li><strong class="kw">API Visualizer</strong> — living map of the API/Camel hops for onboarding and incident triage.</li>
+                </ul>
+              </li>
+            </ul>
+            <p><strong class="kw">Result:</strong> Lower MTTR (faster incident triage via correlation IDs), ~60% less manual deploy effort, fewer escalations, and faster onboarding — the tools became part of the team's daily workflow.</p>
+
+            <h4>Lead with the incident story</h4>
+            <p>When asked "your hardest bug," tell the peak-hour stuck-queue story: Fuse Logger (correlation ID) → Subscriber Tool (data valid) → API Visualizer (delay on external billing hop) → partner throttle confirmed → backoff/retry tuned → queue drained in ~2 hours, added a latency alert + runbook. It connects <em>your tools</em> to a <em>production outcome</em>.</p>
+
+            <h4>Likely follow-ups</h4>
+            <ul>
+              <li><em>"How did you guarantee no message loss at 1M/day?"</em> → idempotent processing, retries with backoff, dead-letter handling, monitoring on stuck routes.</li>
+              <li><em>"Build vs buy for the tools?"</em> → generic APM didn't understand Camel route names / telecom correlation IDs; a fast internal MVP fit better and integrated with Jenkins + our schemas.</li>
+              <li><em>"How did you measure success?"</em> → adoption (daily users), MTTR before/after, ~60% fewer manual deploy steps.</li>
+            </ul>
+
+            <h4>Relevance</h4>
+            <p>High-volume, integration-heavy, reliability-first work with strong production ownership — Camel/JMS patterns relate directly to Kafka/SQS messaging in modern stacks.</p>
+            <h4>Delivery tip</h4>
+<p>Lead with the integration-microservices angle (Spring Boot + Camel around legacy cores), the resilience patterns (retry/DLQ, correlation IDs), and one concrete tool you built (Subscriber Tool). End with the impact on ops safety/speed.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="xl-pitch" data-level="easy">
+          <div class="qa-question"><h3>XL Axiata — 2-minute elevator pitch</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Client</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Script:</span></li><li><span class="kw">SQL</span></li></ul></div><p><strong class="kw">Quick script (~30s):</strong> "On XL Axiata I worked on third-party integrations with clear error contracts and timeouts, optimized Camunda BPM workflows for ~5% faster performance tests, and collaborated on database tuning for ~10% faster queries and fewer fallouts. It shows my mix of BPM + integration + SQL."</p>
+
+            <h4>Detailed pitch (STAR)</h4>
+            <p><strong class="kw">Situation:</strong> XL Axiata's order/provisioning flows depended on several third-party systems and on BPM workflows (Camunda) to orchestrate the steps. Unclear error handling and slow workflow steps caused fallouts (stuck/failed orders) and slow performance tests.</p>
+            <p><strong class="kw">Task:</strong> Make third-party integrations robust and predictable, speed up the BPM workflows, and reduce order fallouts working with the DB team.</p>
+            <p><strong class="kw">Action:</strong></p>
+            <ul>
+              <li>Designed integrations with <strong class="kw">clear error contracts and timeouts</strong> — defined what each failure means and how the workflow should react, instead of silent hangs.</li>
+              <li>Optimized <strong class="kw">Camunda BPM</strong> workflows (removed unnecessary steps / waits) → ~5% faster performance tests.</li>
+              <li>Collaborated on <strong class="kw">database tuning</strong> (indexing, query review) → ~10% faster queries and fewer fallouts.</li>
+            </ul>
+            <p><strong class="kw">Result:</strong> More predictable third-party behavior, faster workflows (~5% perf-test gain), ~10% faster queries, and fewer stuck orders — smoother provisioning.</p>
+
+            <h4>Likely follow-ups</h4>
+            <ul>
+              <li><em>"What is a fallout and how did you reduce it?"</em> → an order that fails mid-flow; reduced via timeouts, retries, and clearer error routing in the workflow.</li>
+              <li><em>"Why timeouts matter in integration?"</em> → without them a slow partner blocks threads/workflows; bounded timeouts + retries keep the system responsive (ties to resilience patterns).</li>
+              <li><em>"What is BPM / Camunda?"</em> → a workflow engine that models multi-step business processes as a diagram the system executes — good to explain simply.</li>
+            </ul>
+
+            <h4>Relevance</h4>
+            <p>Shows orchestration of multi-step business processes with resilience (timeouts, error contracts) and SQL tuning — relevant to any multi-step, multi-system workflow. Current role at Amdocs/XL Axiata, Pune.</p>
+            <h4>Delivery tip</h4>
+<p>Focus on workflow orchestration (Camunda/BPMN) + DB tuning (~10% faster), framed around reliability and an auditable process. Keep it crisp and outcome-led; invite a deeper question rather than dumping every detail.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="walk-through-project" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>Walk me through your best project end-to-end</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Meta</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Choose:</span></li><li><span class="kw">Optima tools</span></li><li><span class="kw">Apna Shop</span></li><li><span class="kw">DeskMingle</span></li></ul></div><h4>Structure (5–7 min)</h4>
+            <p><strong class="kw">Pick one story</strong> based on the interviewer:</p>
+            <ul>
+              <li><strong class="kw">Enterprise ownership:</strong> Optima — 1M+ txn/day, CI/CD + internal tools, 60% less manual deploy</li>
+              <li><strong class="kw">Product + users:</strong> Apna Shop — 3 shop owners, udhaar/trust scores, full-stack Spring + React</li>
+              <li><strong class="kw">Realtime + auth:</strong> DeskMingle — OAuth2/JWT, WebSocket chat, Docker deployment</li>
+            </ul>
+            <h4>Structure each as</h4>
+            <ol>
+              <li><strong class="kw">Context:</strong> problem and users</li>
+              <li><strong class="kw">Your role:</strong> what you owned end-to-end</li>
+              <li><strong class="kw">Technical:</strong> architecture, key APIs, data model</li>
+              <li><strong class="kw">Trade-offs:</strong> build vs buy, security vs speed</li>
+              <li><strong class="kw">Results:</strong> metrics or real adoption</li>
+              <li><strong class="kw">Learnings:</strong> what you'd improve next</li>
+            </ol>
+            <h4>Structure it</h4>
+<p>Problem → your role → architecture (draw the boxes) → key decisions + trade-offs → challenges → measurable result → what you'd do differently. Spend most time on <em>your</em> decisions and trade-offs — that's what they're scoring.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="nit-project" data-level="easy">
+          <div class="qa-question"><h3>NIT Summer School — STR-DFT project (when to mention)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Academic</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li></ul></div><ul class="brief-bullets"><li>Python/NumPy/pandas signal processing; predictive models &gt;95% accuracy.</li><li>Use only if interviewer asks Python/research — keep under 60 seconds for backend roles.</li></ul>
+            <h4>When to mention</h4>
+<p>Only surface the STR-DFT research project if asked about academics/research aptitude or to show breadth — keep it brief, then steer back to your professional backend work, which is more relevant to this role.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="tradeoff-build-buy" data-level="hard">
+          <div class="qa-question"><h3>Why build internal tools instead of using existing products?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">Meta</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Camel</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">Trade</span></li></ul></div>
+            <ul>
+              <li>Generic APM doesn't understand Camel route names / telecom correlation IDs</li>
+              <li>Cost/licensing of enterprise tools vs fast internal MVP</li>
+              <li>Tight integration with Jenkins, MIN lookup schemas, existing LDAP</li>
+              <li>Trade-off: maintenance burden — we assigned owner and doc updates each release</li>
+            </ul>
+            <h4>Show balanced judgment</h4>
+<p>Justify build with concrete reasons (tight fit to legacy/internal workflow, no good off-the-shelf option, integration cost) and acknowledge the cost of building (maintenance, support). Signaling that you'd buy when it makes sense shows pragmatism, not NIH syndrome.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="hardest-bug-tools" data-level="hard" data-vimp="true">
+          <div class="qa-question"><h3>Describe the hardest bug you fixed using your internal tools</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">Incident</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Situation:</span></li><li><span class="kw">Task:</span></li><li><span class="kw">Action:</span></li><li><span class="kw">Result:</span></li><li><span class="kw">Camel</span></li><li><span class="kw">API</span></li></ul></div><h4>How to structure this answer (use your real incident)</h4>
+            <p><strong class="kw">Situation:</strong> Peak-hour order messages stuck in a Camel route; partner timeout errors spiked; business reported delayed activations.</p>
+            <p><strong class="kw">Task:</strong> Find failing hop and restore flow without full environment restart.</p>
+            <p><strong class="kw">Action:</strong> Used Fuse Logger with correlation ID from one failed request → traced MIN through Subscriber Tool to confirm data was valid → API Visualizer showed delay on external billing hop → partner throttle confirmed with logs → temporary circuit-style backoff + retry policy adjustment.</p>
+            <p><strong class="kw">Result:</strong> Queue drained in 2 hours; added alert on that hop latency; documented runbook linked from API Visualizer.</p>
+            <h4>Why this story works</h4>
+            <p>It connects <em>your tools</em> to <em>production outcome</em>, not "I grep logs manually."</p>
+            <h4>Show the method</h4>
+<p>Use STAR: how the tool (logger/correlation IDs) helped you trace a gnarly cross-system issue, your hypothesis-driven debugging, the fix, and the regression guard you added. Emphasize how the tooling turned a needle-in-haystack into a quick trace.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="measure-tool-success" data-level="medium">
+          <div class="qa-question"><h3>How did you measure success of your internal tools?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Impact</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Adoption:</span></li><li><span class="kw">MTTR:</span></li><li><span class="kw">Deploy:</span></li><li><span class="kw">Quality:</span></li><li><span class="kw">Onboarding:</span></li><li><span class="kw">MTTR</span></li><li><span class="kw">Jenkins</span></li><li><span class="kw">API</span></li></ul></div><h4>Metrics you can cite</h4>
+            <ul>
+              <li><strong class="kw">Adoption:</strong> daily active users from integration team (even informal count helps)</li>
+              <li><strong class="kw">MTTR:</strong> average incident debug time before vs after Fuse Logger</li>
+              <li><strong class="kw">Deploy:</strong> ~60% less manual steps (SM Tool + Jenkins) — time per release</li>
+              <li><strong class="kw">Quality:</strong> fewer wrong-env deploys after checklist automation</li>
+              <li><strong class="kw">Onboarding:</strong> new joiners use API Visualizer in first week instead of shadowing seniors for 2 weeks</li>
+            </ul>
+            <h4>If you lack exact numbers</h4>
+            <p>Say qualitatively but honestly: "We didn't have a formal dashboard at first; after 3 months the on-call lead said they stopped SSH-ing for 80% of integration tickets."</p>
+            <h4>Quantify adoption + impact</h4>
+<p>Metrics that land: adoption (teams/users), time saved per task, reduction in manual SQL / incidents, faster triage (MTTR). "We cut X from hours to minutes / removed risky manual steps" is far stronger than "people liked it".</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="tech-stack-tools" data-level="medium">
+          <div class="qa-question"><h3>What tech stack did you use for the internal tools?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">Stack</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Backend:</span></li><li><span class="kw">UI:</span></li><li><span class="kw">Auth:</span></li><li><span class="kw">Data:</span></li><li><span class="kw">Deploy:</span></li><li><span class="kw">Spring</span></li><li><span class="kw">Boot</span></li><li><span class="kw">REST</span></li></ul></div><h4>Typical honest answer for your profile</h4>
+            <ul>
+              <li><strong class="kw">Backend:</strong> Java + Spring Boot REST APIs (same skills as Vodafone services)</li>
+              <li><strong class="kw">UI:</strong> simple web UI or internal portal page (React/Angular if your team used it)</li>
+              <li><strong class="kw">Auth:</strong> corporate LDAP/SSO, role-based env access</li>
+              <li><strong class="kw">Data:</strong> read-only JDBC to replica for Subscriber Tool; log API/SSH/ELK for Fuse Logger</li>
+              <li><strong class="kw">Deploy:</strong> same Jenkins pipelines you maintained</li>
+            </ul>
+            <p>Replace placeholders with what you actually used — interviewers will ask one level deeper.</p>
+            <h4>Keep it tied to outcomes</h4>
+<p>List the stack (Java/Spring Boot, REST, JPA/SQL, Jenkins, etc.) but anchor each to why it fit the problem and the team's existing ecosystem — interviewers care that choices were deliberate, not trendy.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="prioritize-four-tools" data-level="medium" data-vimp="true">
+          <div class="qa-question"><h3>Why four tools? How did you prioritize what to build first?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">Product</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Fuse Logger</span></li><li><span class="kw">Subscriber Tool</span></li><li><span class="kw">SM Tool</span></li><li><span class="kw">API Visualizer</span></li><li><span class="kw">API</span></li></ul></div><h4>Priority order (example narrative)</h4>
+            <ol>
+              <li><strong class="kw">Fuse Logger</strong> — highest pain: every incident needed logs first</li>
+              <li><strong class="kw">Subscriber Tool</strong> — second: validate data before blaming integration</li>
+              <li><strong class="kw">SM Tool</strong> — after repeat deploy mistakes cost a release window</li>
+              <li><strong class="kw">API Visualizer</strong> — when team grew and onboarding became expensive</li>
+            </ol>
+            <h4>Product thinking</h4>
+            <p>You listened to on-call pain, shipped MVP, iterated from feedback — shows senior mindset beyond "I coded a utility."</p>
+            <h4>Show prioritization thinking</h4>
+<p>Explain the ordering by pain/impact: tackle the riskiest/most-frequent problem first (e.g. risky manual prod SQL → Subscriber Tool), then automate the next biggest time sink. Demonstrates product sense and ROI-driven sequencing.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="amdocs-role-clarity" data-level="easy">
+          <div class="qa-question"><h3>How do you explain Amdocs + client projects on resume?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">Resume</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">In simple terms:</span></li><li><span class="kw">how</span></li></ul></div><p>"I'm employed by Amdocs Development Center (since 07/2023). I deliver software for telecom operators — currently XL Axiata, previously Vodafone Germany and Optima Philippines — as embedded product teams. Same employer, different client contexts, one continuous backend career path. Side projects DeskMingle and Apna Shop are my own products."</p>
+            <h4>Explain it cleanly</h4>
+<p>State it simply: employed by Amdocs (vendor), deployed to telco clients — list the client context per project. DeskMingle and Apna Shop are independent products with live users.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+      </div>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWS — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="aws">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>AWS Interview Prep</h1>
+        <p>Cloud fundamentals, compute (EC2/ECS/EKS/Lambda), storage &amp; databases (S3/RDS/DynamoDB), messaging (SQS/SNS/Kinesis), networking &amp; security (VPC/IAM/KMS), and DevOps/observability — the practical AWS a backend/Java engineer is expected to know. Click a question for the full answer.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> fundamentals</span>
+        <span><span class="level level-medium">Medium</span> 3 YOE depth</span>
+        <span><span class="level level-hard">Hard</span> senior / tricky</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+
+      <section class="topic-section" id="section-fundamentals">
+        <h2>Cloud Fundamentals</h2>
+        <p class="section-desc">Regions/AZs, the shared responsibility model, IAM, pricing models, and well-architected basics.</p>
+        <p class="section-meta">6 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="regions-az" data-level="easy" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>Explain Regions, Availability Zones, and Edge Locations</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Region = geo area</span></li><li><span class="kw">AZ = isolated DC</span></li><li><span class="kw">Edge = CDN PoP</span></li></ul></div>
+            <p><strong class="kw">Region</strong> — a geographic area (e.g. <code class="kw-code">ap-south-1</code> Mumbai). Pick by latency to users, data-residency laws, and service availability.</p>
+            <p><strong class="kw">Availability Zone (AZ)</strong> — one or more isolated data centers within a region, with independent power/network. Deploy across <strong>≥2 AZs</strong> for high availability.</p>
+            <p><strong class="kw">Edge Location</strong> — CloudFront/Route 53 points of presence close to users for caching/low-latency.</p>
+            <h4>Interview tip</h4>
+            <p>The key design rule: spread across multiple AZs to survive a data-center failure; spread across multiple Regions only for disaster recovery or global low-latency (more complex/costly).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="shared-responsibility" data-level="easy" data-section="fundamentals">
+          <div class="qa-question"><h3>What is the AWS Shared Responsibility Model?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">AWS: security OF the cloud</span></li><li><span class="kw">You: security IN the cloud</span></li></ul></div>
+            <p><strong class="kw">AWS</strong> secures the infrastructure — hardware, the global network, the hypervisor, managed-service internals ("security <em>of</em> the cloud").</p>
+            <p><strong class="kw">You</strong> secure what you put in it — IAM permissions, OS patching (on EC2), security groups, encryption, application code, and your data ("security <em>in</em> the cloud").</p>
+            <p>The line shifts with the service: on EC2 you patch the OS; on Lambda/RDS AWS handles more. A common interview probe: "who patches the DB?" → on RDS, AWS does the engine; you still manage users/queries/access.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="iam-basics" data-level="medium" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>Explain IAM: users, roles, policies, and roles vs keys</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">user/group/role</span></li><li><span class="kw">policy = JSON perms</span></li><li><span class="kw">roles &gt; static keys</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">User</strong> — a person/long-lived identity; <strong class="kw">Group</strong> — a set of users sharing policies.</li>
+              <li><strong class="kw">Role</strong> — an identity that's <em>assumed</em> temporarily; the right way for apps/EC2/Lambda to get permissions (issues short-lived credentials).</li>
+              <li><strong class="kw">Policy</strong> — JSON of <code class="kw-code">Effect/Action/Resource/Condition</code> attached to identities or resources.</li>
+            </ul>
+            <p>Best practice: apps should use an <strong class="kw">IAM role</strong> (e.g. an EC2 instance profile or ECS task role), never hard-coded access keys. Follow <strong class="kw">least privilege</strong>. For a Java app, the AWS SDK picks up role credentials automatically via the default credential chain — no secrets in code.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="iam-role-vs-policy-types" data-level="hard" data-section="fundamentals">
+          <div class="qa-question"><h3>Identity-based vs resource-based policies; how is access evaluated?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">explicit deny wins</span></li><li><span class="kw">default deny</span></li><li><span class="kw">resource policy (S3 bucket)</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Identity-based</strong> — attached to a user/role (what this identity can do).</li>
+              <li><strong class="kw">Resource-based</strong> — attached to a resource (e.g. S3 bucket policy, SQS queue policy) controlling who can access it, including cross-account.</li>
+            </ul>
+            <h4>Evaluation logic</h4>
+            <p>Default is <strong>deny</strong>. An action is allowed only if some policy explicitly allows it AND nothing explicitly denies it. <strong class="kw">Explicit deny always wins</strong>. Add SCPs (org guardrails) and permission boundaries on top. This "deny by default, explicit deny overrides" rule is a frequent interview question.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="pricing-models" data-level="medium" data-section="fundamentals">
+          <div class="qa-question"><h3>EC2 pricing models (On-Demand, Reserved, Spot, Savings Plans)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">On-Demand = flexible</span></li><li><span class="kw">Reserved/Savings = commit, cheaper</span></li><li><span class="kw">Spot = cheap, interruptible</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">On-Demand</strong> — pay per second/hour, no commitment; for unpredictable/short workloads.</li>
+              <li><strong class="kw">Reserved Instances / Savings Plans</strong> — commit 1–3 yrs for up to ~72% off; for steady baseline load.</li>
+              <li><strong class="kw">Spot</strong> — spare capacity up to ~90% off, but can be reclaimed with a 2-min warning; for fault-tolerant/batch work.</li>
+            </ul>
+            <p>Typical strategy: Reserved/Savings for the baseline, On-Demand for spikes, Spot for stateless batch/CI. Cost-optimization questions love this trade-off.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="well-architected" data-level="medium" data-section="fundamentals">
+          <div class="qa-question"><h3>What are the Well-Architected Framework pillars?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Ops, Security, Reliability</span></li><li><span class="kw">Perf, Cost, Sustainability</span></li></ul></div>
+            <p>Six pillars: <strong class="kw">Operational Excellence</strong>, <strong class="kw">Security</strong>, <strong class="kw">Reliability</strong>, <strong class="kw">Performance Efficiency</strong>, <strong class="kw">Cost Optimization</strong>, and <strong class="kw">Sustainability</strong>.</p>
+            <p>You don't need to memorize all six perfectly, but referencing them shows maturity. In design rounds, frame decisions as trade-offs across reliability (multi-AZ), cost (right-sizing/Spot), and security (least privilege, encryption).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-compute">
+        <h2>Compute</h2>
+        <p class="section-desc">EC2, Auto Scaling, load balancers, containers (ECS/EKS/Fargate), and serverless (Lambda).</p>
+        <p class="section-meta">8 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="ec2-basics" data-level="easy" data-section="compute">
+          <div class="qa-question"><h3>What is EC2 and what are instance types/AMIs?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">virtual server</span></li><li><span class="kw">AMI = image</span></li><li><span class="kw">instance families</span></li></ul></div>
+            <p><strong class="kw">EC2</strong> = resizable virtual servers. An <strong class="kw">AMI</strong> (Amazon Machine Image) is the template (OS + preinstalled software) used to launch instances.</p>
+            <p>Instance families target workloads: <strong>t</strong> (burstable/cheap), <strong>m</strong> (general), <strong>c</strong> (compute-heavy), <strong>r/x</strong> (memory-heavy), <strong>g/p</strong> (GPU). For a typical Spring Boot service, an <code class="kw-code">m</code> or <code class="kw-code">c</code> family is common. You pick based on CPU/memory profile and right-size using CloudWatch metrics.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="asg" data-level="medium" data-section="compute" data-vimp="true">
+          <div class="qa-question"><h3>How does Auto Scaling work (ASG, scaling policies)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">min/desired/max</span></li><li><span class="kw">target tracking</span></li><li><span class="kw">health checks</span></li></ul></div>
+            <p>An <strong class="kw">Auto Scaling Group</strong> keeps a fleet between <strong>min</strong> and <strong>max</strong>, aiming for <strong>desired</strong> capacity, across multiple AZs.</p>
+            <ul>
+              <li><strong class="kw">Target tracking</strong> — keep a metric at a target (e.g. CPU ~60%); simplest and most common.</li>
+              <li><strong class="kw">Step / scheduled</strong> — react to thresholds or known traffic patterns.</li>
+              <li>Unhealthy instances are replaced automatically (self-healing).</li>
+            </ul>
+            <p>This gives elasticity + HA. Mention warm-up/cooldown to avoid flapping, and that scaling works best with <strong>stateless</strong> apps (offload session/state to Redis/DynamoDB).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="elb-types" data-level="medium" data-section="compute" data-vimp="true">
+          <div class="qa-question"><h3>ALB vs NLB vs CLB — when to use which?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ALB = L7/HTTP</span></li><li><span class="kw">NLB = L4/TCP, fast</span></li><li><span class="kw">CLB = legacy</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">ALB (Application LB)</strong> — Layer 7. Path/host-based routing, HTTP/HTTPS, WebSockets, gRPC; ideal for microservices and container routing.</li>
+              <li><strong class="kw">NLB (Network LB)</strong> — Layer 4 (TCP/UDP). Ultra-low latency, millions of connections, static IPs; for extreme performance or non-HTTP.</li>
+              <li><strong class="kw">CLB</strong> — legacy, avoid for new work.</li>
+            </ul>
+            <p>For a Spring Boot REST/microservice fleet, <strong>ALB</strong> is the default (host/path routing, TLS termination, health checks). NLB when you need raw TCP throughput or a fixed IP.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ecs-vs-eks" data-level="medium" data-section="compute" data-vimp="true">
+          <div class="qa-question"><h3>ECS vs EKS vs Fargate?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ECS = AWS-native orchestrator</span></li><li><span class="kw">EKS = managed Kubernetes</span></li><li><span class="kw">Fargate = serverless containers</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">ECS</strong> — AWS's own container orchestrator; simpler, deeply integrated, less to learn.</li>
+              <li><strong class="kw">EKS</strong> — managed Kubernetes; portable, huge ecosystem, but more operational complexity.</li>
+              <li><strong class="kw">Fargate</strong> — a <em>launch type</em> (works with ECS or EKS) where AWS runs the containers serverlessly — no EC2 nodes to manage; you pay per vCPU/memory.</li>
+            </ul>
+            <p>Rule of thumb: ECS+Fargate for simplicity and "just run my containers"; EKS when you need Kubernetes portability/standardization or already have k8s expertise. Fargate trades a bit of cost/control for zero node management.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="lambda" data-level="medium" data-section="compute" data-vimp="true">
+          <div class="qa-question"><h3>What is Lambda and when would you use it?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">serverless, event-driven</span></li><li><span class="kw">pay per invocation</span></li><li><span class="kw">cold start, 15-min limit</span></li></ul></div>
+            <p><strong class="kw">Lambda</strong> runs code in response to events (S3 upload, SQS message, API Gateway request, schedule) with no servers to manage; you pay per invocation + duration, and it scales automatically.</p>
+            <h4>Good fits / limits</h4>
+            <ul>
+              <li>Great for: event processing, glue/automation, lightweight APIs, cron jobs, fan-out.</li>
+              <li>Watch: <strong class="kw">cold starts</strong> (JVM is heavier — consider provisioned concurrency, GraalVM, or SnapStart), 15-min max runtime, /tmp limits, statelessness.</li>
+            </ul>
+            <p>For long-running or steady high-throughput Java services, containers (ECS/EKS) are usually cheaper and avoid cold-start pain.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ec2-vs-containers-vs-lambda" data-level="hard" data-section="compute">
+          <div class="qa-question"><h3>How do you choose between EC2, containers, and Lambda?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">control vs management</span></li><li><span class="kw">traffic pattern</span></li><li><span class="kw">cost at scale</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Lambda</strong> — spiky/event-driven, low-to-moderate volume, want zero ops; beware cold starts &amp; cost at very high constant load.</li>
+              <li><strong class="kw">Containers (ECS/EKS)</strong> — steady microservices, need control over runtime, portability, long-lived connections; the sweet spot for most Spring Boot apps.</li>
+              <li><strong class="kw">EC2</strong> — need full OS control, special hardware (GPU), or licensing tied to the instance.</li>
+            </ul>
+            <p>Decision drivers: traffic shape (spiky vs steady), operational burden you'll accept, latency/cold-start tolerance, and cost at expected scale. A strong answer names the trade-off, not just one tool.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ec2-userdata-instance-profile" data-level="medium" data-section="compute">
+          <div class="qa-question"><h3>How does an app on EC2/ECS get AWS credentials securely?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">instance profile / task role</span></li><li><span class="kw">temporary creds via metadata</span></li><li><span class="kw">no static keys</span></li></ul></div>
+            <p>Attach an <strong class="kw">IAM role</strong> — an <em>instance profile</em> for EC2 or a <em>task role</em> for ECS. AWS injects short-lived, auto-rotated credentials via the instance metadata service (IMDS), and the AWS SDK picks them up automatically through the default credential chain.</p>
+            <p>So your Java code does <code class="kw-code">S3Client.create()</code> with no keys anywhere. Never bake access keys into AMIs, env vars, or code — that's the most common security finding. Use IMDSv2 to prevent SSRF credential theft.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ecs-task-def" data-level="medium" data-section="compute">
+          <div class="qa-question"><h3>In ECS, what are a task definition, task, and service?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">compute</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">task def = blueprint</span></li><li><span class="kw">task = running instance</span></li><li><span class="kw">service = keeps N running</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Task definition</strong> — the blueprint: image, CPU/memory, ports, env vars, IAM task role, log config (like a Compose/Pod spec).</li>
+              <li><strong class="kw">Task</strong> — a running instantiation of that definition (one or more containers).</li>
+              <li><strong class="kw">Service</strong> — keeps a desired number of tasks running, integrates with the ALB target group, and handles rolling deployments.</li>
+            </ul>
+            <p>This mirrors Kubernetes Deployment/Pod concepts — useful to draw the analogy if the interviewer knows k8s.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-storage">
+        <h2>Storage &amp; Databases</h2>
+        <p class="section-desc">S3, EBS vs EFS, RDS/Aurora, DynamoDB, ElastiCache — and how to pick.</p>
+        <p class="section-meta">8 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="s3-basics" data-level="easy" data-section="storage" data-vimp="true">
+          <div class="qa-question"><h3>What is S3 and what are its key properties?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">object storage</span></li><li><span class="kw">11 9's durability</span></li><li><span class="kw">buckets + keys</span></li></ul></div>
+            <p><strong class="kw">S3</strong> is object storage — store files ("objects") in <strong>buckets</strong> by key. It's virtually unlimited, highly durable (<strong>11 nines</strong>), and accessed over HTTPS APIs (not a mountable filesystem).</p>
+            <h4>Common uses &amp; features</h4>
+            <ul>
+              <li>Static assets, backups, data lake, logs, file uploads.</li>
+              <li><strong class="kw">Storage classes</strong> (Standard, Infrequent Access, Glacier) + <strong class="kw">lifecycle rules</strong> to cut cost.</li>
+              <li>Versioning, server-side encryption (SSE-S3/KMS), <strong class="kw">presigned URLs</strong> for temporary direct upload/download.</li>
+            </ul>
+            <p>For Java apps, generate <strong>presigned URLs</strong> so clients upload directly to S3 instead of streaming through your service.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="s3-consistency-classes" data-level="medium" data-section="storage">
+          <div class="qa-question"><h3>S3 consistency and storage classes?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">strong read-after-write</span></li><li><span class="kw">Standard/IA/Glacier</span></li><li><span class="kw">lifecycle policies</span></li></ul></div>
+            <p>S3 now provides <strong class="kw">strong read-after-write consistency</strong> for all operations (an older interview "gotcha" was eventual consistency — that changed in 2020).</p>
+            <p><strong class="kw">Storage classes</strong> trade cost vs access: <strong>Standard</strong> (hot), <strong>Standard-IA / One Zone-IA</strong> (infrequent), <strong>Glacier / Deep Archive</strong> (cold, retrieval delay), <strong>Intelligent-Tiering</strong> (auto-moves based on access). Use <strong class="kw">lifecycle rules</strong> to transition old objects to cheaper tiers or expire them — a classic cost-optimization lever.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ebs-vs-efs-vs-s3" data-level="medium" data-section="storage">
+          <div class="qa-question"><h3>EBS vs EFS vs S3 — what's the difference?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">EBS = block, 1 instance</span></li><li><span class="kw">EFS = shared NFS</span></li><li><span class="kw">S3 = object/HTTP</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">EBS</strong> — block storage (a virtual disk) attached to a single EC2 instance in one AZ; for DB data dirs, OS volumes.</li>
+              <li><strong class="kw">EFS</strong> — managed NFS file system shared across many instances/AZs; for shared files.</li>
+              <li><strong class="kw">S3</strong> — object storage over HTTP; for unstructured blobs, not a filesystem.</li>
+            </ul>
+            <p>Quick test: need a disk for one server → EBS; need a shared mount across servers → EFS; storing files/assets accessed by API → S3.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="rds-basics" data-level="medium" data-section="storage" data-vimp="true">
+          <div class="qa-question"><h3>What is RDS and what does Multi-AZ vs Read Replica give you?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Multi-AZ = HA/failover</span></li><li><span class="kw">Read Replica = scale reads</span></li></ul></div>
+            <p><strong class="kw">RDS</strong> is managed relational DB (PostgreSQL, MySQL, etc.) — AWS handles backups, patching, and failover; you handle schema/queries.</p>
+            <ul>
+              <li><strong class="kw">Multi-AZ</strong> — a synchronous standby in another AZ for <em>high availability</em>; automatic failover. Not for scaling reads.</li>
+              <li><strong class="kw">Read Replica</strong> — asynchronous copies to <em>scale read traffic</em> (and can be promoted). Can introduce replication lag.</li>
+            </ul>
+            <p>Key distinction interviewers probe: Multi-AZ = availability; Read Replicas = read scalability. Point your app's read-only queries at replicas, writes at the primary.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="aurora" data-level="medium" data-section="storage">
+          <div class="qa-question"><h3>What is Aurora and how does it differ from standard RDS?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">MySQL/Postgres-compatible</span></li><li><span class="kw">distributed storage, 6 copies</span></li><li><span class="kw">fast failover</span></li></ul></div>
+            <p><strong class="kw">Aurora</strong> is AWS's cloud-native engine compatible with MySQL/PostgreSQL. It separates compute from a distributed storage layer that replicates <strong>6 copies across 3 AZs</strong>, giving better performance, faster failover, and storage that auto-grows.</p>
+            <p>Extras: up to 15 low-lag read replicas, <strong class="kw">Aurora Serverless</strong> (auto-scaling capacity), global database for cross-region DR. Trade-off: costs more than vanilla RDS but stronger HA/scale. Use it when you want managed relational with high availability and read scale.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="dynamodb" data-level="hard" data-section="storage" data-vimp="true">
+          <div class="qa-question"><h3>What is DynamoDB and when would you choose it over RDS?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">managed NoSQL key-value</span></li><li><span class="kw">partition key design</span></li><li><span class="kw">single-digit ms at scale</span></li></ul></div>
+            <p><strong class="kw">DynamoDB</strong> is a fully-managed NoSQL key-value/document store with single-digit-millisecond latency at massive scale, automatic partitioning, and no servers to manage.</p>
+            <h4>Choose it when</h4>
+            <ul>
+              <li>You need predictable low latency at huge scale and simple access patterns (lookup by key).</li>
+              <li>You can design around the <strong class="kw">partition key</strong> (avoid hot partitions) and known query patterns.</li>
+            </ul>
+            <p>Choose <strong>RDS</strong> for complex queries, joins, ad-hoc reporting, and strong relational integrity. Mention features: on-demand vs provisioned capacity, GSIs for alternate queries, DynamoDB Streams (CDC), and the trade-off of denormalizing for access patterns.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="elasticache" data-level="medium" data-section="storage">
+          <div class="qa-question"><h3>What is ElastiCache and how do you use it with a Java app?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">managed Redis/Memcached</span></li><li><span class="kw">cache-aside</span></li><li><span class="kw">sessions, rate limiting</span></li></ul></div>
+            <p><strong class="kw">ElastiCache</strong> is managed <strong>Redis</strong> or <strong>Memcached</strong>. Common uses: cache-aside for hot DB reads, session store for stateless apps, rate limiting, distributed locks, leaderboards.</p>
+            <pre><code class="kw-code">// cache-aside pattern
+value = redis.get(key);
+if (value == null) {        // miss
+  value = db.load(key);
+  redis.setex(key, ttl, value);
+}</code></pre>
+            <p>From Spring, use Spring Data Redis / <code class="kw-code">@Cacheable</code>. Watch for cache stampede (use TTL jitter/locks) and stale data (set sensible TTLs / invalidate on write). Redis adds persistence/replication; Memcached is simpler/multi-threaded.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="db-choice" data-level="hard" data-section="storage">
+          <div class="qa-question"><h3>How do you pick the right database for a workload on AWS?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">storage</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">access patterns first</span></li><li><span class="kw">relational vs NoSQL</span></li><li><span class="kw">purpose-built</span></li></ul></div>
+            <p>Start from <strong>access patterns and data shape</strong>, not the tech:</p>
+            <ul>
+              <li>Relational, joins, transactions, reporting → <strong class="kw">RDS/Aurora</strong>.</li>
+              <li>Massive scale, simple key lookups, predictable latency → <strong class="kw">DynamoDB</strong>.</li>
+              <li>Sub-ms caching/sessions → <strong class="kw">ElastiCache (Redis)</strong>.</li>
+              <li>Full-text search/log analytics → <strong class="kw">OpenSearch</strong>.</li>
+              <li>Analytics/warehouse → <strong class="kw">Redshift</strong>; blobs → <strong class="kw">S3</strong>.</li>
+            </ul>
+            <p>AWS pushes "purpose-built databases" — pick per workload rather than forcing everything into one engine. Strong answers state the access pattern, then map it.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-messaging">
+        <h2>Messaging &amp; Integration</h2>
+        <p class="section-desc">SQS, SNS, Kinesis, EventBridge, and API Gateway — decoupling and event-driven patterns.</p>
+        <p class="section-meta">6 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="sqs" data-level="medium" data-section="messaging" data-vimp="true">
+          <div class="qa-question"><h3>What is SQS and what are Standard vs FIFO queues?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">messaging</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Standard = at-least-once, best-effort order</span></li><li><span class="kw">FIFO = ordered, exactly-once</span></li><li><span class="kw">visibility timeout, DLQ</span></li></ul></div>
+            <p><strong class="kw">SQS</strong> is a fully-managed message queue for decoupling producers and consumers.</p>
+            <ul>
+              <li><strong class="kw">Standard</strong> — nearly unlimited throughput, <em>at-least-once</em> delivery, best-effort ordering (duplicates possible → make consumers idempotent).</li>
+              <li><strong class="kw">FIFO</strong> — strict ordering + exactly-once processing within a message group, lower throughput.</li>
+            </ul>
+            <p>Key concepts: <strong class="kw">visibility timeout</strong> (message hidden while being processed), <strong class="kw">DLQ</strong> for poison messages after N failed receives, and long polling to reduce empty receives. SQS is pull-based (consumers poll).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sns" data-level="medium" data-section="messaging">
+          <div class="qa-question"><h3>What is SNS and what is the fan-out pattern?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">messaging</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">pub/sub, push</span></li><li><span class="kw">topics → subscribers</span></li><li><span class="kw">SNS+SQS fan-out</span></li></ul></div>
+            <p><strong class="kw">SNS</strong> is pub/sub: publishers send to a <strong>topic</strong>, and it pushes to many subscribers (SQS queues, Lambda, HTTP, email/SMS).</p>
+            <p><strong class="kw">Fan-out</strong>: publish once to an SNS topic that delivers to multiple <strong>SQS queues</strong>, so several services each get their own copy to process independently and at their own pace. This decouples one event from many consumers — a very common AWS event-driven pattern (vs SQS alone, which is one queue/one logical consumer group).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sqs-vs-kinesis-vs-kafka" data-level="hard" data-section="messaging" data-vimp="true">
+          <div class="qa-question"><h3>SQS vs Kinesis vs Kafka (MSK) — when to use each?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">messaging</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SQS = queue, delete after read</span></li><li><span class="kw">Kinesis/Kafka = log, replayable</span></li><li><span class="kw">ordering, multiple consumers</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">SQS</strong> — a queue; each message consumed once then deleted. Best for task/work distribution and decoupling. No replay.</li>
+              <li><strong class="kw">Kinesis</strong> — a managed streaming log (shards); ordered per shard, retained for a window, multiple consumers can replay. For real-time analytics/streaming.</li>
+              <li><strong class="kw">MSK (Kafka)</strong> — managed Kafka; partitions, consumer groups, replay, rich ecosystem; for high-throughput event streaming and when you want Kafka specifically.</li>
+            </ul>
+            <p>Mental model: SQS = "do this once"; Kinesis/Kafka = "an ordered, replayable event log many consumers read". If you need replay, ordering per key, and multiple independent consumers → streaming, not SQS.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="eventbridge" data-level="medium" data-section="messaging">
+          <div class="qa-question"><h3>What is EventBridge and how does it differ from SNS?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">messaging</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">event bus</span></li><li><span class="kw">content-based routing rules</span></li><li><span class="kw">SaaS/AWS event sources</span></li></ul></div>
+            <p><strong class="kw">EventBridge</strong> is a serverless event bus that routes events to targets based on <strong>content-matching rules</strong> (filter on the event JSON), with schema registry and many built-in AWS/SaaS sources.</p>
+            <p>Vs SNS: SNS is simple, high-throughput pub/sub (subscribe to a topic). EventBridge adds rich filtering, routing to 20+ target types, scheduling, and event archiving/replay. Use SNS for straightforward fan-out; EventBridge for event-driven architectures needing smart routing and integrations.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="api-gateway" data-level="medium" data-section="messaging">
+          <div class="qa-question"><h3>What is API Gateway and what does it provide?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">messaging</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">managed API front door</span></li><li><span class="kw">auth, throttling, caching</span></li><li><span class="kw">REST vs HTTP API</span></li></ul></div>
+            <p><strong class="kw">API Gateway</strong> is a managed front door for APIs — it handles routing, <strong class="kw">authentication/authorization</strong> (Cognito, IAM, Lambda authorizers), <strong class="kw">throttling/rate limiting</strong>, request/response transformation, caching, and metrics.</p>
+            <p>It commonly fronts Lambda (serverless APIs) or backend services (HTTP/VPC link). Note: for container microservices behind an ALB, an ALB is often enough; API Gateway shines for serverless and when you need its built-in auth/throttling/usage-plan features.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="decoupling-idempotency" data-level="hard" data-section="messaging" data-vimp="true">
+          <div class="qa-question"><h3>How do you ensure reliable, idempotent message processing on AWS?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">messaging</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">at-least-once → idempotent consumer</span></li><li><span class="kw">dedup store</span></li><li><span class="kw">DLQ + retries</span></li></ul></div>
+            <p>SQS Standard / SNS are <strong>at-least-once</strong>, so duplicates and retries happen. Make consumers <strong class="kw">idempotent</strong>:</p>
+            <ul>
+              <li>Use a business/message ID; track processed IDs in a store (DynamoDB conditional put, or a DB unique constraint) and skip duplicates.</li>
+              <li>Tune <strong class="kw">visibility timeout</strong> &gt; processing time so a message isn't redelivered mid-work.</li>
+              <li>Configure a <strong class="kw">DLQ</strong> with a max-receive count for poison messages; alert on DLQ depth.</li>
+              <li>For producers, the <strong>transactional outbox</strong> pattern avoids "saved to DB but message lost".</li>
+            </ul>
+            <p>This ties directly to your Kafka/outbox knowledge — the principles transfer across messaging systems.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-networking">
+        <h2>Networking &amp; Security</h2>
+        <p class="section-desc">VPC, subnets, security groups vs NACLs, Route 53, CloudFront, KMS, and secrets.</p>
+        <p class="section-meta">7 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="vpc" data-level="medium" data-section="networking" data-vimp="true">
+          <div class="qa-question"><h3>What is a VPC, and explain public vs private subnets</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">isolated virtual network</span></li><li><span class="kw">public = route to IGW</span></li><li><span class="kw">private + NAT for egress</span></li></ul></div>
+            <p>A <strong class="kw">VPC</strong> is your private, isolated network in AWS, divided into <strong>subnets</strong> across AZs.</p>
+            <ul>
+              <li><strong class="kw">Public subnet</strong> — has a route to an <strong>Internet Gateway</strong>; for load balancers / bastions.</li>
+              <li><strong class="kw">Private subnet</strong> — no direct inbound from internet; app servers and databases live here. Outbound internet (e.g. calling an API) goes via a <strong class="kw">NAT Gateway</strong> in a public subnet.</li>
+            </ul>
+            <p>Standard pattern: ALB in public subnets → app/EC2/ECS in private subnets → RDS in private (DB) subnets. This layered isolation is a frequent design-round expectation.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sg-vs-nacl" data-level="medium" data-section="networking" data-vimp="true">
+          <div class="qa-question"><h3>Security Groups vs Network ACLs?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SG = stateful, instance level</span></li><li><span class="kw">NACL = stateless, subnet level</span></li><li><span class="kw">SG allow-only</span></li></ul></div>
+            <table>
+              <tr><th>Aspect</th><th>Security Group</th><th>Network ACL</th></tr>
+              <tr><td>Level</td><td>Instance/ENI</td><td>Subnet</td></tr>
+              <tr><td>State</td><td>Stateful (return traffic auto-allowed)</td><td>Stateless (must allow both directions)</td></tr>
+              <tr><td>Rules</td><td>Allow only</td><td>Allow and Deny</td></tr>
+            </table>
+            <p>SGs are the primary tool — e.g. "allow 8080 only from the ALB's SG, allow 5432 only from the app SG". You can reference another SG as the source (no hardcoded IPs). NACLs add a coarse subnet-level layer (e.g. block a bad IP range). Knowing <strong>stateful vs stateless</strong> is the classic exam point.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="route53" data-level="easy" data-section="networking">
+          <div class="qa-question"><h3>What is Route 53 and what routing policies exist?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">managed DNS</span></li><li><span class="kw">latency/failover/weighted</span></li><li><span class="kw">health checks</span></li></ul></div>
+            <p><strong class="kw">Route 53</strong> is AWS's managed DNS + domain registrar with health checks. Routing policies:</p>
+            <ul>
+              <li><strong class="kw">Simple</strong> — one record.</li>
+              <li><strong class="kw">Weighted</strong> — split traffic by % (canary/blue-green).</li>
+              <li><strong class="kw">Latency</strong> — send users to the lowest-latency region.</li>
+              <li><strong class="kw">Failover</strong> — route to a standby if the primary's health check fails.</li>
+              <li><strong class="kw">Geolocation</strong> — route by user location.</li>
+            </ul>
+            <p>Combined with health checks, it enables multi-region failover and global low-latency routing.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cloudfront" data-level="easy" data-section="networking">
+          <div class="qa-question"><h3>What is CloudFront and why use a CDN?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CDN, edge caching</span></li><li><span class="kw">lower latency, offload origin</span></li><li><span class="kw">TLS, WAF, DDoS</span></li></ul></div>
+            <p><strong class="kw">CloudFront</strong> is AWS's CDN — it caches content at <strong>edge locations</strong> near users, cutting latency and offloading the origin (S3/ALB).</p>
+            <p>Benefits: faster static/dynamic delivery, TLS termination at the edge, integration with <strong>WAF</strong> and <strong>Shield</strong> for security/DDoS protection, and origin-shielding to reduce load. Common setup: CloudFront in front of an S3 bucket (static site) or an ALB (dynamic app) with appropriate cache behaviors/TTLs.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="kms-encryption" data-level="medium" data-section="networking">
+          <div class="qa-question"><h3>How does encryption work on AWS (KMS, at-rest, in-transit)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">KMS manages keys</span></li><li><span class="kw">envelope encryption</span></li><li><span class="kw">at-rest + in-transit (TLS)</span></li></ul></div>
+            <p><strong class="kw">KMS</strong> manages encryption keys (CMKs) and integrates with most services. <strong class="kw">At-rest</strong>: enable encryption on S3, EBS, RDS, DynamoDB — they use KMS via <strong class="kw">envelope encryption</strong> (a data key encrypts data; KMS encrypts the data key). <strong class="kw">In-transit</strong>: TLS everywhere (ALB/CloudFront certs via ACM).</p>
+            <p>KMS gives centralized key control, rotation, and CloudTrail audit of every key use — important for regulated/financial platforms. You rarely handle raw keys; services call KMS for you.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="secrets-manager" data-level="medium" data-section="networking" data-vimp="true">
+          <div class="qa-question"><h3>How do you manage secrets (Secrets Manager vs Parameter Store)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Secrets Manager = rotation</span></li><li><span class="kw">SSM Parameter Store = config</span></li><li><span class="kw">never hardcode</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Secrets Manager</strong> — stores secrets (DB passwords, API keys) with built-in <strong>automatic rotation</strong> and KMS encryption; costs per secret.</li>
+              <li><strong class="kw">SSM Parameter Store</strong> — config + secrets (SecureString); cheaper, no built-in rotation; good for general config.</li>
+            </ul>
+            <p>Your Spring Boot app fetches DB creds at startup via the SDK (IAM-controlled), so no passwords in <code class="kw-code">application.yml</code>, env vars, or git. Rotation means leaked creds expire quickly. This directly answers the very common "how do you handle DB credentials securely?" question.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="vpc-endpoints" data-level="hard" data-section="networking">
+          <div class="qa-question"><h3>What are VPC endpoints and why use them?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">networking</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">private access to AWS services</span></li><li><span class="kw">no NAT/internet</span></li><li><span class="kw">Gateway vs Interface</span></li></ul></div>
+            <p><strong class="kw">VPC endpoints</strong> let resources in private subnets reach AWS services privately, without going over the internet/NAT.</p>
+            <ul>
+              <li><strong class="kw">Gateway endpoints</strong> — for S3 and DynamoDB (route-table entry, free).</li>
+              <li><strong class="kw">Interface endpoints (PrivateLink)</strong> — an ENI in your subnet for most other services (SQS, Secrets Manager, etc.).</li>
+            </ul>
+            <p>Benefits: improved security (traffic never leaves the AWS network), and lower NAT cost/egress. A good senior-level detail when discussing locked-down, private architectures.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-devops">
+        <h2>DevOps &amp; Observability</h2>
+        <p class="section-desc">CloudWatch, CloudTrail, IaC (CloudFormation/CDK/Terraform), CI/CD, and deployment strategies.</p>
+        <p class="section-meta">6 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="cloudwatch" data-level="medium" data-section="devops" data-vimp="true">
+          <div class="qa-question"><h3>What does CloudWatch provide (metrics, logs, alarms)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">devops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">metrics + logs + alarms</span></li><li><span class="kw">dashboards</span></li><li><span class="kw">alarm → SNS/auto scaling</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Metrics</strong> — CPU, memory, request counts, latency, queue depth, plus custom app metrics.</li>
+              <li><strong class="kw">Logs</strong> — centralize app/container logs (CloudWatch Logs), query with Logs Insights.</li>
+              <li><strong class="kw">Alarms</strong> — trigger on thresholds → notify via SNS or drive Auto Scaling.</li>
+              <li><strong class="kw">Dashboards</strong> + EventBridge for scheduled/automation.</li>
+            </ul>
+            <p>For a Spring Boot app, ship Actuator/Micrometer metrics to CloudWatch and set alarms on error rate, p99 latency, and SQS lag. Mention distributed tracing via <strong class="kw">X-Ray</strong> for request-level visibility.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cloudtrail-vs-cloudwatch" data-level="easy" data-section="devops">
+          <div class="qa-question"><h3>CloudWatch vs CloudTrail — what's the difference?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">devops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CloudWatch = performance/health</span></li><li><span class="kw">CloudTrail = API audit log</span></li></ul></div>
+            <p><strong class="kw">CloudWatch</strong> = monitoring/observability — "how is my system <em>performing</em>?" (metrics, logs, alarms).</p>
+            <p><strong class="kw">CloudTrail</strong> = governance/audit — "<em>who did what</em> in my account?" It records every API call (who, when, from where). Essential for security investigations and compliance.</p>
+            <p>One-liner: CloudWatch watches your app's behavior; CloudTrail watches actions on your AWS account.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="iac" data-level="medium" data-section="devops" data-vimp="true">
+          <div class="qa-question"><h3>Infrastructure as Code on AWS (CloudFormation/CDK/Terraform)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">devops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">declarative, repeatable</span></li><li><span class="kw">CFN native, CDK code, TF multi-cloud</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">CloudFormation</strong> — AWS-native, declarative YAML/JSON templates; manages stacks.</li>
+              <li><strong class="kw">CDK</strong> — define infra in real code (TypeScript/Java) that synthesizes to CloudFormation; great for developers.</li>
+              <li><strong class="kw">Terraform</strong> — popular, multi-cloud, declarative HCL with state management.</li>
+            </ul>
+            <p>Why IaC: version-controlled, repeatable, reviewable infra — no manual "click-ops" drift, easy to recreate environments. Mention that infra changes go through PRs/CI like app code. As a Java dev, CDK (with Java) lets you stay in one language.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cicd-aws" data-level="medium" data-section="devops">
+          <div class="qa-question"><h3>How do you build a CI/CD pipeline to deploy to AWS?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">devops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">build → image → ECR → deploy</span></li><li><span class="kw">CodePipeline / GitHub Actions</span></li></ul></div>
+            <p>Typical container pipeline:</p>
+            <ol>
+              <li>Push to git → CI (GitHub Actions / Jenkins / CodeBuild) runs tests + builds the jar.</li>
+              <li>Build a Docker image, push to <strong class="kw">ECR</strong>.</li>
+              <li>Deploy: update the ECS service / EKS deployment / Lambda to the new image (CodeDeploy or <code class="kw-code">aws ecs update-service</code>).</li>
+              <li>Run smoke tests / health checks; roll back on failure.</li>
+            </ol>
+            <p>Use OIDC roles (not static keys) for the CI to assume AWS permissions. Mention environment promotion (dev→staging→prod) with approvals, and immutable image tags for traceability.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="deploy-strategies" data-level="hard" data-section="devops" data-vimp="true">
+          <div class="qa-question"><h3>Blue-green vs canary vs rolling deployments on AWS?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">devops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">rolling = gradual replace</span></li><li><span class="kw">blue-green = swap envs</span></li><li><span class="kw">canary = small % first</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Rolling</strong> — replace instances/tasks gradually (ECS default). Simple, no extra cost, but mixed versions briefly.</li>
+              <li><strong class="kw">Blue-green</strong> — stand up a full new environment, then switch the ALB/Route 53 over; instant rollback by switching back. Costs double briefly.</li>
+              <li><strong class="kw">Canary</strong> — send a small % of traffic to the new version, watch metrics, then ramp up (CodeDeploy/weighted target groups).</li>
+            </ul>
+            <p>For zero-downtime, you also need backward-compatible DB migrations and graceful shutdown (drain connections on SIGTERM). Choose based on risk tolerance and cost — canary for high-risk changes, rolling for routine ones.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cost-optimization" data-level="medium" data-section="devops">
+          <div class="qa-question"><h3>How do you control/optimize AWS costs?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">devops</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">right-size + auto scale</span></li><li><span class="kw">Savings Plans/Spot</span></li><li><span class="kw">S3 lifecycle, budgets/alerts</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Right-size</strong> instances using CloudWatch; scale to zero/down off-peak with ASG schedules.</li>
+              <li><strong class="kw">Savings Plans/Reserved</strong> for baseline, <strong class="kw">Spot</strong> for batch/stateless.</li>
+              <li><strong class="kw">S3 lifecycle</strong> to cheaper tiers; delete unattached EBS/old snapshots/idle NAT.</li>
+              <li><strong class="kw">Tagging</strong> for cost allocation; <strong class="kw">Budgets + alerts</strong> and Cost Explorer to catch surprises.</li>
+              <li>Serverless (Lambda/Fargate) to avoid paying for idle capacity on spiky workloads.</li>
+            </ul>
+            <p>Frame it as continuous: measure (Cost Explorer), then right-size, commit, and clean up waste.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

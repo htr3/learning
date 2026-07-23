@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Striver SDE Sheet — Visual Answers</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="striver-sheet" class="striver-page">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>Striver SDE Sheet — Visual Answers</h1>
+        <p>
+          <strong id="striver-count">184</strong> problems from
+          <a href="https://takeuforward.org/dsa/strivers-sde-sheet-top-coding-interview-problems" target="_blank" rel="noopener">takeUforward Striver SDE Sheet</a>
+          — each with a beginner-friendly approach and step-by-step canvas visualization.
+          <strong id="striver-visual-links">0</strong> also link to full interactive demos on the DSA Visuals page.
+        </p>
+      </header>
+
+      <div class="diagram-banner diagram-banner-back">
+        <span>← Back to</span>
+        <a href="dsa.html"><strong>DSA Q&amp;A</strong></a>
+        <span class="diagram-banner-sep">·</span>
+        <a href="dsa-visuals.html"><strong>32 full 3D demos</strong></a>
+      </div>
+
+      <div class="toolbar">
+        <input type="search" id="striver-search" placeholder="Search Striver problems...">
+        <select id="striver-level" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <button type="button" class="btn" id="striver-expand">Expand all</button>
+        <button type="button" class="btn" id="striver-collapse">Collapse all</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><strong id="striver-visible">184</strong><span>Showing</span></div>
+        <div class="stat-card"><strong>13</strong><span>Sections</span></div>
+        <div class="stat-card"><strong>🎬</strong><span>Full demo link when available</span></div>
+      </div>
+
+      <nav class="section-nav striver-section-nav" id="striver-section-nav" aria-label="Striver sections"></nav>
+
+      <div id="striver-root" class="striver-root"></div>
+    </main>
+  </div>
+
+  <script src="../assets/striver-sheet-data.js"></script>
+  <script src="../assets/linked-list-draw.js"></script>
+  <script src="../assets/linked-list-algos.js"></script>
+  <script src="../assets/dsa-visuals.js"></script>
+  <script src="../assets/striver-visuals.js"></script>
+  <script src="../assets/striver-sheet.js"></script>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

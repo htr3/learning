@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Networking — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="networking">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>Networking Interview Prep</h1>
+        <p>OSI/TCP-IP, TCP/UDP, HTTP/HTTPS, TLS, DNS &amp; load balancing, Java/app networking, and troubleshooting — the network knowledge a backend engineer needs. Click a question for the full answer.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> fundamentals</span>
+        <span><span class="level level-medium">Medium</span> 3 YOE depth</span>
+        <span><span class="level level-hard">Hard</span> senior / tricky</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+
+      <section class="topic-section" id="section-fundamentals">
+        <h2>Networking Fundamentals</h2>
+        <p class="section-desc">OSI vs TCP/IP, IP addressing, ports, DNS, MAC/ARP, NAT.</p>
+        <p class="section-meta">7 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="osi-model" data-level="easy" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>Explain the OSI model vs the TCP/IP model</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">7 layers</span></li><li><span class="kw">encapsulation</span></li><li><span class="kw">TCP/IP 4 layers</span></li></ul></div>
+            <p>The <strong class="kw">OSI model</strong> is a 7-layer conceptual model; the <strong class="kw">TCP/IP model</strong> is the 4-layer model the internet actually runs on.</p>
+            <h4>OSI 7 layers (top → bottom)</h4>
+            <ol>
+              <li><strong class="kw">Application</strong> — HTTP, DNS, SMTP (what your app speaks)</li>
+              <li><strong class="kw">Presentation</strong> — encoding, TLS/encryption, compression</li>
+              <li><strong class="kw">Session</strong> — connection state</li>
+              <li><strong class="kw">Transport</strong> — TCP/UDP (ports, reliability)</li>
+              <li><strong class="kw">Network</strong> — IP, routing</li>
+              <li><strong class="kw">Data Link</strong> — MAC, switches, frames</li>
+              <li><strong class="kw">Physical</strong> — cables, signals</li>
+            </ol>
+            <h4>Mnemonic</h4>
+            <p>"All People Seem To Need Data Processing" (App→Physical). TCP/IP collapses these into Application, Transport, Internet, Link.</p>
+            <h4>Interview tip</h4>
+            <p>You mostly live at <strong>Application (L7)</strong> and <strong>Transport (L4)</strong> — that's also how load balancers are categorized (L4 vs L7).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ip-address" data-level="easy" data-section="fundamentals">
+          <div class="qa-question"><h3>IPv4 vs IPv6, public vs private IPs, and CIDR/subnets?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">IPv4 32-bit</span></li><li><span class="kw">IPv6 128-bit</span></li><li><span class="kw">CIDR</span></li><li><span class="kw">private ranges</span></li></ul></div>
+            <p><strong class="kw">IPv4</strong> is 32-bit (e.g. <code class="kw-code">192.168.1.10</code>, ~4.3B addresses — exhausted). <strong class="kw">IPv6</strong> is 128-bit (huge space, hex).</p>
+            <h4>Private ranges (RFC 1918)</h4>
+            <ul><li><code class="kw-code">10.0.0.0/8</code></li><li><code class="kw-code">172.16.0.0/12</code></li><li><code class="kw-code">192.168.0.0/16</code></li></ul>
+            <p>Private IPs aren't routable on the internet — they reach it via <strong class="kw">NAT</strong>.</p>
+            <h4>CIDR</h4>
+            <p><code class="kw-code">/24</code> means the first 24 bits are the network → 256 addresses (254 usable). Smaller number = bigger block. This is exactly how cloud VPC subnets / security-group rules are written.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ports-sockets" data-level="easy" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>What is a port? What is a socket?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">port = 0-65535</span></li><li><span class="kw">socket = IP:port</span></li><li><span class="kw">well-known ports</span></li></ul></div>
+            <p>A <strong class="kw">port</strong> (0–65535) identifies a specific process/service on a host so one machine can run many services. A <strong class="kw">socket</strong> = IP + port + protocol — the endpoint of a connection.</p>
+            <h4>Well-known ports</h4>
+            <ul><li><strong>80</strong> HTTP, <strong>443</strong> HTTPS</li><li><strong>22</strong> SSH, <strong>53</strong> DNS</li><li><strong>3306</strong> MySQL, <strong>5432</strong> Postgres, <strong>6379</strong> Redis, <strong>9092</strong> Kafka, <strong>8080</strong> Spring Boot default</li></ul>
+            <h4>The 4-tuple</h4>
+            <p>A TCP connection is uniquely identified by <code class="kw-code">(srcIP, srcPort, dstIP, dstPort)</code> — which is why a server on port 443 can hold thousands of simultaneous client connections.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="dns-basics" data-level="easy" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>How does DNS resolution work?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">recursive resolver</span></li><li><span class="kw">root → TLD → authoritative</span></li><li><span class="kw">caching + TTL</span></li></ul></div>
+            <p>DNS translates a hostname (<code class="kw-code">api.example.com</code>) into an IP address.</p>
+            <h4>The lookup chain</h4>
+            <ol>
+              <li>Check local/OS cache, then the <strong class="kw">recursive resolver</strong> (ISP/8.8.8.8).</li>
+              <li>Resolver asks a <strong>root</strong> server → referred to the <strong>TLD</strong> server (<code class="kw-code">.com</code>).</li>
+              <li>TLD → the domain's <strong class="kw">authoritative</strong> name server, which returns the record.</li>
+              <li>Result is cached per the record's <strong class="kw">TTL</strong>.</li>
+            </ol>
+            <h4>Why it matters</h4>
+            <p>DNS is a common hidden cause of "intermittent" issues — stale caches, low TTL during failover, or slow resolution adding latency to the first request. <code class="kw-code">dig</code>/<code class="kw-code">nslookup</code> are your debug tools.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="mac-vs-ip" data-level="medium" data-section="fundamentals">
+          <div class="qa-question"><h3>MAC address vs IP address — and what is ARP?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">MAC = L2 physical</span></li><li><span class="kw">IP = L3 logical</span></li><li><span class="kw">ARP maps IP→MAC</span></li></ul></div>
+            <p><strong class="kw">MAC</strong> is a permanent hardware address (Layer 2, local network); <strong class="kw">IP</strong> is a logical, routable address (Layer 3) that can change.</p>
+            <h4>Analogy</h4>
+            <p>IP is like the mailing address (used for routing across networks); MAC is like the specific mailbox on the final street (used for the last hop on the local LAN).</p>
+            <h4>ARP</h4>
+            <p><strong class="kw">ARP</strong> (Address Resolution Protocol) maps a known IP to a MAC on the local network so a frame can be delivered to the right device.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="packet-encapsulation" data-level="medium" data-section="fundamentals">
+          <div class="qa-question"><h3>How does data travel down the stack (encapsulation)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">segment → packet → frame</span></li><li><span class="kw">headers added per layer</span></li></ul></div>
+            <p>Each layer wraps the data from the layer above with its own header — <strong class="kw">encapsulation</strong>.</p>
+            <pre><code class="kw-code">Data (HTTP)
+ → + TCP header  = Segment   (ports, seq/ack)
+ → + IP header   = Packet    (src/dst IP)
+ → + Frame header= Frame     (src/dst MAC)
+ → bits on the wire</code></pre>
+            <p>The receiving host reverses it (<strong>de-encapsulation</strong>), peeling headers as it goes up the stack. Each layer only reads its own header — a clean separation of concerns.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="nat" data-level="medium" data-section="fundamentals">
+          <div class="qa-question"><h3>What is NAT and why is it used?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">private → public IP</span></li><li><span class="kw">port translation</span></li><li><span class="kw">IPv4 conservation</span></li></ul></div>
+            <p><strong class="kw">NAT</strong> (Network Address Translation) lets many devices with private IPs share one public IP by rewriting source IP/port on outbound packets and tracking the mapping for replies.</p>
+            <h4>Why</h4>
+            <ul><li>Conserves scarce IPv4 addresses.</li><li>Hides internal topology (a mild security side-effect).</li></ul>
+            <h4>Cloud relevance</h4>
+            <p>In AWS, a <strong class="kw">NAT Gateway</strong> lets private-subnet instances reach the internet (for updates/outbound calls) without being directly reachable — a common architecture detail in design questions.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-transport">
+        <h2>TCP &amp; UDP</h2>
+        <p class="section-desc">Reliability, the 3-way handshake, flow/congestion control, TCP states, and when to use UDP.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="tcp-vs-udp" data-level="easy" data-section="transport" data-vimp="true">
+          <div class="qa-question"><h3>TCP vs UDP — differences and when to use each?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">transport</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">TCP reliable/ordered</span></li><li><span class="kw">UDP fast/connectionless</span></li></ul></div>
+            <p><strong class="kw">TCP</strong> — connection-oriented, reliable, ordered, with flow + congestion control. <strong class="kw">UDP</strong> — connectionless, no delivery/order guarantee, minimal overhead.</p>
+            <h4>Use TCP for</h4>
+            <p>HTTP/REST, databases, anything where correctness matters (the vast majority of backend traffic).</p>
+            <h4>Use UDP for</h4>
+            <p>DNS, real-time voice/video, gaming, metrics (statsd) — where speed beats perfect delivery and a dropped packet is acceptable. HTTP/3 uses QUIC, which is built on UDP but adds its own reliability.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="tcp-handshake" data-level="medium" data-section="transport" data-vimp="true">
+          <div class="qa-question"><h3>Explain the TCP 3-way handshake (and connection close)</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">transport</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SYN</span></li><li><span class="kw">SYN-ACK</span></li><li><span class="kw">ACK</span></li><li><span class="kw">FIN</span></li></ul></div>
+            <h4>Opening (3-way)</h4>
+            <ol>
+              <li>Client → <strong class="kw">SYN</strong> (seq=x)</li>
+              <li>Server → <strong class="kw">SYN-ACK</strong> (seq=y, ack=x+1)</li>
+              <li>Client → <strong class="kw">ACK</strong> (ack=y+1) — connection established</li>
+            </ol>
+            <h4>Closing (4-way)</h4>
+            <p><code class="kw-code">FIN</code> → <code class="kw-code">ACK</code> → <code class="kw-code">FIN</code> → <code class="kw-code">ACK</code>; the initiator then sits in <code class="kw-code">TIME_WAIT</code> to absorb stray packets.</p>
+            <h4>Why it matters</h4>
+            <p>The handshake adds a full round-trip <em>before</em> any data — that's why connection reuse (keep-alive / pooling) and TLS session resumption matter so much for latency.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="tcp-reliability" data-level="hard" data-section="transport">
+          <div class="qa-question"><h3>How does TCP guarantee reliable, ordered delivery?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">transport</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">seq/ack</span></li><li><span class="kw">retransmission</span></li><li><span class="kw">sliding window</span></li><li><span class="kw">congestion control</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Sequence numbers</strong> + <strong class="kw">ACKs</strong> — receiver reorders and confirms bytes; unacked data is retransmitted (timeout / triple-dup-ACK).</li>
+              <li><strong class="kw">Flow control</strong> — the receiver advertises a window so a fast sender can't overwhelm a slow receiver.</li>
+              <li><strong class="kw">Congestion control</strong> — slow start + AIMD back off when the network drops packets, protecting the shared network.</li>
+              <li><strong>Checksums</strong> detect corruption.</li>
+            </ul>
+            <p>Net effect: a clean byte stream to the app, at the cost of latency and head-of-line blocking (which HTTP/3/QUIC addresses).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="tcp-states" data-level="hard" data-section="transport">
+          <div class="qa-question"><h3>What do TIME_WAIT and CLOSE_WAIT mean (in netstat)?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">transport</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">TIME_WAIT = we closed</span></li><li><span class="kw">CLOSE_WAIT = app didn't close</span></li></ul></div>
+            <p><strong class="kw">TIME_WAIT</strong> — the side that closed <em>first</em> waits (~2×MSL) to absorb delayed packets. Many of these = lots of short-lived connections; fix with connection pooling/keep-alive.</p>
+            <p><strong class="kw">CLOSE_WAIT</strong> — the remote closed but <em>your</em> app hasn't called <code class="kw-code">close()</code>. A growing pile of CLOSE_WAIT is an application bug (leaked sockets / unclosed clients) and can exhaust file descriptors.</p>
+            <h4>Production angle</h4>
+            <p>"Too many open files" + rising CLOSE_WAIT → you're leaking connections (HTTP client not closed/pooled). This is a real on-call diagnosis.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="udp-usecases" data-level="medium" data-section="transport">
+          <div class="qa-question"><h3>When would you choose UDP despite no reliability?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">transport</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">low latency</span></li><li><span class="kw">tolerant of loss</span></li></ul></div>
+            <p>When low latency matters more than perfect delivery and the app can tolerate (or handle) loss: live audio/video, online gaming, DNS queries, and high-volume metrics where a dropped sample is fine.</p>
+            <p>If you need <em>some</em> reliability over UDP, you build it at the app layer — which is exactly what <strong class="kw">QUIC</strong> (HTTP/3) does to avoid TCP's head-of-line blocking while keeping reliability.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-http">
+        <h2>HTTP &amp; HTTPS</h2>
+        <p class="section-desc">Methods, status codes, HTTP versions, headers, cookies/sessions, CORS, keep-alive, REST vs gRPC.</p>
+        <p class="section-meta">8 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="http-basics" data-level="easy" data-section="http" data-vimp="true">
+          <div class="qa-question"><h3>HTTP basics — request/response, methods, idempotency</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">stateless</span></li><li><span class="kw">GET/POST/PUT/PATCH/DELETE</span></li><li><span class="kw">idempotent + safe</span></li></ul></div>
+            <p>HTTP is a <strong class="kw">stateless</strong>, text-based request/response protocol: a request has a method + URL + headers + optional body; the response has a status code + headers + body.</p>
+            <h4>Methods</h4>
+            <ul>
+              <li><strong>GET</strong> — read (safe, idempotent)</li>
+              <li><strong>POST</strong> — create / non-idempotent action</li>
+              <li><strong>PUT</strong> — replace (idempotent)</li>
+              <li><strong>PATCH</strong> — partial update</li>
+              <li><strong>DELETE</strong> — remove (idempotent)</li>
+            </ul>
+            <h4>Why idempotency matters</h4>
+            <p><strong class="kw">Idempotent</strong> = repeating it has the same effect. This is what makes it <em>safe to retry</em> GET/PUT/DELETE on a timeout, but not a naive POST (needs an idempotency key) — a key network-resilience concept.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="http-status" data-level="easy" data-section="http" data-vimp="true">
+          <div class="qa-question"><h3>HTTP status code families — and the ones to know</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">2xx/3xx/4xx/5xx</span></li><li><span class="kw">retry only 5xx/429</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">2xx</strong> success — 200 OK, 201 Created, 204 No Content</li>
+              <li><strong class="kw">3xx</strong> redirect — 301 permanent, 302 temporary, 304 Not Modified (cache)</li>
+              <li><strong class="kw">4xx</strong> client error — 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422, <strong>429 Too Many Requests</strong></li>
+              <li><strong class="kw">5xx</strong> server error — 500, 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout</li>
+            </ul>
+            <h4>Network-resilience rule</h4>
+            <p>Retry (with backoff) on <strong>5xx</strong> and <strong>429</strong> (honor <code class="kw-code">Retry-After</code>); never blindly retry <strong>4xx</strong> — the client must change the request.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="http-versions" data-level="hard" data-section="http">
+          <div class="qa-question"><h3>HTTP/1.1 vs HTTP/2 vs HTTP/3 — what changed?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">multiplexing</span></li><li><span class="kw">head-of-line blocking</span></li><li><span class="kw">QUIC/UDP</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">HTTP/1.1</strong> — one request at a time per connection (keep-alive helps), so browsers open many connections; head-of-line blocking.</li>
+              <li><strong class="kw">HTTP/2</strong> — <strong>multiplexing</strong> many streams over one TCP connection + header compression (HPACK) + server push. Still suffers TCP-level head-of-line blocking on packet loss.</li>
+              <li><strong class="kw">HTTP/3</strong> — runs over <strong class="kw">QUIC</strong> (UDP), so a lost packet only stalls its own stream; faster connection setup (0/1-RTT) with built-in TLS 1.3.</li>
+            </ul>
+            <p>gRPC rides on HTTP/2 to get multiplexed, streaming, low-latency RPC.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="http-headers" data-level="medium" data-section="http">
+          <div class="qa-question"><h3>Important HTTP headers (content, caching, auth)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Content-Type</span></li><li><span class="kw">Authorization</span></li><li><span class="kw">Cache-Control / ETag</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Content-Type</strong> — payload format (<code class="kw-code">application/json</code>); <code class="kw-code">Accept</code> states what the client wants.</li>
+              <li><strong class="kw">Authorization</strong> — <code class="kw-code">Bearer &lt;token&gt;</code> for JWT/OAuth.</li>
+              <li><strong class="kw">Cache-Control</strong>, <strong class="kw">ETag</strong>/<code class="kw-code">If-None-Match</code> — caching + conditional 304s.</li>
+              <li><code class="kw-code">Content-Encoding: gzip</code> — compression.</li>
+              <li><code class="kw-code">X-Correlation-Id</code> — trace one request across services.</li>
+            </ul>
+            <p>Note the difference between <strong>entity</strong> headers (about the body) and <strong>hop-by-hop</strong> headers (e.g. <code class="kw-code">Connection</code>) that proxies don't forward.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cookies-sessions" data-level="medium" data-section="http">
+          <div class="qa-question"><h3>Cookies vs sessions vs tokens — how is state kept?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">stateless HTTP</span></li><li><span class="kw">session vs JWT</span></li><li><span class="kw">HttpOnly/Secure</span></li></ul></div>
+            <p>HTTP is stateless, so identity is carried each request.</p>
+            <ul>
+              <li><strong class="kw">Cookies</strong> — small key/values the browser stores and re-sends; mark them <code class="kw-code">HttpOnly</code> (no JS access), <code class="kw-code">Secure</code> (HTTPS only), <code class="kw-code">SameSite</code> (CSRF defense).</li>
+              <li><strong class="kw">Server session</strong> — cookie holds a session ID; state lives server-side (needs sticky sessions or shared store like Redis to scale).</li>
+              <li><strong class="kw">Token (JWT)</strong> — self-contained, stateless; great for microservices but revocation is harder.</li>
+            </ul>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cors" data-level="medium" data-section="http" data-vimp="true">
+          <div class="qa-question"><h3>What is CORS and how does a preflight work?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">same-origin policy</span></li><li><span class="kw">preflight OPTIONS</span></li><li><span class="kw">Access-Control-Allow-*</span></li></ul></div>
+            <p><strong class="kw">CORS</strong> relaxes the browser's <strong class="kw">same-origin policy</strong> so a frontend on one origin can call an API on another. It's enforced by the <em>browser</em>, not the server.</p>
+            <h4>Preflight</h4>
+            <p>For "non-simple" requests the browser first sends an <code class="kw-code">OPTIONS</code> preflight; the server must reply with <code class="kw-code">Access-Control-Allow-Origin</code>, <code class="kw-code">-Methods</code>, <code class="kw-code">-Headers</code>. Only then does the real request go.</p>
+            <h4>Common gotcha</h4>
+            <p>A "CORS error" is usually a <strong>missing server header</strong>, not a client bug. In Spring, configure it via <code class="kw-code">@CrossOrigin</code> or a global CORS config — don't "fix" it by disabling browser security.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="keepalive" data-level="medium" data-section="http">
+          <div class="qa-question"><h3>What is HTTP keep-alive / persistent connections?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">reuse TCP connection</span></li><li><span class="kw">avoid handshake per request</span></li></ul></div>
+            <p>Keep-alive reuses one TCP (and TLS) connection for multiple requests instead of opening a new one each time — avoiding the handshake + slow-start cost per request.</p>
+            <h4>Why it's a big deal</h4>
+            <p>Without it, each call pays a TCP handshake (1 RTT) + TLS handshake (1–2 RTT). For a chatty service that's huge. Connection <strong>pools</strong> (HTTP client / DB) are the application-level equivalent — reuse warm connections rather than churn them (also avoids TIME_WAIT buildup).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="rest-vs-grpc-net" data-level="medium" data-section="http">
+          <div class="qa-question"><h3>REST/JSON vs gRPC — the networking trade-offs</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">http</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">JSON/HTTP1.1 vs Protobuf/HTTP2</span></li><li><span class="kw">streaming</span></li></ul></div>
+            <p><strong class="kw">REST</strong> — JSON over HTTP/1.1, human-readable, universal, browser-native. <strong class="kw">gRPC</strong> — Protobuf (binary, compact) over HTTP/2 with multiplexing + bidirectional streaming and strong contracts.</p>
+            <h4>When each</h4>
+            <p>REST at the public edge (browsers, partners, easy debugging); gRPC for internal east-west service calls needing low latency, typed contracts, and streaming. gRPC isn't browser-native (needs grpc-web).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-tls">
+        <h2>TLS &amp; Network Security</h2>
+        <p class="section-desc">HTTPS/TLS handshake, certificates, mTLS, encryption types, common attacks &amp; firewalls.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="https-tls" data-level="medium" data-section="tls" data-vimp="true">
+          <div class="qa-question"><h3>What happens during a TLS/HTTPS handshake?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">tls</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">cert + asymmetric</span></li><li><span class="kw">session key</span></li><li><span class="kw">then symmetric</span></li></ul></div>
+            <p>HTTPS = HTTP over <strong class="kw">TLS</strong>, giving encryption, integrity, and server authentication.</p>
+            <h4>Simplified flow</h4>
+            <ol>
+              <li>Client hello (supported ciphers) → server hello + <strong class="kw">certificate</strong> (public key).</li>
+              <li>Client verifies the cert against trusted CAs.</li>
+              <li>They agree a shared <strong class="kw">session key</strong> (using asymmetric crypto / Diffie-Hellman).</li>
+              <li>All further data uses fast <strong class="kw">symmetric</strong> encryption with that session key.</li>
+            </ol>
+            <p>TLS 1.3 cuts this to ~1 RTT (0-RTT on resumption). Asymmetric crypto sets up the key; symmetric does the bulk work (faster).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="certificates" data-level="medium" data-section="tls">
+          <div class="qa-question"><h3>How do certificates and the chain of trust work?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">tls</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">CA signs cert</span></li><li><span class="kw">root → intermediate → leaf</span></li><li><span class="kw">trust store</span></li></ul></div>
+            <p>A certificate binds a domain to a public key and is signed by a <strong class="kw">Certificate Authority</strong> (CA). Your OS/browser trusts a set of root CAs (the <strong class="kw">trust store</strong>).</p>
+            <h4>Chain of trust</h4>
+            <p>Root CA → intermediate CA → your <strong>leaf</strong> cert. The client validates each signature up to a trusted root, and checks the domain + expiry.</p>
+            <h4>Common failures</h4>
+            <p>Expired cert, hostname mismatch, missing intermediate (incomplete chain), or self-signed cert not in the trust store — all surface as TLS errors (and in Java, <code class="kw-code">PKIX path building failed</code> = missing trust).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="mtls" data-level="hard" data-section="tls">
+          <div class="qa-question"><h3>What is mutual TLS (mTLS) and where is it used?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">tls</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">both sides present certs</span></li><li><span class="kw">service-to-service</span></li></ul></div>
+            <p>In normal TLS only the <em>server</em> proves its identity. In <strong class="kw">mTLS</strong>, the <em>client</em> also presents a certificate — both sides authenticate.</p>
+            <h4>Where</h4>
+            <p>Service-to-service auth inside a <strong>service mesh</strong> (Istio/Linkerd auto-issue + rotate certs), partner B2B APIs, and zero-trust internal networks. For a financial platform like ICE, mTLS between services is a strong, common security control.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="symmetric-asymmetric" data-level="medium" data-section="tls">
+          <div class="qa-question"><h3>Symmetric vs asymmetric encryption — why TLS uses both?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">tls</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">symmetric = fast, shared key</span></li><li><span class="kw">asymmetric = key exchange</span></li></ul></div>
+            <p><strong class="kw">Symmetric</strong> (AES) uses one shared key — fast, but how do two strangers share it safely? <strong class="kw">Asymmetric</strong> (RSA/ECDSA) uses a public/private key pair — solves key exchange/identity but is slow.</p>
+            <h4>TLS uses both</h4>
+            <p>Asymmetric crypto during the handshake to authenticate and agree on a session key; then fast symmetric encryption for all the actual data. Best of both worlds.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="common-attacks" data-level="hard" data-section="tls">
+          <div class="qa-question"><h3>Common network attacks and how do we defend (MITM, DDoS, firewalls)?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">tls</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">MITM → TLS</span></li><li><span class="kw">DDoS → rate-limit/WAF</span></li><li><span class="kw">firewall/security groups</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">MITM</strong> (eavesdrop/tamper) — defend with TLS + cert validation (+ HSTS, pinning).</li>
+              <li><strong class="kw">DDoS</strong> — rate limiting, WAF, CDN/anycast absorption, autoscaling.</li>
+              <li><strong class="kw">Replay</strong> — nonces/idempotency keys, short-lived tokens.</li>
+              <li><strong class="kw">DNS spoofing</strong> — DNSSEC, trusted resolvers.</li>
+            </ul>
+            <h4>Network controls</h4>
+            <p><strong class="kw">Firewalls</strong> / cloud <strong>security groups</strong> allow traffic by port/IP (default deny, least privilege); put services in private subnets and expose only the load balancer.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-infra">
+        <h2>DNS, Load Balancing &amp; Proxies</h2>
+        <p class="section-desc">Load balancers (L4/L7), reverse vs forward proxy, CDN, DNS record types, session affinity.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="load-balancer-net" data-level="medium" data-section="infra" data-vimp="true">
+          <div class="qa-question"><h3>Load balancing — L4 vs L7, and algorithms?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">infra</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">L4 = TCP</span></li><li><span class="kw">L7 = HTTP-aware</span></li><li><span class="kw">health checks</span></li></ul></div>
+            <p><strong class="kw">L4</strong> balances on TCP/UDP (IP+port) — fast, protocol-agnostic. <strong class="kw">L7</strong> understands HTTP — can route by path/host/header, terminate TLS, and do sticky sessions.</p>
+            <h4>Algorithms</h4>
+            <p>Round-robin, least-connections, weighted, IP-hash. Add <strong class="kw">health checks</strong> to eject unhealthy instances automatically.</p>
+            <h4>Cloud mapping</h4>
+            <p>AWS ALB = L7, NLB = L4. The LB is also where you usually terminate TLS and enforce a public entry point while services stay private.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="reverse-proxy" data-level="medium" data-section="infra">
+          <div class="qa-question"><h3>Reverse proxy vs forward proxy?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">infra</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">reverse = in front of servers</span></li><li><span class="kw">forward = in front of clients</span></li></ul></div>
+            <p><strong class="kw">Reverse proxy</strong> (Nginx, API gateway) sits in front of your servers — TLS termination, routing, caching, rate limiting, hiding backends. Clients think they're talking to one server.</p>
+            <p><strong class="kw">Forward proxy</strong> sits in front of <em>clients</em> — outbound filtering/anonymity/corporate egress control. The server sees the proxy, not the client.</p>
+            <p>Rule of thumb: reverse = protects/serves the <strong>server</strong> side; forward = controls the <strong>client</strong> side.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cdn-net" data-level="easy" data-section="infra">
+          <div class="qa-question"><h3>What is a CDN and what problem does it solve?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">infra</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">edge caching</span></li><li><span class="kw">lower latency</span></li><li><span class="kw">offload origin</span></li></ul></div>
+            <p>A <strong class="kw">CDN</strong> caches content at edge locations (POPs) close to users, cutting latency (shorter physical distance = fewer RTTs) and offloading the origin server.</p>
+            <p>Great for static assets and cacheable API responses. Control freshness with TTL / <code class="kw-code">Cache-Control</code> and invalidate via versioned URLs or purge. Also helps absorb traffic spikes / DDoS.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="dns-records" data-level="easy" data-section="infra">
+          <div class="qa-question"><h3>Common DNS record types (A, CNAME, MX, TXT, TTL)?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">infra</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">A/AAAA</span></li><li><span class="kw">CNAME</span></li><li><span class="kw">MX/TXT</span></li><li><span class="kw">TTL</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">A</strong> → IPv4, <strong class="kw">AAAA</strong> → IPv6</li>
+              <li><strong class="kw">CNAME</strong> → alias to another hostname</li>
+              <li><strong class="kw">MX</strong> → mail servers</li>
+              <li><strong class="kw">TXT</strong> → arbitrary text (SPF/DKIM, domain verification)</li>
+              <li><strong class="kw">NS</strong> → authoritative name servers</li>
+            </ul>
+            <p><strong class="kw">TTL</strong> controls how long records are cached — lower it <em>before</em> a planned migration/failover so changes propagate fast (but very low TTL means more DNS traffic).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sticky-session" data-level="medium" data-section="infra">
+          <div class="qa-question"><h3>What is session affinity (sticky sessions) and its downside?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">infra</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">same client → same server</span></li><li><span class="kw">breaks easy scaling</span></li></ul></div>
+            <p>The LB pins a client to the same backend (via cookie or IP hash) so server-side session state stays available.</p>
+            <h4>Downside</h4>
+            <p>It hurts elasticity — uneven load, and losing an instance drops its users' sessions. The cleaner pattern is <strong>stateless</strong> services with shared state (Redis) or JWTs, so any instance can serve any request.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-app">
+        <h2>Java / Application Networking</h2>
+        <p class="section-desc">Sockets &amp; NIO, connection pooling, timeouts, WebSockets/SSE, retries + idempotency.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="sockets-java" data-level="medium" data-section="app">
+          <div class="qa-question"><h3>Sockets in Java — blocking I/O vs NIO?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">app</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">Socket/ServerSocket</span></li><li><span class="kw">thread-per-connection</span></li><li><span class="kw">NIO selector</span></li></ul></div>
+            <p>Classic <code class="kw-code">Socket</code>/<code class="kw-code">ServerSocket</code> use <strong>blocking</strong> I/O — simple, but thread-per-connection doesn't scale to tens of thousands of connections.</p>
+            <p><strong class="kw">Java NIO</strong> (selectors, non-blocking channels) lets a few threads handle many connections — the model behind Netty and reactive servers. <strong>Virtual threads</strong> (Java 21) now make simple blocking code scale like async, often removing the need for hand-written NIO.</p>
+            <p>In practice you rarely touch raw sockets — you use an HTTP client (<code class="kw-code">WebClient</code>/<code class="kw-code">RestClient</code>) over a managed connection pool.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="connection-pool-net" data-level="medium" data-section="app" data-vimp="true">
+          <div class="qa-question"><h3>Why connection pooling (HTTP and DB)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">app</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">reuse warm connections</span></li><li><span class="kw">HikariCP</span></li><li><span class="kw">pool exhaustion</span></li></ul></div>
+            <p>Opening a connection is expensive (TCP handshake + TLS + DB auth). A <strong class="kw">pool</strong> keeps warm connections and hands them out, slashing per-request latency and avoiding TIME_WAIT churn.</p>
+            <h4>Watch out</h4>
+            <ul>
+              <li><strong class="kw">Pool exhaustion</strong> — all connections held by slow calls → requests queue/timeout. Size the pool, set acquisition timeouts, and keep transactions short.</li>
+              <li>Size DB pools modestly (often ~CPU-bound, not huge — a bigger pool can overload the DB).</li>
+              <li>HikariCP <code class="kw-code">leakDetectionThreshold</code> catches connections you forgot to return.</li>
+            </ul>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="timeouts-net" data-level="medium" data-section="app" data-vimp="true">
+          <div class="qa-question"><h3>Connect timeout vs read timeout — why are they critical?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">app</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">connect = TCP setup</span></li><li><span class="kw">read = waiting for response</span></li><li><span class="kw">never infinite</span></li></ul></div>
+            <p><strong class="kw">Connect timeout</strong> caps how long you wait to <em>establish</em> the TCP connection. <strong class="kw">Read (socket) timeout</strong> caps how long you wait for the response after sending.</p>
+            <h4>Why it matters</h4>
+            <p>Default "infinite" timeouts are a classic outage cause: one slow dependency makes threads pile up waiting, exhausting the pool and taking <em>your</em> service down too. Always set both, keep them aggressive, and combine with retries (idempotent only) + a circuit breaker + fallback.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="websocket" data-level="medium" data-section="app">
+          <div class="qa-question"><h3>WebSocket vs polling vs SSE — for real-time?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">app</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">WebSocket = full-duplex</span></li><li><span class="kw">SSE = server→client</span></li><li><span class="kw">polling = repeated requests</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Polling</strong> — client repeatedly asks (simple, wasteful/laggy). Long-polling holds the request open.</li>
+              <li><strong class="kw">SSE</strong> — one-way server→client stream over HTTP (great for notifications/feeds, auto-reconnect).</li>
+              <li><strong class="kw">WebSocket</strong> — full-duplex persistent connection (starts as an HTTP <code class="kw-code">Upgrade</code>) for chat, live trading, collaborative apps.</li>
+            </ul>
+            <p>Pick the lightest tool: SSE if it's only server→client; WebSocket if you need bidirectional low-latency.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="retries-idempotency-net" data-level="hard" data-section="app">
+          <div class="qa-question"><h3>How do you make network calls resilient (retries + idempotency)?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">app</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">backoff + jitter</span></li><li><span class="kw">idempotency key</span></li><li><span class="kw">circuit breaker</span></li></ul></div>
+            <p>Networks are unreliable, so design for failure:</p>
+            <ul>
+              <li><strong class="kw">Timeouts</strong> on every call (above).</li>
+              <li><strong class="kw">Retries</strong> with exponential backoff + jitter — only on transient errors (timeouts, 5xx, 429) and only for <strong>idempotent</strong> operations.</li>
+              <li><strong class="kw">Idempotency key</strong> for non-idempotent writes so a retried POST doesn't double-charge.</li>
+              <li><strong class="kw">Circuit breaker</strong> + fallback (Resilience4j) to fail fast and degrade gracefully.</li>
+            </ul>
+            <p>Beware the gotcha: a timeout doesn't mean the request <em>failed</em> — it may have succeeded after you gave up, which is exactly why idempotency matters.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-troubleshooting">
+        <h2>Troubleshooting &amp; Tools</h2>
+        <p class="section-desc">Latency vs bandwidth, CLI tools, debugging slow/failing calls, firewalls, DNS issues.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="latency-bandwidth" data-level="easy" data-section="troubleshooting">
+          <div class="qa-question"><h3>Latency vs bandwidth vs throughput?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">troubleshooting</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">latency = delay (RTT)</span></li><li><span class="kw">bandwidth = capacity</span></li><li><span class="kw">throughput = actual rate</span></li></ul></div>
+            <p><strong class="kw">Latency</strong> = time for one trip (RTT). <strong class="kw">Bandwidth</strong> = max capacity of the pipe. <strong class="kw">Throughput</strong> = the actual data rate achieved.</p>
+            <h4>Analogy</h4>
+            <p>A highway: latency = how long one car takes end-to-end; bandwidth = how many lanes; throughput = cars actually arriving per minute. Adding lanes (bandwidth) doesn't reduce the trip time (latency).</p>
+            <p>Backend latency is dominated by RTTs (handshakes, chatty calls, cross-region hops) — which is why batching, keep-alive, and CDNs help.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="network-tools" data-level="medium" data-section="troubleshooting" data-vimp="true">
+          <div class="qa-question"><h3>Which CLI tools do you use to debug network issues?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">troubleshooting</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ping/traceroute</span></li><li><span class="kw">dig/nslookup</span></li><li><span class="kw">curl</span></li><li><span class="kw">netstat/ss</span></li><li><span class="kw">tcpdump</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">ping</strong> — is the host reachable + round-trip time.</li>
+              <li><strong class="kw">traceroute</strong> — the hop path / where it stalls.</li>
+              <li><strong class="kw">dig</strong>/<strong class="kw">nslookup</strong> — DNS resolution.</li>
+              <li><strong class="kw">curl -v</strong> — full HTTP request/response, headers, TLS, timing.</li>
+              <li><strong class="kw">netstat</strong>/<strong class="kw">ss</strong> — open sockets &amp; states (TIME_WAIT/CLOSE_WAIT).</li>
+              <li><strong class="kw">telnet</strong>/<strong class="kw">nc</strong> — is a port open?</li>
+              <li><strong class="kw">tcpdump</strong>/Wireshark — packet capture for the hard cases.</li>
+            </ul>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="debug-slow-api" data-level="hard" data-section="troubleshooting" data-vimp="true">
+          <div class="qa-question"><h3>A downstream API call is slow/failing — how do you diagnose it?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">troubleshooting</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">isolate the layer</span></li><li><span class="kw">DNS/connect/TLS/server</span></li><li><span class="kw">traces + correlation id</span></li></ul></div>
+            <h4>Narrow it down layer by layer</h4>
+            <ol>
+              <li><strong>DNS?</strong> <code class="kw-code">dig</code> the host — slow/failing resolution.</li>
+              <li><strong>Reachability?</strong> <code class="kw-code">ping</code>/<code class="kw-code">nc host port</code> — network/firewall.</li>
+              <li><strong>Timing breakdown?</strong> <code class="kw-code">curl -w</code> for DNS / connect / TLS / TTFB — find which phase is slow.</li>
+              <li><strong>Server side?</strong> Use the <strong>correlation ID</strong> to trace it across services; check the dependency's own latency/error metrics and DB.</li>
+            </ol>
+            <h4>Common culprits</h4>
+            <p>Connection-pool exhaustion, missing/large timeout, DNS issues, TLS renegotiation, a slow query downstream, or a saturated dependency. Mitigate (timeout/circuit breaker), then root-cause with traces + metrics.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="firewall-ports" data-level="medium" data-section="troubleshooting">
+          <div class="qa-question"><h3>"Connection refused" vs "connection timed out" — what's the difference?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">troubleshooting</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">refused = reached, nothing listening</span></li><li><span class="kw">timeout = blocked/unreachable</span></li></ul></div>
+            <p><strong class="kw">Connection refused</strong> — you reached the host but <em>nothing is listening</em> on that port (service down / wrong port). The host actively rejected (RST).</p>
+            <p><strong class="kw">Connection timed out</strong> — no response at all; usually a <strong>firewall / security group</strong> dropping packets, wrong host, or the host is unreachable.</p>
+            <h4>Cloud tip</h4>
+            <p>Timeouts between services are very often a missing <strong>security-group / firewall</strong> rule (port not allowed) — check that before suspecting the app.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="dns-cache-issue" data-level="medium" data-section="troubleshooting">
+          <div class="qa-question"><h3>Common DNS/connectivity issues (and Java's DNS caching)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">troubleshooting</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">stale DNS cache</span></li><li><span class="kw">JVM networkaddress.cache.ttl</span></li><li><span class="kw">low TTL on failover</span></li></ul></div>
+            <p>Classic issues: a stale cached record after an IP change/failover, too-high TTL slowing propagation, or split-horizon DNS returning different results internally vs externally.</p>
+            <h4>JVM gotcha</h4>
+            <p>The JVM caches DNS lookups (historically "forever" for successes via <code class="kw-code">networkaddress.cache.ttl</code>). If a service's IP changes (common in cloud), a long-running JVM can keep hitting the old IP — set a sane cache TTL so it re-resolves after failover.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

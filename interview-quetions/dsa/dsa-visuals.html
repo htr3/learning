@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSA — Interactive 3D Visuals</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="dsa-visuals" class="visuals-page">
+  <div class="layout layout-visuals">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main main-visuals">
+      <header class="page-header">
+        <h1>DSA — Interactive Visuals</h1>
+        <p><strong id="visual-count">33</strong> step-by-step demos across all 11 Q&amp;A sections — Three.js on desktop, 2D canvas on mobile (&lt;768px). Use <strong>Next step</strong>, <strong>Auto play</strong>, and controls on each card.</p>
+      </header>
+
+      <div class="diagram-banner diagram-banner-back">
+        <span>← Back to Q&amp;A</span>
+        <a href="dsa.html"><strong>DSA questions</strong></a>
+        <span class="diagram-banner-sep">·</span>
+        <a href="striver-sheet.html"><strong>Striver SDE Sheet (184 problems)</strong></a>
+      </div>
+
+      <nav class="diagram-toc" aria-label="Visual sections">
+        <h2 class="diagram-toc-title">Jump to visual</h2>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">1. Basics</span>
+          <div class="diagram-toc-links"><a href="#visual-big-o">Big O</a><a href="#visual-recursion-backtrack">Recursion</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">2. Arrays</span>
+          <div class="diagram-toc-links"><a href="#visual-array">Array</a><a href="#visual-two-sum">Two Sum</a><a href="#visual-sliding-window">Sliding window</a><a href="#visual-prefix-sum">Prefix sum</a><a href="#visual-two-pointers">Two pointers</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">3. Linked List</span>
+          <div class="diagram-toc-links"><a href="#visual-linked-list">Reverse</a><a href="#visual-doubly-ll">Doubly</a><a href="#visual-cycle-floyd">Floyd cycle</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">4. Stack &amp; Queue</span>
+          <div class="diagram-toc-links"><a href="#visual-stack">Stack</a><a href="#visual-queue">Queue</a><a href="#visual-deque">Deque</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">5. Trees</span>
+          <div class="diagram-toc-links"><a href="#visual-tree-traversal">Traversals</a><a href="#visual-bfs-tree">Level BFS</a><a href="#visual-bst">BST</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">6. Heap</span>
+          <div class="diagram-toc-links"><a href="#visual-heap">Min heap</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">7. Hashing</span>
+          <div class="diagram-toc-links"><a href="#visual-hashmap">Hash map</a><a href="#visual-hash-collision">Collisions</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">8. Graphs</span>
+          <div class="diagram-toc-links"><a href="#visual-graph">BFS/DFS</a><a href="#visual-dijkstra">Dijkstra</a><a href="#visual-toposort">Topo sort</a><a href="#visual-union-find">Union-Find</a><a href="#visual-trie">Trie</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">9. Sort &amp; Search</span>
+          <div class="diagram-toc-links"><a href="#visual-sorting">Sorting</a><a href="#visual-binary-search">Binary search</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">10. DP</span>
+          <div class="diagram-toc-links"><a href="#visual-fib-dp">Fibonacci</a><a href="#visual-kadane">Kadane</a><a href="#visual-knapsack">Knapsack</a><a href="#visual-lcs">LCS</a></div></div>
+        <div class="diagram-toc-section"><span class="diagram-toc-heading">11. Greedy</span>
+          <div class="diagram-toc-links"><a href="#visual-greedy-intervals">Intervals</a><a href="#visual-fractional-knapsack">Fractional</a></div></div>
+      </nav>
+
+      <div class="visual-grid">
+
+        <h3 class="visual-section-title" id="toc-basics">1. Basic Concepts</h3>
+
+        <section class="visual-card diagram-card" id="visual-big-o">
+          <h2>Big O — growth rates</h2>
+          <p class="diagram-desc">Compare how operations grow as input size n increases: O(1), O(log n), O(n), O(n log n), O(n²).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Big O comparison chart"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-recursion-backtrack">
+          <h2>Recursion &amp; backtracking — subset tree</h2>
+          <p class="diagram-desc">Build all subsets of [1,2,3]: include or skip each element, then undo (backtrack).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Backtracking decision tree"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-arrays">2. Arrays &amp; Strings</h3>
+
+        <section class="visual-card diagram-card" id="visual-array">
+          <h2>Array — indexing &amp; insertion</h2>
+          <p class="diagram-desc">Contiguous memory: O(1) access by index; inserting in the middle shifts elements — O(n).</p>
+          <div class="visual-stage">
+            <div class="three-container" aria-label="3D array bars"></div>
+            <canvas class="visual-canvas" aria-label="2D array bars"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <label>Array size: <input type="range" min="5" max="12" value="8" aria-label="Array size"></label>
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-two-sum">
+          <h2>Two Sum — HashMap lookup</h2>
+          <p class="diagram-desc">For each value, check if (target − value) was seen. Store value→index in HashMap — O(n).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Two sum HashMap"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-sliding-window">
+          <h2>Sliding window — unique substring</h2>
+          <p class="diagram-desc">Expand right, shrink left when duplicate found. Track last index per character.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Sliding window"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-prefix-sum">
+          <h2>Prefix sum — range query</h2>
+          <p class="diagram-desc">prefix[i] = sum(nums[0..i]). Range [l,r] = prefix[r] − prefix[l−1] in O(1).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Prefix sum"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-two-pointers">
+          <h2>Two pointers — container with most water</h2>
+          <p class="diagram-desc">left=0, right=n−1. Move the shorter line inward to possibly increase area.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Two pointers water"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-linkedlist">3. Linked List</h3>
+
+        <section class="visual-card diagram-card" id="visual-linked-list">
+          <h2>Reverse linked list — pointer rewiring</h2>
+          <p class="diagram-desc">Watch <strong>prev</strong>, <strong>curr</strong>, and <strong>nxt</strong>. Each step: save nxt → <code>curr.next = prev</code> → advance. Orange arrows = flipped links.</p>
+          <div class="visual-stage">
+            <canvas class="visual-canvas" aria-label="Reverse linked list"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-doubly-ll">
+          <h2>Doubly linked list — prev &amp; next</h2>
+          <p class="diagram-desc">Bidirectional links enable O(1) delete at known node (e.g. LRU cache).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Doubly linked list"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-cycle-floyd">
+          <h2>Floyd cycle detection — tortoise &amp; hare</h2>
+          <p class="diagram-desc">Slow +1, fast +2 per step. Meeting inside cycle proves a loop — O(n).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Floyd cycle detection"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-stackqueue">4. Stack &amp; Queue</h3>
+
+        <section class="visual-card diagram-card" id="visual-stack">
+          <h2>Stack — push &amp; pop (LIFO)</h2>
+          <p class="diagram-desc">Last In, First Out — undo stacks, DFS, parentheses matching.</p>
+          <div class="visual-stage">
+            <div class="three-container" aria-label="3D stack"></div>
+            <canvas class="visual-canvas" aria-label="2D stack"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-queue">
+          <h2>Queue — FIFO enqueue &amp; dequeue</h2>
+          <p class="diagram-desc">First In, First Out — BFS, job buffers, thread pools.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Queue FIFO"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-deque">
+          <h2>Deque — both ends</h2>
+          <p class="diagram-desc">Add/remove at front and back — monotonic deque for sliding window maximum.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Deque"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-trees">5. Trees</h3>
+
+        <section class="visual-card diagram-card" id="visual-tree-traversal">
+          <h2>Tree traversals — in / pre / postorder</h2>
+          <p class="diagram-desc">Same tree, different visit orders. Inorder on BST yields sorted sequence.</p>
+          <div class="visual-stage visual-stage-tall">
+            <canvas class="visual-canvas" aria-label="Tree traversals"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <label>Order: <select class="filter-select visual-mode-select" data-mode="traversal">
+              <option value="inorder">Inorder (L, root, R)</option>
+              <option value="preorder">Preorder (root, L, R)</option>
+              <option value="postorder">Postorder (L, R, root)</option>
+            </select></label>
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-bfs-tree">
+          <h2>Level-order BFS on tree</h2>
+          <p class="diagram-desc">Queue processes all nodes at current depth before going deeper.</p>
+          <div class="visual-stage visual-stage-tall">
+            <canvas class="visual-canvas" aria-label="Tree level BFS"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-bst">
+          <h2>Binary search tree — insert &amp; search</h2>
+          <p class="diagram-desc">Left &lt; root &lt; right. Path length = tree height h — O(h).</p>
+          <div class="visual-stage visual-stage-tall">
+            <div class="three-container" aria-label="3D BST"></div>
+            <canvas class="visual-canvas" aria-label="2D BST"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-heap">6. Heap</h3>
+
+        <section class="visual-card diagram-card" id="visual-heap">
+          <h2>Min heap — insert &amp; heapify</h2>
+          <p class="diagram-desc">Complete binary tree: parent ≤ children. Array index i → children 2i+1, 2i+2.</p>
+          <div class="visual-stage visual-stage-tall">
+            <canvas class="visual-canvas" aria-label="Min heap"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-hashing">7. Hashing</h3>
+
+        <section class="visual-card diagram-card" id="visual-hashmap">
+          <h2>Hash map — key to bucket</h2>
+          <p class="diagram-desc">hash(key) % buckets → index. Average O(1) get/put when load factor is low.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Hash map"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-hash-collision">
+          <h2>Hash collisions — chaining</h2>
+          <p class="diagram-desc">Multiple keys land in same bucket → linked list (or tree) at that slot.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Hash collisions"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-graphs">8. Graphs</h3>
+
+        <section class="visual-card diagram-card" id="visual-graph">
+          <h2>Graph — BFS vs DFS</h2>
+          <p class="diagram-desc">BFS uses a queue (layers); DFS uses stack/recursion (depth first). Both O(V+E).</p>
+          <div class="visual-stage">
+            <div class="three-container" aria-label="3D graph"></div>
+            <canvas class="visual-canvas" aria-label="2D graph"></canvas>
+          </div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <label for="graph-mode">Traversal:</label>
+            <select class="filter-select graph-mode-select" aria-label="BFS or DFS">
+              <option value="bfs">BFS (queue)</option>
+              <option value="dfs">DFS (stack)</option>
+            </select>
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-dijkstra">
+          <h2>Dijkstra — shortest path</h2>
+          <p class="diagram-desc">Min-heap picks closest unvisited node; relax edge weights. Non-negative weights only.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Dijkstra algorithm"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-toposort">
+          <h2>Topological sort — Kahn's BFS</h2>
+          <p class="diagram-desc">DAG: repeatedly take node with indegree 0, reduce neighbors' indegree.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Topological sort"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-union-find">
+          <h2>Union-Find — connected components</h2>
+          <p class="diagram-desc">Kruskal MST: union sets when edge connects different components. Path compression optional.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Union find"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-trie">
+          <h2>Trie — insert &amp; search</h2>
+          <p class="diagram-desc">Prefix tree: each node stores char → child. Insert/search O(word length). ★ marks end of word.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Trie insert and search"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-sortsearch">9. Sorting &amp; Searching</h3>
+
+        <section class="visual-card diagram-card" id="visual-sorting">
+          <h2>Sorting — step animator</h2>
+          <p class="diagram-desc">Bubble, selection, insertion, merge, quick, heap sort. Orange = comparing, red = swapping, green = sorted.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Sorting animation"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <label>Algorithm: <select class="filter-select visual-mode-select" data-mode="sort">
+              <option value="bubble">Bubble O(n²)</option>
+              <option value="selection">Selection O(n²)</option>
+              <option value="insertion">Insertion O(n²)</option>
+              <option value="merge">Merge O(n log n)</option>
+              <option value="quick">Quick O(n log n) avg</option>
+              <option value="heap">Heap O(n log n)</option>
+            </select></label>
+            <label>Size: <input type="range" min="6" max="12" value="8" aria-label="Sort array size"></label>
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-binary-search">
+          <h2>Binary search — halving the range</h2>
+          <p class="diagram-desc">Sorted array: compare mid, discard half. O(log n) time, O(1) space.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Binary search"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-dp">10. Dynamic Programming</h3>
+
+        <section class="visual-card diagram-card" id="visual-fib-dp">
+          <h2>Fibonacci — tabulation</h2>
+          <p class="diagram-desc">dp[i] = dp[i−1] + dp[i−2]. Turns O(2ⁿ) recursion into O(n).</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Fibonacci DP"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-kadane">
+          <h2>Kadane — maximum subarray</h2>
+          <p class="diagram-desc">curr = max(nums[i], curr + nums[i]); track global best.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Kadane algorithm"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-knapsack">
+          <h2>0/1 Knapsack — DP table</h2>
+          <p class="diagram-desc">For each item, update dp[w] from larger capacities down to avoid reuse.</p>
+          <div class="visual-stage visual-stage-tall"><canvas class="visual-canvas" aria-label="Knapsack DP"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-lcs">
+          <h2>LCS — longest common subsequence</h2>
+          <p class="diagram-desc">If chars match: dp[i][j]=1+dp[i−1][j−1]; else max of neighbors.</p>
+          <div class="visual-stage visual-stage-tall"><canvas class="visual-canvas" aria-label="LCS DP table"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <h3 class="visual-section-title" id="toc-greedy">11. Greedy Algorithms</h3>
+
+        <section class="visual-card diagram-card" id="visual-greedy-intervals">
+          <h2>Activity selection — non-overlapping intervals</h2>
+          <p class="diagram-desc">Sort by end time; greedily pick next compatible interval.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Greedy intervals"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+        <section class="visual-card diagram-card" id="visual-fractional-knapsack">
+          <h2>Fractional knapsack — by value/weight</h2>
+          <p class="diagram-desc">Sort items by value/weight ratio; take full items then fraction of next.</p>
+          <div class="visual-stage"><canvas class="visual-canvas" aria-label="Fractional knapsack"></canvas></div>
+          <p class="visual-status" aria-live="polite"></p>
+          <div class="visual-controls">
+            <button type="button" class="btn" data-action="reset">Reset</button>
+            <button type="button" class="btn btn-primary" data-action="next">Next step</button>
+            <button type="button" class="btn" data-action="play" aria-pressed="false">Auto play</button>
+          </div>
+        </section>
+
+      </div>
+
+      <div class="diagram-banner diagram-banner-back" style="margin-top: 2rem;">
+        <a href="dsa.html">← DSA Q&amp;A</a>
+        <span class="diagram-banner-sep">·</span>
+        <a href="../index.html">Home</a>
+      </div>
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="../assets/linked-list-draw.js"></script>
+  <script src="../assets/linked-list-algos.js"></script>
+  <script src="../assets/app.js"></script>
+  <script src="../assets/dsa-visuals.js"></script>
+</body>
+</html>

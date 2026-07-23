@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Linux — Interview Prep</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="linux">
+  <div class="layout">
+    <aside class="sidebar"><h2>Interview Prep</h2><nav id="site-nav"></nav></aside>
+    <main class="main">
+      <header class="page-header">
+        <h1>Linux Interview Prep</h1>
+        <p>The command-line, file/text tools, permissions, processes &amp; services, performance troubleshooting, and running Java apps on Linux — the practical Linux a backend/on-call engineer needs. Click a question for the full answer.</p>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search questions & answers...">
+        <select id="level-filter" class="filter-select">
+          <option value="all">All levels</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <label><input type="checkbox" id="vimp-only"> ⭐ Very important</label>
+        <label><input type="checkbox" id="practice-mode"> Practice mode</label>
+        <button type="button" class="btn" id="expand-all">Expand all</button>
+        <button type="button" class="btn" id="collapse-all">Collapse all</button>
+      </div>
+      <div class="legend">
+        <span><span class="level level-easy">Easy</span> fundamentals</span>
+        <span><span class="level level-medium">Medium</span> 3 YOE depth</span>
+        <span><span class="level level-hard">Hard</span> senior / tricky</span>
+        <span><span class="level-vimp">⭐ VI</span> must practice before interview</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><strong id="stat-done">0</strong><span>Practiced</span></div>
+        <div class="stat-card"><strong id="stat-total">0</strong><span>Total</span></div>
+        <div class="stat-card"><strong id="stat-visible">0</strong><span>Showing</span></div>
+        <div class="stat-card"><strong id="stat-pct">0%</strong><span>Progress</span></div>
+      </div>
+
+      <section class="topic-section" id="section-fundamentals">
+        <h2>Fundamentals &amp; the Shell</h2>
+        <p class="section-desc">Filesystem hierarchy, "everything is a file", shell/PATH, paths, pipes &amp; redirection, getting help.</p>
+        <p class="section-meta">6 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="fs-hierarchy" data-level="easy" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>Explain the Linux filesystem hierarchy (key directories)</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">/etc /var /home</span></li><li><span class="kw">/proc /tmp</span></li><li><span class="kw">single tree from /</span></li></ul></div>
+            <p>Everything hangs off a single root <code class="kw-code">/</code> (no drive letters).</p>
+            <h4>Key directories</h4>
+            <ul>
+              <li><strong class="kw">/etc</strong> — config files</li>
+              <li><strong class="kw">/var</strong> — variable data; <code class="kw-code">/var/log</code> for logs</li>
+              <li><strong class="kw">/home</strong> — user home dirs; <code class="kw-code">/root</code> for root</li>
+              <li><strong class="kw">/tmp</strong> — temp files (cleared)</li>
+              <li><strong class="kw">/usr/bin</strong>, <code class="kw-code">/bin</code> — executables</li>
+              <li><strong class="kw">/proc</strong>, <code class="kw-code">/sys</code> — virtual FS exposing kernel/process info</li>
+              <li><strong class="kw">/dev</strong> — device files</li>
+            </ul>
+            <p>On-call tip: app logs in <code class="kw-code">/var/log</code> (or journald), config in <code class="kw-code">/etc</code>, and a full <code class="kw-code">/var</code> or <code class="kw-code">/tmp</code> is a classic cause of outages.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="everything-is-file" data-level="medium" data-section="fundamentals">
+          <div class="qa-question"><h3>What does "everything is a file" mean in Linux?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">devices as files</span></li><li><span class="kw">/proc, /dev</span></li><li><span class="kw">uniform interface</span></li></ul></div>
+            <p>Linux exposes most resources through the file interface, so the same <code class="kw-code">open/read/write</code> calls work for many things:</p>
+            <ul>
+              <li>Regular files &amp; directories.</li>
+              <li>Devices — <code class="kw-code">/dev/null</code> (discard), <code class="kw-code">/dev/zero</code>, disks <code class="kw-code">/dev/sda</code>.</li>
+              <li>Process info — <code class="kw-code">/proc/&lt;pid&gt;/</code> (status, fd, limits).</li>
+              <li>Sockets and pipes (file descriptors).</li>
+            </ul>
+            <p>This uniformity is why you can <code class="kw-code">cat /proc/cpuinfo</code> or redirect output to <code class="kw-code">/dev/null</code> — powerful and composable.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="shell-basics" data-level="easy" data-section="fundamentals">
+          <div class="qa-question"><h3>What is the shell, PATH, and environment variables?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">bash</span></li><li><span class="kw">$PATH</span></li><li><span class="kw">export VAR</span></li></ul></div>
+            <p>The <strong class="kw">shell</strong> (usually <code class="kw-code">bash</code>) is the command interpreter. When you type a command, it searches the directories in <strong class="kw">$PATH</strong> to find the executable.</p>
+            <pre><code class="kw-code">echo $PATH        # where commands are looked up
+which java        # full path of the resolved binary
+export APP_ENV=prod   # set an env var for this shell + children</code></pre>
+            <p><strong class="kw">Environment variables</strong> configure programs (e.g. <code class="kw-code">JAVA_HOME</code>, <code class="kw-code">SPRING_PROFILES_ACTIVE</code>). Set persistently in <code class="kw-code">~/.bashrc</code> / <code class="kw-code">/etc/environment</code>; per-process is the 12-factor way to pass config.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="abs-vs-rel-path" data-level="easy" data-section="fundamentals">
+          <div class="qa-question"><h3>Absolute vs relative paths (. .. ~ /)?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">/ = root</span></li><li><span class="kw">. = here, .. = up</span></li><li><span class="kw">~ = home</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">Absolute</strong> starts at root: <code class="kw-code">/var/log/app.log</code>.</li>
+              <li><strong class="kw">Relative</strong> is from the current dir: <code class="kw-code">logs/app.log</code>.</li>
+              <li><code class="kw-code">.</code> = current dir, <code class="kw-code">..</code> = parent, <code class="kw-code">~</code> = your home, <code class="kw-code">-</code> = previous dir (<code class="kw-code">cd -</code>).</li>
+            </ul>
+            <p>Use <code class="kw-code">pwd</code> to see where you are. In scripts/cron, prefer absolute paths — the working directory may not be what you expect.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="pipes-redirection" data-level="medium" data-section="fundamentals" data-vimp="true">
+          <div class="qa-question"><h3>Pipes and redirection (| &gt; &gt;&gt; 2&gt;&amp;1)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">| pipe</span></li><li><span class="kw">&gt; / &gt;&gt;</span></li><li><span class="kw">stdout=1, stderr=2</span></li></ul></div>
+            <p>Every process has 3 streams: <strong class="kw">stdin (0)</strong>, <strong class="kw">stdout (1)</strong>, <strong class="kw">stderr (2)</strong>.</p>
+            <ul>
+              <li><code class="kw-code">|</code> — pipe one command's stdout into the next's stdin.</li>
+              <li><code class="kw-code">&gt;</code> overwrite a file, <code class="kw-code">&gt;&gt;</code> append.</li>
+              <li><code class="kw-code">2&gt;&amp;1</code> — redirect stderr to wherever stdout goes.</li>
+              <li><code class="kw-code">&gt; /dev/null 2&gt;&amp;1</code> — discard all output.</li>
+            </ul>
+            <pre><code class="kw-code">grep ERROR app.log | awk '{print $1}' | sort | uniq -c | sort -rn
+java -jar app.jar &gt; app.log 2&gt;&amp;1 &amp;</code></pre>
+            <p>Pipelines are the heart of Linux power — small tools composed to analyze logs in seconds.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="man-help" data-level="easy" data-section="fundamentals">
+          <div class="qa-question"><h3>How do you get help on a command?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">fundamentals</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">man</span></li><li><span class="kw">--help</span></li><li><span class="kw">which/type</span></li></ul></div>
+            <ul>
+              <li><code class="kw-code">man ls</code> — full manual; <code class="kw-code">cmd --help</code> — quick usage.</li>
+              <li><code class="kw-code">which java</code> / <code class="kw-code">type cd</code> — where a command resolves (and whether it's a builtin/alias).</li>
+              <li><code class="kw-code">apropos &lt;keyword&gt;</code> — search man pages.</li>
+            </ul>
+            <p>Knowing how to self-serve docs on an unfamiliar box matters more than memorizing every flag.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-files">
+        <h2>Files &amp; Text Processing</h2>
+        <p class="section-desc">Navigation, viewing files, grep, find, sed/awk, file ops, compression, sort/uniq/wc.</p>
+        <p class="section-meta">8 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="navigation" data-level="easy" data-section="files">
+          <div class="qa-question"><h3>Navigating and listing files (ls, cd, pwd)?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ls -la</span></li><li><span class="kw">ls -lh</span></li><li><span class="kw">ls -lt</span></li></ul></div>
+            <pre><code class="kw-code">ls -la    # long listing incl hidden (perms, owner, size, date)
+ls -lh    # human-readable sizes
+ls -lt    # sort by modified time (newest first) — find recent changes
+ls -ltr   # oldest→newest (handy to spot the latest file at the bottom)</code></pre>
+            <p><code class="kw-code">ls -lt</code> is great on-call to spot what changed recently (e.g. a freshly written log or a new deploy artifact).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="view-files" data-level="easy" data-section="files" data-vimp="true">
+          <div class="qa-question"><h3>Viewing files — cat, less, head, tail -f?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="level-vimp">⭐ VI</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">tail -f</span></li><li><span class="kw">less</span></li><li><span class="kw">head/tail -n</span></li></ul></div>
+            <ul>
+              <li><code class="kw-code">cat</code> — dump a whole (small) file.</li>
+              <li><code class="kw-code">less</code> — page through a big file (search with <code class="kw-code">/</code>, quit with <code class="kw-code">q</code>) without loading it all.</li>
+              <li><code class="kw-code">head -n 50</code> / <code class="kw-code">tail -n 50</code> — first/last N lines.</li>
+              <li><strong class="kw">tail -f app.log</strong> — follow a live log; <code class="kw-code">tail -F</code> survives log rotation.</li>
+            </ul>
+            <p><code class="kw-code">tail -f | grep ERROR</code> while reproducing an issue is a daily on-call move. Don't <code class="kw-code">cat</code> a multi-GB log — use <code class="kw-code">less</code>/<code class="kw-code">tail</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="grep" data-level="medium" data-section="files" data-vimp="true">
+          <div class="qa-question"><h3>grep — searching files/logs effectively</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">-i -r -n -v</span></li><li><span class="kw">-A/-B/-C context</span></li><li><span class="kw">-E regex</span></li></ul></div>
+            <pre><code class="kw-code">grep -i "error" app.log         # case-insensitive
+grep -rn "NullPointer" src/      # recursive + line numbers
+grep -v "DEBUG" app.log          # invert: exclude
+grep -C 3 "Exception" app.log    # 3 lines of context around match
+grep -E "WARN|ERROR" app.log     # extended regex (OR)
+grep "OrderService" app.log | grep "corr-123"  # narrow by correlation id</code></pre>
+            <p>Combine with a correlation ID to trace one request through a noisy log. <code class="kw-code">grep -c</code> counts matches (e.g. how many errors).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="find" data-level="medium" data-section="files" data-vimp="true">
+          <div class="qa-question"><h3>find — locating files by name, size, or age</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">-name</span></li><li><span class="kw">-size +100M</span></li><li><span class="kw">-mtime</span></li><li><span class="kw">-exec</span></li></ul></div>
+            <pre><code class="kw-code">find /var/log -name "*.log"             # by name
+find / -size +500M 2&gt;/dev/null          # big files (disk-full triage)
+find /tmp -mtime +7 -delete             # files older than 7 days
+find . -name "*.tmp" -exec rm {} \;     # run a command per match</code></pre>
+            <p>Finding large/old files is the go-to when a disk fills up. Redirect <code class="kw-code">2&gt;/dev/null</code> to hide permission-denied noise.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sed-awk" data-level="hard" data-section="files">
+          <div class="qa-question"><h3>sed and awk — when do you use them?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">sed = substitute</span></li><li><span class="kw">awk = columns/fields</span></li></ul></div>
+            <p><strong class="kw">sed</strong> — stream editor for find/replace and line edits. <strong class="kw">awk</strong> — column/field processing and quick aggregations.</p>
+            <pre><code class="kw-code">sed 's/foo/bar/g' file.txt        # replace all foo with bar
+sed -n '10,20p' file.txt          # print lines 10-20
+awk '{print $1, $4}' access.log   # print columns 1 and 4
+awk '{sum+=$5} END {print sum}'   # sum a column
+awk -F',' '{print $2}' data.csv   # CSV: 2nd field</code></pre>
+            <p>For log/CSV crunching these beat writing a script. Example: top client IPs = <code class="kw-code">awk '{print $1}' access.log | sort | uniq -c | sort -rn | head</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="file-ops" data-level="easy" data-section="files">
+          <div class="qa-question"><h3>File operations (cp, mv, rm, mkdir) and the rm -rf danger</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">cp -r</span></li><li><span class="kw">mv</span></li><li><span class="kw">rm -rf (careful!)</span></li></ul></div>
+            <pre><code class="kw-code">cp -r src/ dst/      # copy recursively
+mv old.txt new.txt   # move/rename
+mkdir -p a/b/c       # create nested dirs
+rm -rf dir/          # recursive force delete — NO undo</code></pre>
+            <h4>Safety</h4>
+            <p>There is no recycle bin — <code class="kw-code">rm -rf</code> is permanent. Never run it with a variable that could be empty (<code class="kw-code">rm -rf "$DIR"/</code> with unset <code class="kw-code">$DIR</code> = disaster). Double-check the path; consider <code class="kw-code">ls</code> first.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="compression" data-level="easy" data-section="files">
+          <div class="qa-question"><h3>Archiving and compression (tar, gzip, zip)?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">tar -czf / -xzf</span></li><li><span class="kw">gzip</span></li></ul></div>
+            <pre><code class="kw-code">tar -czf logs.tar.gz /var/log/app/   # create gzip archive
+tar -xzf logs.tar.gz                 # extract
+tar -tzf logs.tar.gz                 # list contents
+zcat app.log.gz | grep ERROR         # search a gzipped log without extracting</code></pre>
+            <p>Mnemonic: <strong>c</strong>reate, e<strong>x</strong>tract, <strong>t</strong>list; <strong>z</strong> = gzip, <strong>f</strong> = file. <code class="kw-code">zcat</code>/<code class="kw-code">zgrep</code> read rotated <code class="kw-code">.gz</code> logs directly.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sort-uniq-wc" data-level="medium" data-section="files">
+          <div class="qa-question"><h3>Log analysis with sort, uniq, wc, cut?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">files</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">sort | uniq -c</span></li><li><span class="kw">wc -l</span></li><li><span class="kw">cut -d</span></li></ul></div>
+            <pre><code class="kw-code">wc -l app.log                         # count lines (e.g. # of requests)
+grep ERROR app.log | wc -l            # count errors
+sort | uniq -c | sort -rn             # frequency count (top offenders)
+cut -d',' -f2 data.csv                # extract 2nd CSV field</code></pre>
+            <p>The classic "top errors" one-liner:</p>
+            <pre><code class="kw-code">grep ERROR app.log | cut -d' ' -f5- | sort | uniq -c | sort -rn | head</code></pre>
+            <p><code class="kw-code">uniq</code> only collapses <em>adjacent</em> duplicates — always <code class="kw-code">sort</code> first.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-permissions">
+        <h2>Permissions &amp; Users</h2>
+        <p class="section-desc">rwx permissions, chmod/chown, sudo/root, users &amp; groups, SSH.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="permissions" data-level="medium" data-section="permissions" data-vimp="true">
+          <div class="qa-question"><h3>Explain Linux file permissions and chmod</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">permissions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">rwx</span></li><li><span class="kw">user/group/other</span></li><li><span class="kw">chmod 755 / 644</span></li></ul></div>
+            <p>Each file has permissions for <strong class="kw">user (owner)</strong>, <strong class="kw">group</strong>, <strong class="kw">others</strong> — each with <strong class="kw">r</strong>(4) <strong class="kw">w</strong>(2) <strong class="kw">x</strong>(1).</p>
+            <pre><code class="kw-code">-rwxr-xr--  → owner rwx(7), group r-x(5), other r--(4) = 754
+chmod 755 script.sh   # rwxr-xr-x (typical executable)
+chmod 644 file.txt    # rw-r--r-- (typical data file)
+chmod +x deploy.sh    # add execute (symbolic)</code></pre>
+            <p>On a directory, <code class="kw-code">x</code> means "can enter/traverse it". A common bug: a script that won't run = missing <code class="kw-code">+x</code>; a config that won't load = wrong owner/permissions.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="chown-chgrp" data-level="easy" data-section="permissions">
+          <div class="qa-question"><h3>Changing ownership (chown, chgrp)?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">permissions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">chown user:group</span></li><li><span class="kw">-R recursive</span></li></ul></div>
+            <pre><code class="kw-code">chown appuser:appgroup app.jar    # set owner and group
+chown -R appuser /opt/app/        # recursive
+chgrp devs file.txt               # just the group</code></pre>
+            <p>Services should run as a dedicated non-root user that owns its files — so a compromised app can't touch the whole system. A common deploy issue: files owned by <code class="kw-code">root</code> that the service user can't read/write.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="sudo-root" data-level="easy" data-section="permissions">
+          <div class="qa-question"><h3>sudo, root, and least privilege?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">permissions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">root = uid 0</span></li><li><span class="kw">sudo elevates</span></li><li><span class="kw">least privilege</span></li></ul></div>
+            <p><strong class="kw">root</strong> (uid 0) can do anything. <strong class="kw">sudo</strong> runs a single command with elevated rights and logs who did what (<code class="kw-code">/var/log/auth.log</code>).</p>
+            <p>Best practice: log in as a normal user, <code class="kw-code">sudo</code> only when needed, and run services as non-root. Avoid <code class="kw-code">sudo su -</code> for routine work — least privilege limits blast radius and gives an audit trail (important for a regulated platform like ICE).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="users-groups" data-level="medium" data-section="permissions">
+          <div class="qa-question"><h3>Users and groups (/etc/passwd, id, groups)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">permissions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">/etc/passwd</span></li><li><span class="kw">id / whoami</span></li><li><span class="kw">groups</span></li></ul></div>
+            <pre><code class="kw-code">whoami            # current user
+id                # uid, gid, group memberships
+groups appuser    # which groups a user is in
+cat /etc/passwd   # user accounts (not passwords — those are in /etc/shadow)</code></pre>
+            <p>Groups grant shared access (e.g. add a user to a <code class="kw-code">docker</code> or <code class="kw-code">log-readers</code> group). Permissions on files are evaluated against your uid/gid, which is why <code class="kw-code">id</code> is the first thing to check on a "permission denied".</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="ssh-keys" data-level="medium" data-section="permissions">
+          <div class="qa-question"><h3>SSH and key-based login (ssh, scp)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">permissions</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">public/private key</span></li><li><span class="kw">authorized_keys</span></li><li><span class="kw">scp</span></li></ul></div>
+            <pre><code class="kw-code">ssh user@host                 # remote shell
+ssh -i key.pem user@host      # with a specific key
+scp file.txt user@host:/tmp/  # copy a file over SSH</code></pre>
+            <p>Key auth: your <strong>public</strong> key goes in the server's <code class="kw-code">~/.ssh/authorized_keys</code>; your <strong>private</strong> key stays local (never share it). It's more secure than passwords and enables automation. A frequent gotcha: SSH refuses keys if <code class="kw-code">~/.ssh</code>/key permissions are too open (must be <code class="kw-code">600</code>).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-processes">
+        <h2>Processes &amp; Services</h2>
+        <p class="section-desc">ps/top, signals &amp; kill, background jobs, systemd/journalctl, cron, priorities.</p>
+        <p class="section-meta">7 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="processes" data-level="medium" data-section="processes" data-vimp="true">
+          <div class="qa-question"><h3>Inspecting processes (ps, pgrep, PID)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ps aux</span></li><li><span class="kw">pgrep/pidof</span></li><li><span class="kw">PID / PPID</span></li></ul></div>
+            <pre><code class="kw-code">ps aux | grep java        # find the Java process + its PID, CPU, MEM
+pgrep -f app.jar          # PID(s) matching a pattern
+ps -ef --forest           # process tree (parent/child)
+ps -o pid,%cpu,%mem,rss,cmd -p &lt;PID&gt;   # focused view</code></pre>
+            <p>Every process has a <strong class="kw">PID</strong> and a parent (<strong class="kw">PPID</strong>). You'll grab the PID first, then use it with <code class="kw-code">top</code>, <code class="kw-code">jstack</code>, <code class="kw-code">kill</code>, or <code class="kw-code">lsof</code> for deeper inspection.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="top-htop" data-level="medium" data-section="processes" data-vimp="true">
+          <div class="qa-question"><h3>top/htop — and what is load average?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">top / htop</span></li><li><span class="kw">load avg 1/5/15 min</span></li><li><span class="kw">vs #cores</span></li></ul></div>
+            <p><code class="kw-code">top</code> (or nicer <code class="kw-code">htop</code>) shows live CPU/mem per process. Press <code class="kw-code">P</code> to sort by CPU, <code class="kw-code">M</code> by memory.</p>
+            <h4>Load average</h4>
+            <p>The three numbers (1, 5, 15-min) are the average number of processes wanting the CPU. Compare to core count: load <strong>8 on an 8-core</strong> box ≈ fully busy; load <strong>16 on 8 cores</strong> = overloaded (things are queuing). A rising trend (1m &gt; 15m) means it's getting worse.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="kill-signals" data-level="medium" data-section="processes" data-vimp="true">
+          <div class="qa-question"><h3>kill and signals — SIGTERM vs SIGKILL?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">SIGTERM(15) graceful</span></li><li><span class="kw">SIGKILL(9) forceful</span></li><li><span class="kw">SIGHUP reload</span></li></ul></div>
+            <ul>
+              <li><strong class="kw">SIGTERM (15)</strong> — polite "please shut down"; the app can clean up (close connections, finish in-flight work). <code class="kw-code">kill &lt;PID&gt;</code> sends this by default.</li>
+              <li><strong class="kw">SIGKILL (9)</strong> — <code class="kw-code">kill -9</code> can't be caught; the OS force-kills immediately (no cleanup → possible data loss). Last resort.</li>
+              <li><strong class="kw">SIGHUP (1)</strong> — often "reload config".</li>
+            </ul>
+            <p>Graceful shutdown matters: Spring Boot + Kubernetes send SIGTERM first (drain requests), then SIGKILL after a grace period. Reflexively reaching for <code class="kw-code">-9</code> can corrupt state.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="bg-jobs" data-level="medium" data-section="processes">
+          <div class="qa-question"><h3>Background jobs (&amp;, nohup, jobs, fg/bg)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">cmd &amp;</span></li><li><span class="kw">nohup</span></li><li><span class="kw">jobs/fg/bg</span></li></ul></div>
+            <pre><code class="kw-code">long-task &amp;            # run in background, returns the shell
+jobs                   # list background jobs
+fg %1                  # bring job 1 to foreground
+nohup java -jar app.jar &gt; app.log 2&gt;&amp;1 &amp;   # survive logout</code></pre>
+            <p><code class="kw-code">&amp;</code> backgrounds within the session; <code class="kw-code">nohup</code> (or <code class="kw-code">disown</code>) detaches it so it keeps running after you log off. For real services, prefer a proper supervisor (<strong class="kw">systemd</strong>) over nohup.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="systemd" data-level="medium" data-section="processes">
+          <div class="qa-question"><h3>Managing services with systemd (systemctl, journalctl)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">systemctl start/status</span></li><li><span class="kw">enable = on boot</span></li><li><span class="kw">journalctl -u</span></li></ul></div>
+            <pre><code class="kw-code">systemctl status myapp     # is it running? recent logs
+systemctl start/stop/restart myapp
+systemctl enable myapp     # auto-start on boot
+journalctl -u myapp -f     # follow this service's logs
+journalctl -u myapp --since "10 min ago"</code></pre>
+            <p><strong class="kw">systemd</strong> supervises services — auto-restart on crash, dependency ordering, and centralized logging via <strong class="kw">journald</strong>. A unit file in <code class="kw-code">/etc/systemd/system/</code> defines how your jar starts, its user, env, and restart policy.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cron" data-level="medium" data-section="processes" data-vimp="true">
+          <div class="qa-question"><h3>Scheduling with cron (crontab format)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">crontab -e/-l</span></li><li><span class="kw">min hr dom mon dow</span></li></ul></div>
+            <pre><code class="kw-code">crontab -e        # edit; crontab -l = list
+# ┌min ┌hr ┌day ┌month ┌weekday   command
+  0    2   *    *      *      /opt/app/backup.sh   # daily 02:00
+  */15 *   *    *      *      /opt/app/healthcheck.sh  # every 15 min
+  0    0   1    *      *      /opt/app/monthly.sh  # 1st of month</code></pre>
+            <h4>Gotchas</h4>
+            <p>Cron runs with a minimal environment (limited <code class="kw-code">PATH</code>, no profile) — use absolute paths and redirect output (<code class="kw-code">&gt;&gt; log 2&gt;&amp;1</code>) or you won't see failures. For distributed apps, a scheduler/quartz with leader election avoids duplicate runs across nodes.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="nice-priority" data-level="hard" data-section="processes">
+          <div class="qa-question"><h3>Process priority (nice/renice)?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">processes</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">niceness -20..19</span></li><li><span class="kw">lower = higher priority</span></li></ul></div>
+            <p><strong class="kw">Niceness</strong> hints the scheduler: range <code class="kw-code">-20</code> (highest priority) to <code class="kw-code">19</code> (lowest). Default 0.</p>
+            <pre><code class="kw-code">nice -n 10 ./batch.sh     # start a low-priority batch job
+renice -n 5 -p &lt;PID&gt;       # change a running process's niceness</code></pre>
+            <p>Use it to keep a heavy batch/report job from starving latency-sensitive services on the same box. Related: <code class="kw-code">ionice</code> for disk I/O priority.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-perf">
+        <h2>Performance &amp; Troubleshooting</h2>
+        <p class="section-desc">Disk, memory, CPU, OOM killer, I/O, network, and logs — the on-call toolkit.</p>
+        <p class="section-meta">7 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="disk-space" data-level="medium" data-section="perf" data-vimp="true">
+          <div class="qa-question"><h3>Disk is full — how do you find what's using it?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">df -h</span></li><li><span class="kw">du -sh *</span></li><li><span class="kw">deleted-but-open files</span></li></ul></div>
+            <pre><code class="kw-code">df -h                      # which mount is full (Use%)
+du -sh /var/* | sort -rh   # biggest dirs under /var
+du -ah /var/log | sort -rh | head   # biggest files
+find / -size +1G 2&gt;/dev/null        # huge files</code></pre>
+            <h4>Classic gotcha</h4>
+            <p>If <code class="kw-code">df</code> says full but <code class="kw-code">du</code> doesn't add up, a process is holding a <strong>deleted but still-open</strong> file (often a log) — space frees only when the process restarts. Find it with <code class="kw-code">lsof | grep deleted</code>. Also watch <strong>inode</strong> exhaustion (<code class="kw-code">df -i</code>) from millions of tiny files.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="memory" data-level="medium" data-section="perf" data-vimp="true">
+          <div class="qa-question"><h3>Checking memory (free) — used vs cached vs available?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">free -h</span></li><li><span class="kw">available != free</span></li><li><span class="kw">swap</span></li></ul></div>
+            <pre><code class="kw-code">free -h            # total / used / free / buff/cache / available
+cat /proc/meminfo  # detailed</code></pre>
+            <p>Key insight: Linux uses spare RAM for the <strong>page cache</strong>, so low "free" is normal and healthy. Look at <strong class="kw">available</strong> (memory apps can still get) — not "free". Heavy <strong class="kw">swap</strong> usage (<code class="kw-code">si/so</code> in <code class="kw-code">vmstat</code>) means real memory pressure and will tank performance.</p>
+            <p>For a JVM, also remember the heap is bounded by <code class="kw-code">-Xmx</code>/<code class="kw-code">MaxRAMPercentage</code> — a container can OOM-kill it even when host "free" looks fine.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="cpu-load" data-level="hard" data-section="perf" data-vimp="true">
+          <div class="qa-question"><h3>High CPU / high load — how do you investigate?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">top → PID</span></li><li><span class="kw">vmstat/mpstat</span></li><li><span class="kw">us/sy/wa/id</span></li></ul></div>
+            <ol>
+              <li><code class="kw-code">top</code> → which process? (sort by CPU)</li>
+              <li><code class="kw-code">vmstat 1</code> / <code class="kw-code">mpstat -P ALL 1</code> → is it user (<code class="kw-code">us</code>), system (<code class="kw-code">sy</code>), or I/O wait (<code class="kw-code">wa</code>)?</li>
+              <li>High <code class="kw-code">wa</code> = disk/network bottleneck, not CPU. High <code class="kw-code">us</code> = app compute.</li>
+              <li>For a Java process, find the hot thread: <code class="kw-code">top -H -p &lt;PID&gt;</code> → convert thread id to hex → match it in a <code class="kw-code">jstack</code> thread dump.</li>
+            </ol>
+            <p>That <code class="kw-code">top -H</code> + <code class="kw-code">jstack</code> trick pinpoints the exact Java method burning CPU — a strong senior-level answer.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="oom-killer" data-level="hard" data-section="perf">
+          <div class="qa-question"><h3>My process was killed — what is the OOM killer?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">OOM killer</span></li><li><span class="kw">dmesg</span></li><li><span class="kw">cgroup limit</span></li></ul></div>
+            <p>When the system runs out of memory, the kernel's <strong class="kw">OOM killer</strong> kills a process (highest "oom_score", often the biggest = your JVM) to save the box.</p>
+            <pre><code class="kw-code">dmesg | grep -i "killed process"   # confirm OOM kill
+grep -i oom /var/log/syslog</code></pre>
+            <p>In containers, exceeding the cgroup memory limit triggers it too (exit code <strong>137</strong> = 128+9/SIGKILL). Fix: right-size <code class="kw-code">-Xmx</code> vs the container limit, find the leak (heap dump), or add memory. This is distinct from a JVM <code class="kw-code">OutOfMemoryError</code> (heap exhausted inside the JVM).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="io-debug" data-level="hard" data-section="perf">
+          <div class="qa-question"><h3>Diagnosing disk I/O bottlenecks (iostat, iotop)?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">iostat %util</span></li><li><span class="kw">iotop</span></li><li><span class="kw">await</span></li></ul></div>
+            <pre><code class="kw-code">iostat -x 1        # %util near 100 = disk saturated; await = latency
+iotop              # which process is doing the I/O</code></pre>
+            <p>High I/O wait (<code class="kw-code">wa</code> in top) + high <code class="kw-code">%util</code> means the disk is the bottleneck — common causes are excessive logging, a chatty DB, or swapping. Match it to a process with <code class="kw-code">iotop</code>, then reduce I/O (batch writes, async logging, faster storage).</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="network-linux" data-level="medium" data-section="perf" data-vimp="true">
+          <div class="qa-question"><h3>Network checks on a box (ss, lsof, curl)?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ss -tlnp</span></li><li><span class="kw">lsof -i</span></li><li><span class="kw">curl -v</span></li></ul></div>
+            <pre><code class="kw-code">ss -tlnp              # listening TCP ports + owning process
+ss -s                 # socket summary (incl TIME_WAIT counts)
+lsof -i :8080         # who's using port 8080
+curl -v http://localhost:8080/actuator/health   # test locally
+nc -zv host 5432      # is the DB port reachable?</code></pre>
+            <p>"Is my service even listening?" → <code class="kw-code">ss -tlnp</code>. "Can this box reach the DB?" → <code class="kw-code">nc</code>/<code class="kw-code">curl</code>. Lots of <code class="kw-code">CLOSE_WAIT</code> in <code class="kw-code">ss</code> = the app is leaking connections.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="logs" data-level="medium" data-section="perf" data-vimp="true">
+          <div class="qa-question"><h3>Where are logs and how do you search them?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">perf</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">/var/log</span></li><li><span class="kw">journalctl</span></li><li><span class="kw">tail -f | grep</span></li></ul></div>
+            <p>System/app logs live in <code class="kw-code">/var/log</code> (e.g. <code class="kw-code">syslog</code>, <code class="kw-code">auth.log</code>, app dirs); systemd services log to <strong class="kw">journald</strong>.</p>
+            <pre><code class="kw-code">tail -f /var/log/app/app.log | grep -i error
+journalctl -u myapp --since "1 hour ago" | grep corr-123
+zgrep "Exception" /var/log/app/app.log.*.gz   # rotated logs</code></pre>
+            <p>Filter by <strong>correlation ID</strong> to follow one request. Note: production logs should be shipped to a central aggregator (ELK/Loki) — grepping a single box is for quick triage.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+      <section class="topic-section" id="section-java">
+        <h2>Running Java Apps on Linux</h2>
+        <p class="section-desc">Launching the JVM, file descriptors/ulimit, env config, log pipelines, on-call debugging.</p>
+        <p class="section-meta">5 questions in this section</p>
+        <div class="qa-list">
+
+        <article class="qa-card" data-id="run-jvm" data-level="medium" data-section="java">
+          <div class="qa-question"><h3>How do you run and manage a Java app on a Linux server?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="tag">java</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">java -jar</span></li><li><span class="kw">-Xmx flags</span></li><li><span class="kw">systemd service</span></li></ul></div>
+            <pre><code class="kw-code">java -XX:MaxRAMPercentage=75 -jar app.jar --spring.profiles.active=prod
+# inspect a running JVM:
+jps -l            # list JVMs + main class
+jstack &lt;PID&gt;       # thread dump
+jmap -histo &lt;PID&gt;  # heap histogram</code></pre>
+            <p>For real services, run under <strong class="kw">systemd</strong> (auto-restart, logging) or in a container, as a non-root user. Pass config via env/args (12-factor), and use container-aware JVM flags (<code class="kw-code">MaxRAMPercentage</code>) instead of a hard-coded <code class="kw-code">-Xmx</code>.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="file-descriptors" data-level="hard" data-section="java" data-vimp="true">
+          <div class="qa-question"><h3>"Too many open files" — what's happening and how to fix it?</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">java</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">ulimit -n</span></li><li><span class="kw">fd = files + sockets</span></li><li><span class="kw">leak vs limit</span></li></ul></div>
+            <p>Every open file <em>and socket</em> is a file descriptor. Hitting the per-process limit throws <code class="kw-code">Too many open files</code>.</p>
+            <pre><code class="kw-code">ulimit -n                 # current fd limit (often 1024 default — too low)
+ls /proc/&lt;PID&gt;/fd | wc -l  # how many the process holds now
+lsof -p &lt;PID&gt; | wc -l      # detailed</code></pre>
+            <p>Two causes: the limit is too low (raise it via <code class="kw-code">limits.conf</code> / systemd <code class="kw-code">LimitNOFILE</code>), or the app is <strong>leaking</strong> connections/streams (not closing HTTP/DB clients, sockets stuck in CLOSE_WAIT). Fix the leak (try-with-resources, connection pooling) rather than only bumping the limit.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="env-config" data-level="easy" data-section="java">
+          <div class="qa-question"><h3>Passing configuration via environment variables?</h3>
+            <div class="qa-meta"><span class="level level-easy">Easy</span><span class="tag">java</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">export</span></li><li><span class="kw">SPRING_*</span></li><li><span class="kw">12-factor config</span></li></ul></div>
+            <pre><code class="kw-code">export SPRING_PROFILES_ACTIVE=prod
+export SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/app
+java -jar app.jar
+printenv | grep SPRING     # verify what the process will see</code></pre>
+            <p>Spring Boot maps env vars to properties (<code class="kw-code">SPRING_DATASOURCE_URL</code> → <code class="kw-code">spring.datasource.url</code>), so the same image runs in every environment — the 12-factor way. Keep secrets in a vault/secret manager, not in plain env files or shell history.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="log-analysis" data-level="medium" data-section="java" data-vimp="true">
+          <div class="qa-question"><h3>Quickly analyzing app logs with a pipeline?</h3>
+            <div class="qa-meta"><span class="level level-medium">Medium</span><span class="level-vimp">⭐ VI</span><span class="tag">java</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">grep | awk | sort | uniq -c</span></li><li><span class="kw">tail -f</span></li></ul></div>
+            <pre><code class="kw-code"># count errors per hour
+grep ERROR app.log | awk '{print $1, $2}' | cut -c1-13 | sort | uniq -c
+
+# most frequent exception types
+grep -oE "[A-Za-z.]+Exception" app.log | sort | uniq -c | sort -rn | head
+
+# follow live errors for one request
+tail -f app.log | grep --line-buffered corr-abc123</code></pre>
+            <p>These one-liners answer "is it spiking?", "what's the top error?", and "what happened to this request?" in seconds — exactly what you do before pulling up a dashboard.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        <article class="qa-card" data-id="debug-prod-linux" data-level="hard" data-section="java" data-vimp="true">
+          <div class="qa-question"><h3>Walk through debugging a slow/down Java service on a Linux box</h3>
+            <div class="qa-meta"><span class="level level-hard">Hard</span><span class="level-vimp">⭐ VI</span><span class="tag">java</span><span class="chevron">▼</span></div></div>
+          <div class="qa-answer"><div class="revision-block"><h4 class="revision-heading">📌 Revision keywords</h4><ul class="revision-kw"><li><span class="kw">is it up? logs? resources?</span></li><li><span class="kw">thread/heap dump</span></li><li><span class="kw">mitigate then root-cause</span></li></ul></div>
+            <h4>A systematic pass</h4>
+            <ol>
+              <li><strong>Is it running &amp; listening?</strong> <code class="kw-code">systemctl status</code> / <code class="kw-code">ps</code> / <code class="kw-code">ss -tlnp</code>.</li>
+              <li><strong>Logs:</strong> <code class="kw-code">journalctl -u app -f</code> / <code class="kw-code">tail -f | grep ERROR</code> + correlation ID.</li>
+              <li><strong>Resources:</strong> <code class="kw-code">top</code> (CPU/mem), <code class="kw-code">free -h</code>, <code class="kw-code">df -h</code> (full disk?), I/O wait.</li>
+              <li><strong>If hung/CPU-spinning:</strong> <code class="kw-code">jstack</code> thread dump (+ <code class="kw-code">top -H</code>); <strong>if OOM:</strong> heap dump / check <code class="kw-code">dmesg</code> for the OOM killer.</li>
+              <li><strong>Recent change?</strong> Last deploy / config diff — usually the culprit.</li>
+            </ol>
+            <p>Mindset: <strong>mitigate first</strong> (restart/rollback/scale to restore service), then root-cause with the dumps + logs and add a guardrail so it can't recur.</p>
+            <div class="qa-footer"><label><input type="checkbox" class="mark-practiced"> Mark practiced</label></div>
+          </div>
+        </article>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <button class="mobile-toggle" id="sidebar-toggle" type="button">Menu</button>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

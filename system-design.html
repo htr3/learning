@@ -243,9 +243,25 @@
     background: rgba(20,20,22,.8); border: 1px solid var(--gray-border);
     padding: 6px 12px; border-radius: 20px; backdrop-filter: blur(6px);
   }
+
+  /* page transition overlay */
+  #page-fade {
+    position: fixed; inset: 0; z-index: 200; background: var(--bg);
+    opacity: 1; pointer-events: none; transition: opacity .45s ease;
+  }
+  #page-fade.hide { opacity: 0; }
+  #page-fade.show { opacity: 1; }
+
+  /* "open page" affordance on nodes that deep-link */
+  .node.has-page::after {
+    content: "↗"; position: absolute; top: 8px; right: 10px;
+    font-size: 12px; color: var(--accent); opacity: .8;
+  }
+  .node.has-page { border-color: var(--accent); }
 </style>
 </head>
 <body>
+  <div id="page-fade"></div>
 
   <!-- ================= TOP BAR ================= -->
   <div id="topbar">
@@ -377,7 +393,7 @@ const NODES = [
     tech:"AWS WAF", lat:"1 ms", rps:"—", health:"ok" },
   { id:"ratelimit", cat:"Security", title:"Rate Limiter", sub:"Token bucket", icon:"⏱️", x:990, y:470, w:150,
     purpose:"Throttles abusive clients using a leaky/token bucket algorithm.",
-    tech:"Redis + Lua", lat:"0.5 ms", rps:"—", health:"ok" },
+    tech:"Redis + Lua", lat:"0.5 ms", rps:"—", health:"ok", page:"rate-limiting.html" },
   { id:"jwt", cat:"Security", title:"JWT / OAuth2", sub:"Token auth", icon:"🔑", x:1260, y:110, w:160,
     purpose:"Signs and verifies stateless access tokens for authenticated sessions.",
     tech:"JWT · OAuth2", lat:"1 ms", rps:"—", health:"ok" },
@@ -530,7 +546,7 @@ function render() {
   // nodes
   NODES.forEach(n => {
     const el = document.createElement("div");
-    el.className = "node" + (n.pulse ? " active-pulse" : "") + (n.db ? " db" : "");
+    el.className = "node" + (n.pulse ? " active-pulse" : "") + (n.db ? " db" : "") + (n.page ? " has-page" : "");
     el.id = "node-" + n.id;
     el.style.left = n.x + "px";
     el.style.top = n.y + "px";
@@ -703,8 +719,20 @@ function clearHighlight() {
    componentClick()  — information popup
    ===================================================================== */
 const popup = document.getElementById("popup");
+
+/* ---- smooth page transitions for nodes that deep-link to a concept page ---- */
+const pageFade = document.getElementById("page-fade");
+requestAnimationFrame(() => pageFade.classList.add("hide"));   // fade in on load
+function navigateTo(url) {
+  pageFade.classList.remove("hide");
+  pageFade.classList.add("show");
+  setTimeout(() => { window.location.href = url; }, 400);
+}
+
 function componentClick(id, el) {
   const n = nodeMap[id];
+  // deep-link nodes (e.g. Rate Limiter) navigate to their dedicated concept page
+  if (n.page) { navigateTo(n.page); return; }
   document.getElementById("pIco").textContent = n.icon;
   document.getElementById("pTitle").textContent = n.title;
   document.getElementById("pCat").textContent = n.cat;

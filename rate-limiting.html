@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rate Limiting — System Design Concept</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  /* page transition overlay */
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* ---------------- TOP NAV ---------------- */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* ---------------- SIDEBAR ---------------- */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* ---------------- MAIN ---------------- */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:720px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  .cx-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .cx{font-size:12px;background:var(--panel-2);border:1px solid var(--gray-border);border-radius:8px;padding:7px 12px;
+    display:flex;align-items:center;gap:8px}
+  .cx b{color:var(--accent);font-family:"JetBrains Mono","Consolas",monospace}
+
+  /* ---------------- VIZ ---------------- */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+  .viz-ctrl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center}
+  .viz-ctrl button{background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);border-radius:8px;
+    padding:8px 13px;font-size:12.5px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+  .viz-ctrl button:hover{border-color:var(--accent);box-shadow:0 0 10px var(--accent-soft)}
+  .viz-ctrl .stat{background:transparent;border:none;color:var(--muted);font-variant-numeric:tabular-nums;cursor:default}
+  .viz-ctrl .stat b{color:var(--line)}
+
+  /* ---------------- CODE VIEWER ---------------- */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* ---------------- COMPARISON ---------------- */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+  .rate{display:inline-flex;gap:3px}
+  .rate i{width:9px;height:9px;border-radius:2px;background:var(--gray-border)}
+  .rate i.on{background:var(--accent);box-shadow:0 0 6px var(--accent-soft)}
+  .rate.g i.on{background:var(--ok);box-shadow:0 0 6px rgba(52,211,153,.5)}
+  .rate.r i.on{background:var(--bad)}
+
+  /* ---------------- REAL WORLD ---------------- */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ---------------- ACCORDION ---------------- */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:340px}
+
+  /* ---------------- PLAYGROUND ---------------- */
+  .pg{display:grid;grid-template-columns:280px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:320px}
+  .pg-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .pg-stat .v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)}
+
+  /* ---------------- RELATED ---------------- */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  .flash-429{fill:var(--bad);font-weight:800;font-family:"JetBrains Mono",monospace}
+
+  /* ---------------- RESPONSIVE ---------------- */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="system-design.html">← Back to System Design</button>
+    <div class="nav-title"><span class="badge">⏱️</span> Rate Limiting</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="system-design.html">System Design</span><span class="sep">›</span>
+      <span>Networking</span><span class="sep">›</span><span class="cur">Rate Limiting</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Algorithms</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="comparison"><span class="num">≡</span> Comparison</div>
+    <div class="snav" data-scroll="real-world"><span class="num">★</span> Real World</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Rate Limiting</h1>
+      <p class="tagline">Control how many requests a client may make in a time window — protecting APIs from abuse,
+        DDoS and cascading overload. Explore the five core algorithms with live, interactive visualizations.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>5</b>&nbsp;algorithms</span>
+        <span class="hpill"><b>Interactive</b>&nbsp;SVG simulations</span>
+        <span class="hpill"><b>7</b>&nbsp;language code samples</span>
+        <span class="hpill"><b>Live</b>&nbsp;playground</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- algorithm sections injected here --></div>
+
+    <!-- ===== COMPARISON ===== -->
+    <section id="comparison">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Decision Guide</div><h2>Comparison</h2></div></div>
+      <div class="card">
+        <div class="block-title">Trade-off Matrix</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="block-title" style="margin-top:26px">Visual Comparison — Memory · Accuracy · Burst Handling</div>
+        <div class="viz-wrap"><div id="cmpChart"></div>
+          <div class="viz-cap">Taller bars are better. Token Bucket balances all three; Sliding Log is accurate but memory-hungry.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== REAL WORLD ===== -->
+    <section id="real-world">
+      <div class="sec-head"><div class="s-num">🏢</div><div><div class="s-tag">In Production</div><h2>Real-World Usage</h2></div></div>
+      <div class="rw-grid" id="rwGrid"></div>
+    </section>
+
+    <!-- ===== INTERVIEW ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">A distributed Token Bucket rate limiter across seven stacks. Redis keeps the shared
+          counter so every API instance enforces the same limit.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Live Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field">
+              <label>Algorithm</label>
+              <select id="pgAlgo">
+                <option value="token">Token Bucket</option>
+                <option value="leaky">Leaky Bucket</option>
+                <option value="fixed">Fixed Window</option>
+                <option value="sliding">Sliding Window Counter</option>
+                <option value="log">Sliding Log</option>
+              </select>
+            </div>
+            <div class="pg-field"><label>Requests / sec <b id="pgRpsV">8</b></label><input id="pgRps" type="range" min="1" max="30" value="8"></div>
+            <div class="pg-field"><label>Bucket / Limit size <b id="pgCapV">10</b></label><input id="pgCap" type="range" min="1" max="30" value="10"></div>
+            <div class="pg-field"><label>Window / Refill (s) <b id="pgWinV">5</b></label><input id="pgWin" type="range" min="1" max="15" value="5"></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Start</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Allowed</div><div class="v ok" id="pgAllowed">0</div></div>
+              <div class="pg-stat"><div class="k">Rejected (429)</div><div class="v bad" id="pgRejected">0</div></div>
+              <div class="pg-stat"><div class="k">Allow rate</div><div class="v" id="pgRate">100%</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   RATE LIMITING — modular vanilla JS
+   Modules: Navigation, Sidebar, CodeViewer, AnimationEngine, Viz (+ 6),
+            AlgorithmRenderer, ComparisonChart, SimulationEngine, Playground
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* =====================================================================
+   NAVIGATION — smooth fade page transitions
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));        // fade in on load
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR — scrollspy + smooth scroll
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER — tabs + copy + lightweight syntax highlight
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in new return if else for while typeof this export default "+
+    "func package type struct interface go defer chan map range var const "+
+    "def self class import from as lambda try except raise with pass elif print True False None "+
+    "String Long Integer Map HashMap List boolean true false null void var val").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard?.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE — rAF + IntersectionObserver gating
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class for SVG visualizations
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.acc=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":12,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+}
+
+/* ---- Section 1: Overview flow (429) ---- */
+class OverviewViz extends Viz {
+  setup(){
+    this.stages=[["Client","👤",40],["API Gateway","🚪",170],["Rate Limiter","⏱️",300],["Backend","⚙️",440],["Database","🗄️",560]];
+    this.stages.forEach(([n,,x],i)=>{ this.box(x,90,i===4?70:110,44,n,i===2?"#7C3AED":"#3a3a42");
+      if(i<4){ const x1=x+(i===4?70:110); this.svg.appendChild(S("path",{d:`M ${x1} 112 L ${this.stages[i+1][2]} 112`,stroke:"#3a3a42","stroke-width":1.5,"marker-end":""})); } });
+    this.rl=300; this.packets=[]; this.spawn=0; this.flashes=[];
+    this.cap("Requests flow left→right. The Rate Limiter allows green requests and rejects red ones with 429.");
+  }
+  frame(dt){
+    this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.35,.7);
+      const reject=Math.random()<.32;
+      this.packets.push({x:40,reject,decided:false,dead:false,el:S("circle",{r:5,cx:40,cy:112,fill:reject?"#f87171":"#34d399",filter:"drop-shadow(0 0 5px rgba(255,255,255,.6))"})});
+      this.svg.appendChild(this.packets[this.packets.length-1].el);
+    }
+    this.packets.forEach(p=>{
+      if(p.dead)return;
+      p.x+=90*dt;
+      if(!p.decided && p.x>=this.rl+55){ p.decided=true;
+        if(p.reject){ p.dead=true; p.el.remove(); this.flash(this.rl+55); } }
+      p.el.setAttribute("cx",Math.min(p.x,630)); 
+      if(p.x>640){ p.dead=true; p.el.remove(); }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+    // flashes
+    this.flashes.forEach(f=>{ f.life-=dt; f.el.setAttribute("opacity",Math.max(0,f.life/f.max));
+      f.el.setAttribute("y",70-(1-f.life/f.max)*16); if(f.life<=0){ f.el.remove(); f.done=true; } });
+    this.flashes=this.flashes.filter(f=>!f.done);
+  }
+  flash(x){ const t=T(x,70,"429",{class:"flash-429","font-size":14,"text-anchor":"middle"}); this.svg.appendChild(t);
+    this.flashes.push({el:t,life:1,max:1}); }
+}
+
+/* ---- Section 2: Fixed Window ---- */
+class FixedWindowViz extends Viz {
+  setup(){ this.limit=100; this.count=0; this.win=0; this.windowLen=4; this.reqAcc=0; this.minute=0;
+    this.barX=60; this.barW=520;
+    this.svg.appendChild(S("rect",{x:this.barX,y:70,width:this.barW,height:34,rx:8,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.fill=S("rect",{x:this.barX,y:70,width:0,height:34,rx:8,fill:"#7C3AED",opacity:.7}); this.svg.appendChild(this.fill);
+    this.label=T(this.barX,58,"Window 12:00 – 12:01",{fill:"#8b8b93","font-size":12}); this.svg.appendChild(this.label);
+    this.counter=T(this.barX+this.barW,58,"0 / 100",{fill:"#34d399","font-size":13,"font-weight":700,"text-anchor":"end"}); this.svg.appendChild(this.counter);
+    this.note=T(320,150,"",{fill:"#f87171","font-size":12,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.note);
+    this.cap("Counter increments per request and resets every window. Bursts across the boundary can allow ~2× the limit.");
+  }
+  frame(dt){ this.win+=dt; this.reqAcc+=dt*rand(28,42);
+    while(this.reqAcc>=1){ this.reqAcc--; this.count++; }
+    if(this.win>=this.windowLen){ this.win=0; this.count=0; this.minute++; this.note.textContent="↺ Window reset";
+      const s=12*60+this.minute; this.label.textContent=`Window ${fmtHM(s)} – ${fmtHM(s+1)}`; setTimeout(()=>{},0); }
+    else if(this.count>this.limit) this.note.textContent="🚫 Requests beyond 100 rejected (429)";
+    else this.note.textContent="";
+    const shown=Math.min(this.count,this.limit);
+    this.fill.setAttribute("width",this.barW*shown/this.limit);
+    this.fill.setAttribute("fill",this.count>this.limit?"#f87171":"#7C3AED");
+    this.counter.textContent=`${this.count} / ${this.limit}`;
+    this.counter.setAttribute("fill",this.count>this.limit?"#f87171":"#34d399");
+  }
+}
+function fmtHM(min){ const h=Math.floor(min/60)%24,m=min%60; return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0"); }
+
+/* ---- Section 3: Sliding Log ---- */
+class SlidingLogViz extends Viz {
+  setup(){ this.window=5; this.logs=[]; this.spawn=0; this.now=0;
+    this.svg.appendChild(T(60,40,"Request timestamps (last 5s window)",{fill:"#8b8b93","font-size":12}));
+    this.svg.appendChild(S("rect",{x:60,y:52,width:400,height:44,rx:10,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.g=S("g"); this.svg.appendChild(this.g);
+    this.svg.appendChild(T(500,60,"Memory",{fill:"#8b8b93","font-size":11}));
+    this.svg.appendChild(S("rect",{x:500,y:66,width:100,height:14,rx:7,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.mem=S("rect",{x:500,y:66,width:0,height:14,rx:7,fill:"#fbbf24"}); this.svg.appendChild(this.mem);
+    this.memT=T(550,120,"0 entries stored",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.memT);
+    this.cap("Every request stores an exact timestamp. Old timestamps drop off the window — precise, but memory grows with traffic.");
+  }
+  frame(dt){ this.now+=dt; this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.25,.6); this.logs.push(this.now); }
+    this.logs=this.logs.filter(t=>this.now-t<=this.window);
+    this.g.innerHTML="";
+    this.logs.slice(-11).forEach((t,i)=>{ const x=72+i*35; const age=this.now-t;
+      this.g.appendChild(S("rect",{x,y:62,width:28,height:26,rx:5,fill:"#7C3AED",opacity:clamp(1-age/this.window*.7,.3,1)}));
+      this.g.appendChild(T(x+14,78,fmtClock(t),{fill:"#fff","font-size":7.5,"text-anchor":"middle"})); });
+    const frac=clamp(this.logs.length/14,0,1);
+    this.mem.setAttribute("width",100*frac); this.mem.setAttribute("fill",frac>.8?"#f87171":"#fbbf24");
+    this.memT.textContent=this.logs.length+" entries stored";
+  }
+}
+function fmtClock(t){ const s=Math.floor(t)%60; return "10:00:"+String(s).padStart(2,"0"); }
+
+/* ---- Section 4: Sliding Window Counter ---- */
+class SlidingWindowViz extends Viz {
+  setup(){ this.prev=randi(60,90); this.cur=0; this.overlap=1; this.limit=100;
+    this.svg.appendChild(T(120,40,"Previous window",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.svg.appendChild(T(400,40,"Current window",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.svg.appendChild(S("rect",{x:40,y:52,width:160,height:44,rx:9,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.svg.appendChild(S("rect",{x:320,y:52,width:160,height:44,rx:9,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.pFill=S("rect",{x:40,y:52,width:0,height:44,rx:9,fill:"#7C3AED",opacity:.5}); this.svg.appendChild(this.pFill);
+    this.cFill=S("rect",{x:320,y:52,width:0,height:44,rx:9,fill:"#34d399",opacity:.7}); this.svg.appendChild(this.cFill);
+    this.eff=T(540,66,"",{fill:"#f4f4f5","font-size":12,"font-weight":700,"text-anchor":"middle"}); this.svg.appendChild(this.eff);
+    this.svg.appendChild(T(540,48,"Effective",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.formula=T(320,130,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.formula);
+    this.cap("Effective = current + previous × overlap%. The previous window's weight fades as the current one advances.");
+  }
+  frame(dt){ this.overlap-=dt*.12; if(this.overlap<=0){ this.overlap=1; this.prev=this.cur; this.cur=0; }
+    this.cur+=dt*rand(10,20);
+    const effective=Math.round(this.cur+this.prev*this.overlap);
+    this.pFill.setAttribute("width",160*clamp(this.prev/this.limit,0,1));
+    this.pFill.setAttribute("opacity",.15+this.overlap*.45);
+    this.cFill.setAttribute("width",160*clamp(this.cur/this.limit,0,1));
+    this.eff.textContent=effective; this.eff.setAttribute("fill",effective>this.limit?"#f87171":"#34d399");
+    this.formula.textContent=`${Math.round(this.cur)} + ${this.prev} × ${(this.overlap*100|0)}% = ${effective}  (limit ${this.limit})`;
+  }
+}
+
+/* ---- Section 5: Token Bucket ---- */
+class TokenBucketViz extends Viz {
+  setup(){ this.cap_=8; this.tokens=8; this.rate=1.2; this.fillAcc=0; this.reqAcc=0; this.reqRate=1.6;
+    this.bx=250; this.bw=140; this.bh=120; this.by=50;
+    this.svg.appendChild(S("path",{d:`M ${this.bx} ${this.by} L ${this.bx+this.bw} ${this.by} L ${this.bx+this.bw-14} ${this.by+this.bh} L ${this.bx+14} ${this.by+this.bh} Z`,fill:"none",stroke:"#7C3AED","stroke-width":2.5}));
+    this.tokG=S("g"); this.svg.appendChild(this.tokG);
+    this.count=T(this.bx+this.bw/2,this.by-12,"",{fill:"#34d399","font-size":14,"font-weight":700,"text-anchor":"middle"}); this.svg.appendChild(this.count);
+    this.svg.appendChild(T(90,100,"Requests →",{fill:"#8b8b93","font-size":12}));
+    this.svg.appendChild(T(540,100,"→ Backend",{fill:"#8b8b93","font-size":12}));
+    this.fx=[]; // moving request marks
+    this.cap("Tokens refill at a steady rate. Each request removes a token; if the bucket is empty the request is rejected.");
+  }
+  addToken(n){ this.tokens=clamp(this.tokens+n,0,this.cap_); }
+  controls(){ return [
+    {label:"➕ Token rate", fn:()=>{ this.rate=clamp(this.rate+.4,.4,6); this.cap("Token rate ↑ — bucket refills faster, allowing more requests."); }},
+    {label:"➖ Token rate", fn:()=>{ this.rate=clamp(this.rate-.4,.4,6); this.cap("Token rate ↓ — slower refill, more rejections under load."); }},
+    {label:"➕ Capacity",   fn:()=>{ this.cap_=clamp(this.cap_+2,2,15); this.cap("Capacity ↑ — bucket can absorb larger bursts."); }},
+    {label:"⚡ Burst traffic", fn:()=>{ this.reqAcc+=6; this.cap("Burst! Many requests at once — watch tokens drain and requests get rejected."); }},
+  ]; }
+  frame(dt){
+    this.fillAcc+=dt*this.rate; while(this.fillAcc>=1){ this.fillAcc--; if(this.tokens<this.cap_)this.tokens++; }
+    this.reqAcc+=dt*this.reqRate;
+    while(this.reqAcc>=1){ this.reqAcc--; const ok=this.tokens>0; if(ok)this.tokens--;
+      this.fx.push({x:150,y:100,ok,el:S("circle",{r:5,cx:150,cy:100,fill:ok?"#34d399":"#f87171"})}); this.svg.appendChild(this.fx[this.fx.length-1].el); }
+    this.fx.forEach(f=>{ f.x+=120*dt; if(!f.ok && f.x>240){ f.dead=true; f.el.remove(); } f.el.setAttribute("cx",f.x);
+      if(f.x>540){ f.dead=true; f.el.remove(); } });
+    this.fx=this.fx.filter(f=>!f.dead);
+    // render tokens
+    this.tokG.innerHTML="";
+    for(let i=0;i<this.tokens;i++){ const col=i%3,row=Math.floor(i/3);
+      this.tokG.appendChild(S("circle",{cx:this.bx+42+col*28,cy:this.by+this.bh-20-row*26,r:9,fill:"#7C3AED",stroke:"#a855f7","stroke-width":1})); }
+    this.count.textContent=`${this.tokens} / ${this.cap_} tokens`;
+    this.count.setAttribute("fill",this.tokens===0?"#f87171":"#34d399");
+  }
+}
+
+/* ---- Section 6: Leaky Bucket ---- */
+class LeakyBucketViz extends Viz {
+  setup(){ this.cap_=12; this.queue=0; this.leak=1.4; this.inAcc=0; this.leakAcc=0; this.burst=0;
+    this.bx=250; this.bw=140; this.bh=130; this.by=40;
+    this.svg.appendChild(S("path",{d:`M ${this.bx} ${this.by} L ${this.bx+this.bw} ${this.by} L ${this.bx+this.bw} ${this.by+this.bh} L ${this.bx+this.bw/2+12} ${this.by+this.bh} L ${this.bx+this.bw/2} ${this.by+this.bh+16} L ${this.bx+this.bw/2-12} ${this.by+this.bh} L ${this.bx} ${this.by+this.bh} Z`,fill:"none",stroke:"#7C3AED","stroke-width":2.5}));
+    this.water=S("rect",{x:this.bx+3,y:this.by+this.bh,width:this.bw-6,height:0,fill:"#7C3AED",opacity:.5}); this.svg.appendChild(this.water);
+    this.count=T(this.bx+this.bw/2,this.by-12,"",{fill:"#34d399","font-size":13,"font-weight":700,"text-anchor":"middle"}); this.svg.appendChild(this.count);
+    this.svg.appendChild(T(120,80,"Bursty in →",{fill:"#8b8b93","font-size":12}));
+    this.svg.appendChild(T(this.bx+this.bw/2,this.by+this.bh+40,"↓ constant out",{fill:"#34d399","font-size":11,"text-anchor":"middle"}));
+    this.fx=[];
+    this.cap("Requests pour in unevenly but leak out at a fixed rate. Overflow beyond capacity is dropped (429).");
+  }
+  controls(){ return [
+    {label:"⚡ Generate burst", fn:()=>{ this.burst=1.4; this.cap("Burst! Incoming spikes — the queue fills and overflow is dropped."); }},
+    {label:"➕ Leak rate", fn:()=>{ this.leak=clamp(this.leak+.4,.4,5); this.cap("Leak rate ↑ — queue drains faster, fewer drops."); }},
+    {label:"➖ Leak rate", fn:()=>{ this.leak=clamp(this.leak-.4,.4,5); this.cap("Leak rate ↓ — slower drain, queue fills and overflows sooner."); }},
+  ]; }
+  frame(dt){ this.inAcc+=dt*(2.0+ (this.burst>0?6:0)); if(this.burst>0)this.burst-=dt;
+    while(this.inAcc>=1){ this.inAcc--; if(this.queue<this.cap_){ this.queue++; this.drop=false; } else { this.drop=true;
+        this.fx.push({x:this.bx+this.bw/2,y:this.by-4,el:S("circle",{r:4,cx:this.bx+this.bw/2,cy:this.by-4,fill:"#f87171"}),up:true}); this.svg.appendChild(this.fx[this.fx.length-1].el);} }
+    this.leakAcc+=dt*this.leak; while(this.leakAcc>=1){ this.leakAcc--; if(this.queue>0)this.queue--; }
+    this.fx.forEach(f=>{ f.y-=60*dt; f.el.setAttribute("cy",f.y); f.el.setAttribute("opacity",clamp((this.by-f.y)/30+.3,0,1)); if(f.y<10){f.dead=true;f.el.remove();} });
+    this.fx=this.fx.filter(f=>!f.dead);
+    const frac=this.queue/this.cap_, h=this.bh*frac;
+    this.water.setAttribute("y",this.by+this.bh-h); this.water.setAttribute("height",h);
+    this.water.setAttribute("fill",frac>=1?"#f87171":"#7C3AED");
+    this.count.textContent=`queue ${this.queue} / ${this.cap_}`+(this.drop?"  ⚠ overflow":"");
+    this.count.setAttribute("fill",frac>=1?"#f87171":"#34d399");
+  }
+}
+
+/* =====================================================================
+   COMPARISON CHART
+   ===================================================================== */
+class ComparisonChart {
+  constructor(host,data){ this.host=host; this.data=data; this.render(); }
+  render(){ const W=640,H=240,pad=40,groups=this.data.length,gw=(W-pad*2)/groups,metrics=["mem","acc","burst"];
+    const colors={mem:"#7C3AED",acc:"#34d399",burst:"#fbbf24"};
+    const svg=S("svg",{viewBox:`0 0 ${W} ${H}`}); const base=H-40;
+    for(let i=0;i<=5;i++){ const y=base-(i/5)*(base-20); svg.appendChild(S("line",{x1:pad,y1:y,x2:W-pad+20,y2:y,stroke:"#26262c","stroke-width":1})); }
+    this.data.forEach((d,gi)=>{ const gx=pad+gi*gw; const bw=(gw-16)/3;
+      metrics.forEach((m,mi)=>{ const v=d[m],bh=(v/5)*(base-20),x=gx+8+mi*bw;
+        const r=S("rect",{x:x+2,y:base,width:bw-4,height:0,rx:3,fill:colors[m]}); svg.appendChild(r);
+        setTimeout(()=>{ r.setAttribute("y",base-bh); r.setAttribute("height",bh); r.style.transition="all .8s ease"; },80+gi*90+mi*40); });
+      svg.appendChild(T(gx+gw/2,base+16,d.short,{fill:"#c9c9d1","font-size":10,"text-anchor":"middle"})); });
+    // legend
+    const leg=[["Memory","#7C3AED"],["Accuracy","#34d399"],["Burst","#fbbf24"]];
+    leg.forEach(([n,c],i)=>{ const lx=pad+i*120; svg.appendChild(S("rect",{x:lx,y:6,width:11,height:11,rx:2,fill:c}));
+      svg.appendChild(T(lx+16,15,n,{fill:"#8b8b93","font-size":10})); });
+    this.host.appendChild(svg);
+  }
+}
+
+/* =====================================================================
+   SIMULATION ENGINE — powers the live playground
+   ===================================================================== */
+class SimulationEngine {
+  constructor(){ this.reset(); }
+  configure({algo,rps,cap,win}){ this.algo=algo; this.rps=rps; this.cap=cap; this.win=win; this.reset(); }
+  reset(){ this.now=0; this.spawnAcc=0; this.allowed=0; this.rejected=0;
+    this.tokens=this.cap||10; this.tokenAcc=0; this.queue=0; this.leakAcc=0; this.count=0; this.winStart=0; this.log=[];
+    this.prevCount=0; this.curCount=0; this.events=[]; }
+  // returns array of {ok} decisions produced during dt
+  step(dt){ this.now+=dt; const out=[]; this.spawnAcc+=dt*this.rps;
+    // background refill / leak / window advance
+    if(this.algo==="token"){ this.tokenAcc+=dt*(this.cap/this.win); while(this.tokenAcc>=1){ this.tokenAcc--; if(this.tokens<this.cap)this.tokens++; } }
+    if(this.algo==="leaky"){ this.leakAcc+=dt*(this.cap/this.win); while(this.leakAcc>=1){ this.leakAcc--; if(this.queue>0)this.queue--; } }
+    if(this.algo==="fixed" && this.now-this.winStart>=this.win){ this.winStart=this.now; this.count=0; }
+    if(this.algo==="sliding"){ if(this.now-this.winStart>=this.win){ this.winStart=this.now; this.prevCount=this.curCount; this.curCount=0; } }
+    while(this.spawnAcc>=1){ this.spawnAcc--; out.push({ok:this.decide()}); }
+    return out;
+  }
+  decide(){
+    switch(this.algo){
+      case "token": if(this.tokens>0){ this.tokens--; return this.tally(true);} return this.tally(false);
+      case "leaky": if(this.queue<this.cap){ this.queue++; return this.tally(true);} return this.tally(false);
+      case "fixed": if(this.count<this.cap){ this.count++; return this.tally(true);} return this.tally(false);
+      case "sliding": { const frac=1-(this.now-this.winStart)/this.win; const eff=this.curCount+this.prevCount*frac;
+        if(eff<this.cap){ this.curCount++; return this.tally(true);} return this.tally(false); }
+      case "log": { this.log=this.log.filter(t=>this.now-t<this.win); if(this.log.length<this.cap){ this.log.push(this.now); return this.tally(true);} return this.tally(false); }
+    }
+    return this.tally(true);
+  }
+  tally(ok){ ok?this.allowed++:this.rejected++; return ok; }
+  state(){ // 0..1 fill level of the algorithm's state
+    if(this.algo==="token") return this.tokens/this.cap;
+    if(this.algo==="leaky") return this.queue/this.cap;
+    if(this.algo==="fixed") return Math.min(1,this.count/this.cap);
+    if(this.algo==="sliding"){ const frac=1-(this.now-this.winStart)/this.win; return Math.min(1,(this.curCount+this.prevCount*frac)/this.cap); }
+    if(this.algo==="log") return Math.min(1,this.log.length/this.cap);
+    return 0;
+  }
+}
+
+/* =====================================================================
+   PLAYGROUND — SimulationEngine + live rendering
+   ===================================================================== */
+class Playground {
+  constructor(){ this.sim=new SimulationEngine(); this.playing=false; this.marks=[]; this.host=$("pgViz");
+    this.svg=S("svg",{viewBox:"0 0 640 240"}); this.host.appendChild(this.svg);
+    this.stateBar=S("rect",{x:40,y:40,width:0,height:24,rx:6,fill:"#7C3AED",opacity:.75}); 
+    this.stateBg=S("rect",{x:40,y:40,width:560,height:24,rx:6,fill:"#0c0c0e",stroke:"#3a3a42"});
+    this.svg.appendChild(this.stateBg); this.svg.appendChild(this.stateBar);
+    this.stateLbl=T(40,32,"State",{fill:"#8b8b93","font-size":11}); this.svg.appendChild(this.stateLbl);
+    this.svg.appendChild(T(40,100,"Incoming requests",{fill:"#8b8b93","font-size":11}));
+    this.markG=S("g"); this.svg.appendChild(this.markG);
+    this.bind(); this.apply(); this.last=performance.now();
+  }
+  bind(){
+    const sync=()=>{ $("pgRpsV").textContent=$("pgRps").value; $("pgCapV").textContent=$("pgCap").value; $("pgWinV").textContent=$("pgWin").value; };
+    ["pgRps","pgCap","pgWin","pgAlgo"].forEach(id=>$(id).addEventListener("input",()=>{ sync(); this.apply(); }));
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.apply(); this.marks.forEach(m=>m.el.remove()); this.marks=[]; this.updateStats(); };
+    sync();
+    const loop=now=>{ const dt=Math.min(.05,(now-this.last)/1000); this.last=now; if(this.playing)this.frame(dt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+  apply(){ this.sim.configure({algo:$("pgAlgo").value,rps:+$("pgRps").value,cap:+$("pgCap").value,win:+$("pgWin").value});
+    this.stateLbl.textContent={token:"Tokens available",leaky:"Queue depth",fixed:"Window count",sliding:"Weighted count",log:"Stored timestamps"}[this.sim.algo];
+    this.updateStats(); }
+  frame(dt){ const decisions=this.sim.step(dt);
+    decisions.forEach(d=>{ const m={x:60,el:S("circle",{r:4.5,cx:60,cy:120,fill:d.ok?"#34d399":"#f87171",filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"})};
+      this.markG.appendChild(m.el); this.marks.push(m); });
+    this.marks.forEach(m=>{ m.x+=140*dt; m.el.setAttribute("cx",m.x); m.el.setAttribute("cy",120+Math.sin(m.x/30)*4); if(m.x>630){m.dead=true;m.el.remove();} });
+    this.marks=this.marks.filter(m=>!m.dead);
+    const lvl=this.sim.state(); this.stateBar.setAttribute("width",560*clamp(lvl,0,1));
+    this.stateBar.setAttribute("fill",lvl>=1&&(this.sim.algo==="leaky"||this.sim.algo==="fixed")?"#f87171":lvl<=0&&this.sim.algo==="token"?"#f87171":"#7C3AED");
+    this.updateStats();
+  }
+  updateStats(){ const a=this.sim.allowed,r=this.sim.rejected,tot=a+r;
+    $("pgAllowed").textContent=a; $("pgRejected").textContent=r; $("pgRate").textContent=(tot?Math.round(a/tot*100):100)+"%"; }
+}
+
+/* =====================================================================
+   DATA — algorithms, comparison, real-world, interview, code
+   ===================================================================== */
+const ALGOS=[
+  { id:"overview", num:1, icon:"🔭", tag:"Big Picture", title:"Overview", viz:OverviewViz,
+    definition:"Rate limiting sits between clients and your backend (usually at the API Gateway or a dedicated limiter) and decides, for every incoming request, whether to <b>allow</b> it or <b>reject</b> it with <b>HTTP 429 Too Many Requests</b>.",
+    problem:"A single client — buggy, greedy, or malicious — can flood your API and exhaust CPU, DB connections and thread pools, taking the service down for everyone. Rate limiting caps each client's request rate.",
+    how:["Client sends a request toward the API.","The API Gateway forwards it to the Rate Limiter.","The limiter checks the client's counter/bucket in a fast store (Redis).","If within limits → forward to the backend service and database.","If over the limit → immediately return 429 with a Retry-After header."],
+    example:"Stripe, GitHub and Twitter all publish per-endpoint limits (e.g. 5,000 requests/hour) and return 429 with X-RateLimit-Remaining headers so clients can back off gracefully.",
+    advantages:["First, cheap line of defense against abuse & DDoS","Protects downstream services and databases","Enables fair multi-tenant usage and paid tiers"],
+    disadvantages:["Distributed counters need shared state (adds latency)","Badly tuned limits reject legitimate bursts","Adds an extra hop / dependency in the hot path"],
+    complexity:[["Where","Edge / Gateway"],["State","Redis"],["Response","HTTP 429"]],
+    best:["Rate-limit at the edge before requests reach services","Always return Retry-After and X-RateLimit-* headers","Use separate limits per client, per route and global"],
+    mistakes:["Doing limiting per-instance with in-memory counters","Returning 500 instead of 429 on limit","One global limit for cheap and expensive endpoints alike"],
+    interview:[["Where should rate limiting live in the stack?","At the edge / API gateway so abusive traffic is rejected before consuming service and DB resources; the counter lives in a shared store like Redis."]],
+    code:{ "Spring Boot":CODE_spring_overview, "Redis":CODE_redis_overview } },
+
+  { id:"fixed-window", num:2, icon:"🪟", tag:"Counter", title:"Fixed Window Counter", viz:FixedWindowViz,
+    definition:"Divide time into fixed windows (e.g. one minute). Keep a counter per client per window; increment on each request and reject once it exceeds the limit. The counter resets when the next window begins.",
+    problem:"You need the simplest possible way to cap requests per minute without storing per-request data.",
+    how:["Compute the current window key, e.g. user:42:1200 (minute 1200).","INCR the counter for that key.","On first increment, set an expiry equal to the window length.","If counter > limit → reject with 429.","When the clock rolls to the next minute, a brand-new key (counter = 0) is used."],
+    example:"Classic Redis one-liner: INCR key + EXPIRE 60. Used for coarse quotas where a little inaccuracy at boundaries is acceptable.",
+    advantages:["Extremely simple and memory-cheap (one integer)","O(1) time and space per client","Trivial to implement in Redis (INCR + EXPIRE)"],
+    disadvantages:["Boundary burst: up to 2× the limit around the edge","Not smooth — resets cause traffic spikes","Coarse accuracy"],
+    complexity:[["Time","O(1)"],["Space","O(1)"],["Accuracy","Low"]],
+    best:["Use only where occasional 2× bursts are tolerable","Keep windows short to limit burst damage","Combine with a global cap as a safety net"],
+    mistakes:["Assuming it strictly enforces N per window (it doesn't at boundaries)","Forgetting to set the key expiry","Using it for strict billing/quota accuracy"],
+    interview:[["What is the burst problem of Fixed Window?","100 requests at 12:00:59 plus 100 at 12:01:01 all pass — 200 requests in ~2 seconds — because two adjacent windows each allow the full limit."]],
+    code:{ "Spring Boot":CODE_spring_fixed(), "Redis":CODE_redis_fixed() } },
+
+  { id:"sliding-log", num:3, icon:"🧾", tag:"Timestamps", title:"Sliding Log", viz:SlidingLogViz,
+    definition:"Store the exact timestamp of every request in a sorted set. To decide, drop timestamps older than the window and count what remains. If the count is under the limit, allow and append the new timestamp.",
+    problem:"Fixed windows are inaccurate at boundaries; Sliding Log gives perfectly accurate rate limiting over a rolling window.",
+    how:["Remove entries older than (now − window) from the client's log.","Count the remaining timestamps.","If count < limit → add now to the log and allow.","Otherwise reject with 429.","Set an expiry on the log so idle clients are cleaned up."],
+    example:"Redis ZREMRANGEBYSCORE + ZADD + ZCARD in a single MULTI/Lua block gives exact per-second limiting.",
+    advantages:["Perfectly accurate — no boundary bursts","Works for any rolling window size","Conceptually simple"],
+    disadvantages:["Memory grows with request volume (one entry per request)","More Redis ops per request (remove + count + add)","Expensive for high-traffic clients"],
+    complexity:[["Time","O(log n)"],["Space","O(n)"],["Accuracy","Exact"]],
+    best:["Use for low/medium volume where accuracy matters","Cap log size to bound memory","Run remove+count+add atomically (Lua)"],
+    mistakes:["Using it for very high-QPS clients (memory blowup)","Non-atomic read/modify causing races","Never expiring idle logs"],
+    interview:[["When should Sliding Log be avoided?","When per-client traffic is very high — it stores one timestamp per request, so memory and per-request cost grow linearly with volume."]],
+    code:{ "Spring Boot":CODE_spring_log(), "Redis":CODE_redis_log() } },
+
+  { id:"sliding-window", num:4, icon:"📈", tag:"Weighted", title:"Sliding Window Counter", viz:SlidingWindowViz,
+    definition:"A hybrid that keeps just two counters (previous and current window) and estimates the rolling count with a weighted blend: effective = current + previous × (overlap fraction of the previous window still inside the rolling window).",
+    problem:"You want near-Sliding-Log accuracy without storing a timestamp per request.",
+    how:["Maintain a counter for the current fixed window and the previous one.","Compute how much of the previous window still overlaps the rolling window.","effective = current + previous × overlap%.","If effective < limit → increment current and allow.","Otherwise reject with 429."],
+    example:"Cloudflare popularized this approach — it approximates a sliding window with O(1) memory and <1% error in practice.",
+    advantages:["O(1) memory — just two counters","Smooths the boundary-burst problem","Very close to exact in practice"],
+    disadvantages:["An approximation (assumes even distribution in the previous window)","Slightly more complex than fixed window","Small error under very bursty traffic"],
+    complexity:[["Time","O(1)"],["Space","O(1)"],["Accuracy","High (~99%)"]],
+    best:["Great default for HTTP APIs at scale","Store both counters in Redis with expiry","Tune window length to your traffic shape"],
+    mistakes:["Forgetting to roll previous←current at window change","Ignoring the even-distribution assumption","Mismatched window/expiry values"],
+    interview:[["How does Sliding Window Counter approximate the rolling count?","It weights the previous window's count by the fraction still overlapping the rolling window and adds the current window's count — O(1) memory, ~99% accurate."]],
+    code:{ "Spring Boot":CODE_spring_sliding(), "Redis":CODE_redis_sliding() } },
+
+  { id:"token-bucket", num:5, icon:"🪙", tag:"Bursty-friendly", title:"Token Bucket", viz:TokenBucketViz,
+    definition:"A bucket holds up to <b>capacity</b> tokens and refills at a steady <b>rate</b> (e.g. 5 tokens/sec). Each request consumes one token; if a token is available the request is allowed, otherwise it is rejected. Idle time lets tokens accumulate, so short bursts are permitted.",
+    problem:"Fixed/sliding windows reject legitimate short bursts. Token Bucket allows bursts up to the bucket capacity while still enforcing a long-run average rate.",
+    how:["Tokens are added to the bucket at a fixed rate, capped at capacity.","A request arrives and tries to take one token.","If tokens remain → consume one and allow (green).","If the bucket is empty → reject with 429 (red).","During idle periods the bucket refills, enabling the next burst."],
+    example:"AWS API Gateway and Stripe use token buckets: a steady refill rate plus a burst capacity that absorbs spikes.",
+    advantages:["Allows controlled bursts (great UX)","Enforces a precise long-run average rate","O(1) memory and time; simple to reason about"],
+    disadvantages:["Two parameters to tune (rate + capacity)","Needs atomic token math in distributed setups","A large capacity can permit big instantaneous bursts"],
+    complexity:[["Time","O(1)"],["Space","O(1)"],["Bursts","Allowed"]],
+    best:["Pick capacity = acceptable burst, rate = sustained limit","Use a Redis Lua script for atomic refill+consume","Store last-refill timestamp, compute tokens lazily"],
+    mistakes:["Non-atomic refill/consume causing over-admission","Confusing capacity (burst) with rate (average)","Refilling on a timer instead of lazily on read"],
+    interview:[["Why choose Token Bucket over Fixed Window?","Token Bucket enforces a smooth long-run rate while still allowing short bursts up to capacity, and has no boundary-burst flaw — far better UX for real API traffic."]],
+    code:{ "Spring Boot":CODE_spring_token, "Redis":CODE_redis_token } },
+
+  { id:"leaky-bucket", num:6, icon:"🕳️", tag:"Traffic shaping", title:"Leaky Bucket", viz:LeakyBucketViz,
+    definition:"Requests enter a fixed-size queue (the bucket) and are processed — leak out — at a constant rate through a hole. If requests arrive faster than they leak and the bucket overflows, the excess is dropped. It smooths bursty input into a steady output stream.",
+    problem:"Downstream systems need a smooth, predictable request rate. Leaky Bucket shapes bursty traffic into a constant outflow.",
+    how:["Incoming requests are appended to a FIFO queue (capacity C).","The queue drains at a fixed rate (e.g. 5 req/sec).","If the queue has room → enqueue (accepted).","If the queue is full → drop the request (429 overflow).","Consumers pull from the queue at the constant leak rate."],
+    example:"NGINX limit_req implements a leaky bucket — it smooths request bursts to a configured rate, optionally queueing a burst.",
+    advantages:["Guarantees a smooth, constant output rate","Protects fragile downstreams from spikes","Predictable, easy to reason about"],
+    disadvantages:["No bursts — even brief spikes may be dropped/delayed","Queueing adds latency to requests","Overflow drops can hurt legitimate users during spikes"],
+    complexity:[["Time","O(1)"],["Space","O(C)"],["Output","Constant"]],
+    best:["Use when the downstream needs a fixed rate","Size the queue to your latency tolerance","Combine with backpressure / retries"],
+    mistakes:["Using it where bursts are desirable (use Token Bucket)","Oversized queues adding huge latency","Ignoring dropped-request handling"],
+    interview:[["Difference between Token Bucket and Leaky Bucket?","Token Bucket allows bursts (tokens accumulate) and outputs unevenly; Leaky Bucket forces a constant output rate and drops overflow — it shapes traffic, it doesn't reward idle time."]],
+    code:{ "Spring Boot":CODE_spring_leaky(), "Redis":CODE_redis_leaky() } },
+];
+
+const CMP=[
+  {short:"Fixed",  name:"Fixed Window",           mem:5,acc:2,burst:1, memL:"Very Low",accL:"Low",burstL:"Poor",cx:"O(1)",use:"Simple quotas"},
+  {short:"Log",    name:"Sliding Log",            mem:1,acc:5,burst:5, memL:"High",accL:"Exact",burstL:"Excellent",cx:"O(n)",use:"Low-volume, precise"},
+  {short:"Sliding",name:"Sliding Window Counter", mem:4,acc:4,burst:4, memL:"Low",accL:"High",burstL:"Good",cx:"O(1)",use:"HTTP APIs (Cloudflare)"},
+  {short:"Token",  name:"Token Bucket",           mem:5,acc:4,burst:5, memL:"Very Low",accL:"High",burstL:"Great (bursts)",cx:"O(1)",use:"AWS, Stripe"},
+  {short:"Leaky",  name:"Leaky Bucket",           mem:5,acc:3,burst:2, memL:"Very Low",accL:"Medium",burstL:"Smoothing",cx:"O(1)",use:"NGINX, shaping"},
+];
+const REAL=[
+  ["AWS API Gateway","☁️","Token Bucket","Per-account burst + steady-rate throttling; returns 429 with a burst capacity that absorbs spikes."],
+  ["Cloudflare","🟠","Sliding Window","Approximate sliding window counters at the edge across its global network for accurate, low-memory limiting."],
+  ["NGINX","🟩","Leaky Bucket","limit_req shapes bursty traffic to a fixed rate, optionally queueing a configured burst before dropping."],
+  ["Stripe","💳","Token Bucket","Documented per-endpoint limits with burst allowance; clients back off using Retry-After headers."],
+  ["GitHub","🐙","Sliding Window","Hourly REST quotas exposed via X-RateLimit-Remaining / Reset headers for graceful client backoff."],
+];
+const INTERVIEW=[
+  ["Why Token Bucket instead of Fixed Window?","Token Bucket enforces a smooth long-run average while allowing short bursts up to capacity, and avoids the 2× boundary-burst flaw of fixed windows — a much better fit for real API traffic."],
+  ["When should Sliding Log be avoided?","When per-client traffic is high: it stores one timestamp per request, so memory and per-request cost grow linearly with volume. Prefer Sliding Window Counter or Token Bucket."],
+  ["How is Redis used for distributed rate limiting?","Redis holds the shared counter/bucket so every API instance enforces the same limit. A Lua script makes the read-modify-write atomic, avoiding race conditions across instances."],
+  ["Difference between Token Bucket and Leaky Bucket?","Token Bucket allows bursts (tokens accumulate during idle time) with uneven output; Leaky Bucket forces a constant output rate and drops overflow — it shapes traffic rather than rewarding idleness."],
+  ["How does distributed rate limiting stay consistent across nodes?","Keep the state in a shared store (Redis) rather than per-instance memory, use atomic operations (INCR/EXPIRE or Lua), and key by client + route. For scale, sync approximate counters or use sticky routing."],
+  ["How would you implement rate limiting in Spring Boot?","Add a filter/interceptor that keys by client+route, runs an atomic Redis Lua token-bucket check, and returns 429 with Retry-After when denied. Bucket4j + Redis is a common ready-made option."],
+];
+
+/* ---------- global multi-language code (Token Bucket, distributed) ---------- */
+const GLOBAL_CODE={
+"Java":
+"// Token bucket check (single-node, atomic per key)\n"+
+"class TokenBucket {\n"+
+"  private double tokens; private final double cap, refillPerSec; private long last;\n"+
+"  TokenBucket(double cap, double refillPerSec){ this.cap=cap; this.tokens=cap; this.refillPerSec=refillPerSec; this.last=System.nanoTime(); }\n"+
+"  synchronized boolean tryConsume(){\n"+
+"    long now=System.nanoTime();\n"+
+"    tokens=Math.min(cap, tokens+(now-last)/1e9*refillPerSec); last=now;\n"+
+"    if(tokens>=1){ tokens-=1; return true; }\n"+
+"    return false;\n"+
+"  }\n"+
+"}",
+"Spring Boot":
+"@Component\n"+
+"public class RateLimitFilter extends OncePerRequestFilter {\n"+
+"  @Autowired StringRedisTemplate redis;\n"+
+"  static final RedisScript<Long> SCRIPT = RedisScript.of(TOKEN_LUA, Long.class);\n"+
+"  protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)\n"+
+"      throws IOException, ServletException {\n"+
+"    String key = \"rl:\" + clientId(req) + \":\" + req.getRequestURI();\n"+
+"    Long allowed = redis.execute(SCRIPT, List.of(key), \"10\", \"5\", now());\n"+
+"    if (allowed == 0) { res.setStatus(429); res.setHeader(\"Retry-After\", \"1\"); return; }\n"+
+"    chain.doFilter(req, res);\n"+
+"  }\n"+
+"}",
+"Redis":
+"# Fixed window (quick + dirty)\n"+
+"MULTI\n"+
+"INCR   rl:user42:1200\n"+
+"EXPIRE rl:user42:1200 60\n"+
+"EXEC\n"+
+"# if INCR result > limit -> reject with 429",
+"Lua Script":
+"-- Atomic token bucket: KEYS[1]=key ARGV[1]=cap ARGV[2]=refill/s ARGV[3]=now\n"+
+"local b = redis.call('HMGET', KEYS[1], 'tokens', 'ts')\n"+
+"local tokens = tonumber(b[1]) or tonumber(ARGV[1])\n"+
+"local ts = tonumber(b[2]) or tonumber(ARGV[3])\n"+
+"local delta = math.max(0, tonumber(ARGV[3]) - ts)\n"+
+"tokens = math.min(tonumber(ARGV[1]), tokens + delta * tonumber(ARGV[2]))\n"+
+"local allowed = 0\n"+
+"if tokens >= 1 then tokens = tokens - 1; allowed = 1 end\n"+
+"redis.call('HMSET', KEYS[1], 'tokens', tokens, 'ts', ARGV[3])\n"+
+"redis.call('EXPIRE', KEYS[1], 60)\n"+
+"return allowed",
+"NodeJS":
+"const redis = require('ioredis').createClient();\n"+
+"const LUA = require('fs').readFileSync('token_bucket.lua','utf8');\n"+
+"async function allow(clientId, route){\n"+
+"  const key = `rl:${clientId}:${route}`;\n"+
+"  const ok = await redis.eval(LUA, 1, key, 10, 5, Date.now()/1000);\n"+
+"  return ok === 1;                       // false => send 429\n"+
+"}\n"+
+"app.use(async (req,res,next)=>{\n"+
+"  if(await allow(req.ip, req.path)) return next();\n"+
+"  res.set('Retry-After','1').status(429).send('Too Many Requests');\n"+
+"});",
+"Go":
+"func Allow(rdb *redis.Client, key string) bool {\n"+
+"  res, _ := rdb.Eval(ctx, tokenLua, []string{key}, 10, 5, time.Now().Unix()).Int()\n"+
+"  return res == 1\n"+
+"}\n"+
+"func Middleware(next http.Handler) http.Handler {\n"+
+"  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){\n"+
+"    if !Allow(rdb, \"rl:\"+clientIP(r)+\":\"+r.URL.Path) {\n"+
+"      w.Header().Set(\"Retry-After\", \"1\"); w.WriteHeader(429); return\n"+
+"    }\n"+
+"    next.ServeHTTP(w, r)\n"+
+"  })\n"+
+"}",
+"Python":
+"import time, redis\n"+
+"r = redis.Redis()\n"+
+"lua = open('token_bucket.lua').read()\n"+
+"check = r.register_script(lua)\n"+
+"def allow(client_id, route):\n"+
+"    key = f'rl:{client_id}:{route}'\n"+
+"    return check(keys=[key], args=[10, 5, time.time()]) == 1\n"+
+"\n"+
+"@app.before_request\n"+
+"def limit():\n"+
+"    if not allow(request.remote_addr, request.path):\n"+
+"        return 'Too Many Requests', 429",
+};
+
+/* ---------- per-section code snippet builders ---------- */
+function CODE_spring_overview(){ return GLOBAL_CODE["Spring Boot"]; }
+function CODE_redis_overview(){ return GLOBAL_CODE["Redis"]; }
+function CODE_spring_fixed(){ return "" +
+"// Fixed window with Redis INCR + EXPIRE\n"+
+"public boolean allow(String client){\n"+
+"  long window = System.currentTimeMillis()/1000/60;   // minute bucket\n"+
+"  String key = \"rl:\"+client+\":\"+window;\n"+
+"  Long c = redis.opsForValue().increment(key);\n"+
+"  if (c == 1) redis.expire(key, Duration.ofMinutes(1));\n"+
+"  return c <= LIMIT;                                   // else 429\n"+
+"}"; }
+function CODE_redis_fixed(){ return "" +
+"INCR   rl:user42:1200      # returns new count\n"+
+"EXPIRE rl:user42:1200 60   # only needed on first INCR\n"+
+"# reject when returned count > LIMIT"; }
+function CODE_spring_log(){ return "" +
+"// Sliding log with a Redis sorted set (ZSET)\n"+
+"public boolean allow(String client){\n"+
+"  long now = System.currentTimeMillis();\n"+
+"  String key = \"rl:log:\"+client;\n"+
+"  redis.opsForZSet().removeRangeByScore(key, 0, now - WINDOW_MS);\n"+
+"  Long count = redis.opsForZSet().zCard(key);\n"+
+"  if (count != null && count >= LIMIT) return false;   // 429\n"+
+"  redis.opsForZSet().add(key, UUID.randomUUID().toString(), now);\n"+
+"  redis.expire(key, Duration.ofMillis(WINDOW_MS));\n"+
+"  return true;\n"+
+"}"; }
+function CODE_redis_log(){ return "" +
+"ZREMRANGEBYSCORE rl:log:user42 0 (now-window)\n"+
+"ZCARD            rl:log:user42          # current count\n"+
+"ZADD             rl:log:user42 now uuid # if under limit\n"+
+"EXPIRE           rl:log:user42 window\n"+
+"# wrap in MULTI/EXEC or Lua for atomicity"; }
+function CODE_spring_sliding(){ return "" +
+"// Sliding window counter (two windows, weighted)\n"+
+"public boolean allow(String client){\n"+
+"  long win = 60_000; long now = System.currentTimeMillis();\n"+
+"  long cur = now/win, prev = cur-1; double pct = 1.0 - (now%win)/(double)win;\n"+
+"  long c = count(client, cur), p = count(client, prev);\n"+
+"  double effective = c + p * pct;\n"+
+"  if (effective >= LIMIT) return false;                // 429\n"+
+"  incr(client, cur); return true;\n"+
+"}"; }
+function CODE_redis_sliding(){ return "" +
+"# two counters: current + previous window\n"+
+"INCR rl:user42:cur\n"+
+"# effective = cur + prev * overlapFraction\n"+
+"# allow when effective < LIMIT (computed app-side or in Lua)"; }
+function CODE_spring_token(){ return GLOBAL_CODE["Spring Boot"]; }
+function CODE_redis_token(){ return GLOBAL_CODE["Lua Script"]; }
+function CODE_spring_leaky(){ return "" +
+"// Leaky bucket: queue + constant drain\n"+
+"public boolean allow(String client){\n"+
+"  long now = System.currentTimeMillis();\n"+
+"  Bucket b = buckets.computeIfAbsent(client, k -> new Bucket(now));\n"+
+"  double leaked = (now - b.last)/1000.0 * LEAK_RATE;\n"+
+"  b.level = Math.max(0, b.level - leaked); b.last = now;\n"+
+"  if (b.level + 1 > CAPACITY) return false;            // overflow -> 429\n"+
+"  b.level += 1; return true;\n"+
+"}"; }
+function CODE_redis_leaky(){ return "" +
+"# NGINX leaky bucket (declarative)\n"+
+"limit_req_zone $binary_remote_addr zone=api:10m rate=5r/s;\n"+
+"server {\n"+
+"  location /api/ {\n"+
+"    limit_req zone=api burst=10 nodelay;   # queue up to 10\n"+
+"  }\n"+
+"}"; }
+
+/* =====================================================================
+   ALGORITHM RENDERER — builds sections + sidebar from ALGOS
+   ===================================================================== */
+class AlgorithmRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"), snav=$("snavList");
+    ALGOS.forEach(a=>{
+      // sidebar entry
+      const s=el("div","snav",`<span class="num">${a.id==="overview"?"◎":a.num-1}</span> ${a.title}`);
+      s.dataset.scroll=a.id; snav.appendChild(s);
+      // section
+      const sec=el("section"); sec.id=a.id;
+      sec.appendChild(el("div","sec-head",
+        `<div class="s-num">${a.icon}</div><div><div class="s-tag">${a.tag}</div><h2>${a.title}</h2></div>`));
+      const card=el("div","card");
+      card.innerHTML=`<p class="lead">${a.definition}</p>
+        <div class="callout"><b style="color:#fff">Problem it solves —</b> ${a.problem}</div>
+        <div class="block-title">Interactive Visualization</div>`;
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      card.appendChild(el("div","block-title","How it works"));
+      card.appendChild(el("ul","steps",a.how.map(h=>`<li>${h}</li>`).join("")));
+
+      card.appendChild(el("div","callout ex",`<b style="color:#fff">Real-world example —</b> ${a.example}`));
+
+      const two=el("div","two-col");
+      two.appendChild(el("div","col-box good",`<h4>✅ Advantages</h4><ul>${a.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+      two.appendChild(el("div","col-box bad",`<h4>⚠️ Disadvantages</h4><ul>${a.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+      card.appendChild(el("div","block-title","Advantages vs Disadvantages")); card.appendChild(two);
+
+      card.appendChild(el("div","block-title","Complexity"));
+      card.appendChild(el("div","cx-row",a.complexity.map(([k,v])=>`<span class="cx">${k} <b>${v}</b></span>`).join("")));
+
+      card.appendChild(el("div","block-title","Implementation — Spring Boot &amp; Redis"));
+      const codeHost=el("div"); card.appendChild(codeHost);
+
+      card.appendChild(el("div","block-title","Best Practices &amp; Common Mistakes"));
+      const bm=el("div","two-col");
+      bm.appendChild(el("div","col-box good",`<h4>💡 Best Practices</h4><ul>${a.best.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+      bm.appendChild(el("div","col-box bad",`<h4>🚫 Common Mistakes</h4><ul>${a.mistakes.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+      card.appendChild(bm);
+
+      sec.appendChild(card); root.appendChild(sec);
+
+      // wire code viewer + viz (resolve any lazy function-valued snippets)
+      const codeTabs={}; for(const k in a.code){ const v=a.code[k]; codeTabs[k]=(typeof v==="function")?v():v; }
+      new CodeViewer(codeHost, codeTabs);
+      const v=new a.viz(vizHost); this.engine.register(vizHost, v);
+      // optional interactive controls under the visualization
+      const ctrls = v.controls && v.controls();
+      if (ctrls && ctrls.length){
+        const bar=el("div","viz-ctrl");
+        ctrls.forEach(c=>{ const b=el("button",null,c.label); b.onclick=c.fn; bar.appendChild(b); });
+        viz.appendChild(bar);
+      }
+    });
+  }
+}
+
+/* =====================================================================
+   BUILD static blocks
+   ===================================================================== */
+function buildComparison(){
+  const t=$("cmpTable");
+  t.innerHTML=`<thead><tr><th>Algorithm</th><th>Memory</th><th>Accuracy</th><th>Burst Handling</th><th>Complexity</th><th>Production Usage</th></tr></thead>`;
+  const tb=el("tbody");
+  CMP.forEach(c=>{ tb.appendChild(el("tr","",
+    `<td>${c.name}</td>
+     <td>${rateBar(c.mem,"g")} <span style="color:var(--muted);font-size:11px">${c.memL}</span></td>
+     <td>${rateBar(c.acc,"g")} <span style="color:var(--muted);font-size:11px">${c.accL}</span></td>
+     <td>${rateBar(c.burst)} <span style="color:var(--muted);font-size:11px">${c.burstL}</span></td>
+     <td><b style="font-family:monospace;color:var(--accent)">${c.cx}</b></td>
+     <td style="color:var(--muted)">${c.use}</td>`)); });
+  t.appendChild(tb);
+  new ComparisonChart($("cmpChart"),CMP);
+}
+function rateBar(n,cls=""){ let h=`<span class="rate ${cls}">`; for(let i=1;i<=5;i++)h+=`<i class="${i<=n?"on":""}"></i>`; return h+"</span>"; }
+
+function buildRealWorld(){ const g=$("rwGrid");
+  REAL.forEach(([name,logo,algo,desc])=>g.appendChild(el("div","rw-card",
+    `<div class="rw-top"><div class="rw-logo">${logo}</div><div><div class="rw-name">${name}</div><div class="rw-algo">${algo}</div></div></div><p>${desc}</p>`))); }
+
+function buildInterview(){ const list=$("accList");
+  INTERVIEW.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span>${q}<span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").onclick=()=>acc.classList.toggle("open"); list.appendChild(acc); }); }
+
+function buildGlobalCode(){ new CodeViewer($("globalCode"),GLOBAL_CODE); }
+
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Authentication","🔑","Identity & tokens"],["API Gateway","🚪","Edge routing"],["Redis","🧠","Shared counters"],
+    ["Caching","⚡","Latency & load"],["Load Balancer","⚖️","Traffic spread"],["Circuit Breaker","🔌","Fail fast"]];
+  rel.forEach(([t,i,s])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav="system-designed.html"; c.onclick=()=>nav.go("system-designed.html"); g.appendChild(c); }); }
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new AlgorithmRenderer(anim).render();
+buildComparison(); buildRealWorld(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

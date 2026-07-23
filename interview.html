@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Java Backend Interview Preparation</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
+
+<style>
+:root{
+  --bg:#0e0e10; --bg-2:#111114; --panel:rgba(26,26,28,.72); --panel-solid:#1a1a1c;
+  --panel-2:#202024; --line:#f4f4f5; --muted:#8b8b93; --muted-2:#6b6b73;
+  --border:rgba(244,244,245,.08); --border-2:rgba(244,244,245,.14);
+  --accent:#7C3AED; --accent-2:#a855f7; --accent-soft:rgba(124,58,237,.32);
+  --green:#22c55e; --green-soft:rgba(34,197,94,.15);
+  --amber:#f59e0b; --red:#ef4444; --blue:#38bdf8;
+  --radius:16px; --sidebar:264px;
+  --shadow:0 10px 40px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html{scroll-behavior:smooth; scroll-padding-top:24px}
+body{
+  font-family:"Segoe UI",Inter,system-ui,-apple-system,Roboto,sans-serif;
+  background:var(--bg); color:var(--line); line-height:1.6;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(900px 500px at 82% -8%, rgba(124,58,237,.18), transparent 60%),
+    radial-gradient(700px 500px at -5% 12%, rgba(56,189,248,.08), transparent 55%),
+    radial-gradient(600px 600px at 50% 120%, rgba(168,85,247,.10), transparent 60%);
+}
+::selection{background:var(--accent-soft); color:#fff}
+a{color:inherit; text-decoration:none}
+::-webkit-scrollbar{width:11px; height:11px}
+::-webkit-scrollbar-thumb{background:#2a2a30; border-radius:8px; border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#3a3a44}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:60; display:flex; align-items:center; gap:16px;
+  padding:12px 22px; background:rgba(14,14,16,.72); backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border);
+}
+.brand{display:flex; align-items:center; gap:11px; font-weight:800; letter-spacing:.2px; white-space:nowrap}
+.brand .logo{
+  width:34px; height:34px; border-radius:10px; display:grid; place-items:center; font-size:16px; color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2)); box-shadow:0 0 18px var(--accent-soft);
+}
+.brand small{display:block; font-size:10.5px; color:var(--muted); font-weight:600}
+.search{
+  flex:1; max-width:520px; margin:0 auto; position:relative;
+}
+.search i{position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:13px}
+.search input{
+  width:100%; padding:10px 40px 10px 38px; border-radius:12px; font-size:14px;
+  background:var(--panel-2); border:1px solid var(--border-2); color:var(--line); outline:none;
+  transition:.2s;
+}
+.search input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.search kbd{
+  position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:11px; color:var(--muted);
+  background:var(--panel); border:1px solid var(--border-2); padding:2px 6px; border-radius:6px;
+}
+.top-actions{display:flex; gap:8px}
+.btn{
+  display:inline-flex; align-items:center; gap:7px; padding:9px 14px; border-radius:11px; cursor:pointer;
+  font-size:13px; font-weight:600; color:var(--line); background:var(--panel-2);
+  border:1px solid var(--border-2); transition:.18s; white-space:nowrap;
+}
+.btn:hover{border-color:var(--accent); color:#fff; box-shadow:0 0 12px var(--accent-soft); transform:translateY(-1px)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2)); border-color:transparent}
+.btn.primary:hover{box-shadow:0 0 18px var(--accent-soft)}
+.hamburger{display:none}
+
+/* ---------- layout ---------- */
+.shell{display:flex; align-items:flex-start; max-width:1500px; margin:0 auto}
+.sidebar{
+  position:sticky; top:61px; align-self:flex-start; width:var(--sidebar); flex:0 0 var(--sidebar);
+  height:calc(100vh - 61px); overflow-y:auto; padding:20px 14px 40px;
+  border-right:1px solid var(--border);
+}
+.side-title{font-size:11px; text-transform:uppercase; letter-spacing:1.4px; color:var(--muted); margin:6px 10px 12px}
+.nav-link{
+  display:flex; align-items:center; gap:11px; padding:9px 12px; border-radius:10px; color:var(--muted);
+  font-size:13.5px; font-weight:600; cursor:pointer; transition:.16s; position:relative; margin-bottom:2px;
+}
+.nav-link i{width:18px; text-align:center; font-size:13px}
+.nav-link .cnt{margin-left:auto; font-size:10.5px; background:var(--panel-2); color:var(--muted); padding:1px 7px; border-radius:20px}
+.nav-link:hover{background:var(--panel-2); color:var(--line)}
+.nav-link.active{background:var(--accent-soft); color:#fff}
+.nav-link.active::before{content:""; position:absolute; left:0; top:8px; bottom:8px; width:3px; border-radius:3px; background:var(--accent)}
+.nav-link.done i.chk{color:var(--green)}
+
+.side-progress{margin:6px 10px 18px; padding:14px; border-radius:14px; background:var(--panel); border:1px solid var(--border); backdrop-filter:blur(8px)}
+.side-progress .lab{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:8px}
+.side-progress .lab b{color:var(--line)}
+
+.content{flex:1; min-width:0; padding:26px 34px 90px}
+
+/* ---------- hero ---------- */
+.hero{
+  position:relative; padding:40px 34px 34px; border-radius:22px; margin-bottom:28px; overflow:hidden;
+  background:linear-gradient(135deg, rgba(124,58,237,.16), rgba(168,85,247,.05));
+  border:1px solid var(--border-2); box-shadow:var(--shadow);
+}
+.hero::after{content:""; position:absolute; right:-60px; top:-60px; width:260px; height:260px; border-radius:50%;
+  background:radial-gradient(circle, var(--accent-soft), transparent 70%); filter:blur(10px)}
+.hero .eyebrow{display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--accent-2);
+  background:var(--accent-soft); padding:5px 12px; border-radius:20px; margin-bottom:14px}
+.hero h1{font-size:clamp(26px,4vw,42px); font-weight:800; letter-spacing:-.5px; line-height:1.15}
+.hero h1 span{background:linear-gradient(120deg,var(--accent-2),#e9d5ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
+.hero p.sub{color:var(--muted); font-size:15px; margin-top:10px; max-width:640px}
+.hero-stats{display:flex; gap:26px; margin-top:22px; flex-wrap:wrap}
+.hero-stats .s b{font-size:22px; font-weight:800; display:block}
+.hero-stats .s span{font-size:12px; color:var(--muted)}
+
+.progress-wrap{margin-top:24px; max-width:560px}
+.progress-wrap .lab{display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:8px}
+.progress-wrap .lab .pct{font-weight:800; font-size:16px; color:var(--accent-2)}
+.pbar{height:12px; border-radius:20px; background:var(--panel-2); overflow:hidden; border:1px solid var(--border)}
+.pbar > i{display:block; height:100%; width:0; border-radius:20px;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2)); box-shadow:0 0 14px var(--accent-soft);
+  transition:width .7s cubic-bezier(.22,1,.36,1)}
+
+/* ---------- section ---------- */
+.section{margin-bottom:40px; scroll-margin-top:20px}
+.sec-head{display:flex; align-items:center; gap:14px; margin-bottom:18px}
+.sec-head .ico{width:44px; height:44px; border-radius:13px; display:grid; place-items:center; font-size:19px; color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2)); box-shadow:0 0 16px var(--accent-soft)}
+.sec-head h2{font-size:24px; font-weight:800; letter-spacing:-.3px}
+.sec-head p{font-size:13px; color:var(--muted)}
+.sec-head .sec-count{margin-left:auto; font-size:12px; color:var(--muted); background:var(--panel-2); padding:6px 12px; border-radius:20px}
+
+/* ---------- card ---------- */
+.grid{display:grid; grid-template-columns:1fr; gap:16px}
+.card{
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); backdrop-filter:blur(10px);
+  overflow:hidden; transition:.25s; opacity:0; transform:translateY(18px);
+}
+.card.in{opacity:1; transform:none}
+.card:hover{border-color:var(--border-2); box-shadow:var(--shadow)}
+.card.done{border-color:rgba(34,197,94,.4)}
+.card.hit{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent),0 0 26px var(--accent-soft)}
+.card-head{display:flex; align-items:center; gap:14px; padding:16px 18px; cursor:pointer; user-select:none}
+.card-head .c-ico{width:40px; height:40px; border-radius:11px; flex:0 0 40px; display:grid; place-items:center; font-size:16px;
+  background:var(--panel-2); color:var(--accent-2); border:1px solid var(--border)}
+.card-title-wrap{flex:1; min-width:0}
+.card-title{font-size:16px; font-weight:700; display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+.card-meta{display:flex; gap:8px; margin-top:6px; flex-wrap:wrap}
+.badge{font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:20px; display:inline-flex; align-items:center; gap:5px; text-transform:uppercase; letter-spacing:.4px}
+.badge.easy{background:rgba(34,197,94,.14); color:#4ade80}
+.badge.medium{background:rgba(245,158,11,.14); color:#fbbf24}
+.badge.hard{background:rgba(239,68,68,.14); color:#f87171}
+.badge.imp{background:var(--accent-soft); color:#c4b5fd}
+.badge.time{background:var(--panel-2); color:var(--muted)}
+.card-tools{display:flex; align-items:center; gap:6px}
+.icon-btn{width:34px; height:34px; border-radius:9px; display:grid; place-items:center; cursor:pointer; color:var(--muted);
+  background:transparent; border:1px solid transparent; transition:.16s; font-size:14px}
+.icon-btn:hover{background:var(--panel-2); color:var(--line)}
+.icon-btn.bm.on{color:var(--amber)}
+.icon-btn.cmp.on{color:var(--green)}
+.chev{transition:transform .3s; color:var(--muted)}
+.card.open .chev{transform:rotate(180deg)}
+
+.card-body{max-height:0; overflow:hidden; transition:max-height .45s cubic-bezier(.4,0,.2,1)}
+.card.open .card-body{max-height:8000px}
+.card-inner{padding:4px 20px 22px; border-top:1px solid var(--border)}
+
+.block-title{font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--accent-2);
+  margin:22px 0 12px; display:flex; align-items:center; gap:8px}
+.block-title:first-child{margin-top:16px}
+.notes{color:#d4d4d8; font-size:14.5px}
+.notes p{margin-bottom:10px}
+.notes ul{margin:8px 0 12px 20px} .notes li{margin-bottom:6px}
+.notes b,.notes strong{color:#fff}
+.notes code{background:var(--panel-2); padding:2px 6px; border-radius:6px; font-size:13px; color:#f0abfc; font-family:"JetBrains Mono",Consolas,monospace}
+
+.callout{border-left:3px solid var(--accent); background:rgba(124,58,237,.08); padding:12px 14px; border-radius:0 10px 10px 0; margin:12px 0; font-size:14px}
+.callout.warn{border-color:var(--red); background:rgba(239,68,68,.08)}
+.callout.tip{border-color:var(--green); background:rgba(34,197,94,.08)}
+
+.two-col{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.col-box{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:14px 16px}
+.col-box h4{font-size:13px; margin-bottom:8px; display:flex; align-items:center; gap:7px}
+.col-box.good h4{color:#4ade80} .col-box.bad h4{color:#f87171}
+.col-box ul{margin-left:18px; font-size:13.5px; color:#c7c7cf} .col-box li{margin-bottom:5px}
+
+/* Q&A accordion */
+.qa{border:1px solid var(--border); border-radius:11px; overflow:hidden; margin-bottom:9px; background:var(--panel-2)}
+.qa .q{display:flex; align-items:center; gap:11px; padding:12px 15px; cursor:pointer; font-size:14px; font-weight:600}
+.qa .q .num{width:22px; height:22px; flex:0 0 22px; border-radius:7px; display:grid; place-items:center; font-size:11px; font-weight:800;
+  background:var(--accent-soft); color:#c4b5fd}
+.qa .q .qx{margin-left:auto; color:var(--muted); transition:transform .3s}
+.qa.open .q .qx{transform:rotate(45deg)}
+.qa .a{max-height:0; overflow:hidden; transition:max-height .35s ease; color:#c7c7cf; font-size:13.8px}
+.qa.open .a{max-height:1200px}
+.qa .a > div{padding:2px 16px 14px 48px}
+
+pre[class*="language-"]{border-radius:12px !important; margin:10px 0 !important; border:1px solid var(--border); font-size:13px !important}
+.mermaid-wrap{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:18px; margin:10px 0; text-align:center; overflow:auto}
+.mermaid{opacity:0; transition:opacity .4s}
+.mermaid.ready{opacity:1}
+
+.revision-list{list-style:none} .revision-list li{display:flex; gap:10px; padding:7px 0; font-size:14px; color:#c7c7cf; border-bottom:1px dashed var(--border)}
+.revision-list li i{color:var(--accent-2); margin-top:4px}
+
+/* checklist (rapid revision) */
+.checklist{display:grid; gap:10px}
+.check-item{display:flex; align-items:center; gap:13px; padding:14px 16px; border-radius:12px; background:var(--panel);
+  border:1px solid var(--border); cursor:pointer; transition:.18s}
+.check-item:hover{border-color:var(--border-2)}
+.check-item.on{background:var(--green-soft); border-color:rgba(34,197,94,.4)}
+.check-box{width:24px; height:24px; border-radius:7px; border:2px solid var(--muted); display:grid; place-items:center; color:transparent; flex:0 0 24px; transition:.18s}
+.check-item.on .check-box{background:var(--green); border-color:var(--green); color:#062a12}
+.check-item .ct{font-weight:600} .check-item.on .ct{text-decoration:line-through; color:var(--muted)}
+
+/* ---------- modal (flashcards / quiz) ---------- */
+.modal{position:fixed; inset:0; z-index:120; display:none; align-items:center; justify-content:center; padding:24px;
+  background:rgba(6,6,8,.7); backdrop-filter:blur(6px)}
+.modal.show{display:flex; animation:fade .25s}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal-box{width:100%; max-width:640px; background:var(--panel-solid); border:1px solid var(--border-2); border-radius:20px;
+  box-shadow:var(--shadow); overflow:hidden; animation:pop .3s cubic-bezier(.22,1,.36,1)}
+@keyframes pop{from{transform:translateY(18px) scale(.97); opacity:0}to{transform:none; opacity:1}}
+.modal-head{display:flex; align-items:center; gap:12px; padding:18px 22px; border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:18px; font-weight:800; flex:1}
+.modal-head .close{cursor:pointer; color:var(--muted); font-size:20px; width:34px; height:34px; display:grid; place-items:center; border-radius:9px}
+.modal-head .close:hover{background:var(--panel-2); color:#fff}
+.modal-body{padding:24px 22px}
+
+/* flashcard */
+.flash{perspective:1400px; height:280px; margin-bottom:18px}
+.flash-inner{position:relative; width:100%; height:100%; transition:transform .6s; transform-style:preserve-3d; cursor:pointer}
+.flash.flipped .flash-inner{transform:rotateY(180deg)}
+.flash-face{position:absolute; inset:0; backface-visibility:hidden; border-radius:16px; padding:28px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; border:1px solid var(--border-2)}
+.flash-front{background:linear-gradient(135deg,rgba(124,58,237,.2),rgba(168,85,247,.08))}
+.flash-back{background:var(--panel-2); transform:rotateY(180deg); overflow:auto; align-items:flex-start; text-align:left}
+.flash-face .tag{font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--accent-2); margin-bottom:14px; font-weight:700}
+.flash-front .qtext{font-size:20px; font-weight:700}
+.flash-back .atext{font-size:14.5px; color:#d4d4d8}
+.flash-face .hint{position:absolute; bottom:14px; font-size:11px; color:var(--muted)}
+.flash-nav{display:flex; align-items:center; justify-content:space-between; gap:12px}
+.flash-nav .idx{font-size:13px; color:var(--muted)}
+
+/* quiz */
+.quiz-q{font-size:16px; font-weight:700; margin-bottom:16px}
+.quiz-q .qn{color:var(--accent-2); margin-right:6px}
+.opt{display:block; padding:13px 16px; border-radius:12px; border:1px solid var(--border-2); background:var(--panel-2);
+  margin-bottom:10px; cursor:pointer; transition:.16s; font-size:14px}
+.opt:hover{border-color:var(--accent)}
+.opt.correct{background:var(--green-soft); border-color:var(--green); color:#bbf7d0}
+.opt.wrong{background:rgba(239,68,68,.12); border-color:var(--red); color:#fca5a5}
+.opt.disabled{pointer-events:none; opacity:.85}
+.quiz-foot{display:flex; align-items:center; justify-content:space-between; margin-top:18px}
+.quiz-score{font-size:14px; color:var(--muted)}
+.quiz-explain{margin-top:12px; padding:12px 14px; border-radius:10px; background:rgba(124,58,237,.08); border-left:3px solid var(--accent); font-size:13.5px; display:none}
+.quiz-result{text-align:center; padding:20px}
+.quiz-result .big{font-size:52px; font-weight:800; background:linear-gradient(120deg,var(--accent-2),#e9d5ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
+
+/* floating action for mobile menu */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:55; display:none}
+.overlay.show{display:block}
+
+.empty{display:none; text-align:center; padding:60px 20px; color:var(--muted)}
+.empty.show{display:block}
+.empty i{font-size:40px; margin-bottom:14px; color:var(--muted-2)}
+
+mark{background:var(--amber); color:#111; border-radius:3px; padding:0 2px}
+
+footer{border-top:1px solid var(--border); padding:26px 34px; color:var(--muted); font-size:12.5px; text-align:center}
+
+/* ---------- responsive ---------- */
+@media(max-width:1024px){
+  .content{padding:22px 20px 80px}
+}
+@media(max-width:860px){
+  .hamburger{display:grid; place-items:center; width:40px; height:40px; border-radius:10px; background:var(--panel-2); border:1px solid var(--border-2); cursor:pointer}
+  .search{order:3; flex-basis:100%; max-width:none; margin:0}
+  .topbar{flex-wrap:wrap; padding:12px 16px}
+  .top-actions .label{display:none}
+  .sidebar{position:fixed; top:0; left:0; z-index:70; height:100vh; width:280px; background:var(--bg-2);
+    transform:translateX(-102%); transition:transform .3s; box-shadow:var(--shadow); padding-top:16px}
+  .sidebar.open{transform:none}
+  .content{padding:18px 16px 70px}
+  .two-col{grid-template-columns:1fr}
+  .hero{padding:28px 20px}
+  .qa .a > div{padding-left:20px}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="hamburger" id="hamburger"><i class="fa-solid fa-bars"></i></div>
+  <a class="brand" href="index.html" title="Back to hub">
+    <span class="logo"><i class="fa-solid fa-code"></i></span>
+    <span>Interview Prep<small>Java Backend · 3 YOE</small></span>
+  </a>
+  <div class="search">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input id="search" type="text" placeholder="Search topics, questions… (try “HashMap”)" autocomplete="off" />
+    <kbd>/</kbd>
+  </div>
+  <div class="top-actions">
+    <button class="btn" id="flashBtn"><i class="fa-solid fa-clone"></i><span class="label">Flashcards</span></button>
+    <button class="btn" id="quizBtn"><i class="fa-solid fa-circle-question"></i><span class="label">Quiz</span></button>
+    <button class="btn primary" id="toggleAll"><i class="fa-solid fa-angles-down"></i><span class="label">Expand All</span></button>
+  </div>
+</header>
+
+<div class="overlay" id="overlay"></div>
+
+<div class="shell">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-progress">
+      <div class="lab"><span>Overall Progress</span><b id="sideProgTxt">0%</b></div>
+      <div class="pbar"><i id="sideProgBar"></i></div>
+    </div>
+    <div class="side-title">Sections</div>
+    <nav id="nav"></nav>
+  </aside>
+
+  <!-- ============ CONTENT ============ -->
+  <main class="content">
+    <section class="hero">
+      <span class="eyebrow"><i class="fa-solid fa-bolt"></i> Complete Revision Guide</span>
+      <h1>Java <span>Backend</span> Interview Preparation</h1>
+      <p class="sub">Complete Revision Guide for a Java Backend Engineer (3 Years Experience) — core Java, Spring Boot, Microservices, Databases, Kafka, DevOps, System Design, project storytelling and HR.</p>
+      <div class="hero-stats">
+        <div class="s"><b id="stTopics">0</b><span>Topics</span></div>
+        <div class="s"><b id="stQuestions">0</b><span>Interview Qs</span></div>
+        <div class="s"><b id="stDone">0</b><span>Completed</span></div>
+        <div class="s"><b id="stBm">0</b><span>Bookmarked</span></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="lab"><span>Your progress</span><span class="pct" id="heroPct">0%</span></div>
+        <div class="pbar"><i id="heroBar"></i></div>
+      </div>
+    </section>
+
+    <div class="empty" id="empty"><i class="fa-solid fa-magnifying-glass"></i><p>No topics match your search.</p></div>
+
+    <div id="sections"></div>
+
+    <footer>Built with pure HTML · CSS · Vanilla JS · Mermaid · Prism · Font Awesome — progress is saved locally in your browser.</footer>
+  </main>
+</div>
+
+<!-- ============ FLASHCARD MODAL ============ -->
+<div class="modal" id="flashModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <i class="fa-solid fa-clone" style="color:var(--accent-2)"></i>
+      <h3>Flashcards</h3>
+      <select id="flashScope" class="btn" style="font-weight:600"></select>
+      <span class="close" data-close="flashModal">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="flash" id="flash">
+        <div class="flash-inner">
+          <div class="flash-face flash-front"><div class="tag">Question</div><div class="qtext" id="flashQ"></div><div class="hint"><i class="fa-solid fa-hand-pointer"></i> click to flip</div></div>
+          <div class="flash-face flash-back"><div class="tag">Answer</div><div class="atext" id="flashA"></div></div>
+        </div>
+      </div>
+      <div class="flash-nav">
+        <button class="btn" id="flashPrev"><i class="fa-solid fa-arrow-left"></i> Prev</button>
+        <span class="idx" id="flashIdx">1 / 1</span>
+        <button class="btn primary" id="flashNext">Next <i class="fa-solid fa-arrow-right"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ QUIZ MODAL ============ -->
+<div class="modal" id="quizModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <i class="fa-solid fa-circle-question" style="color:var(--accent-2)"></i>
+      <h3>Quiz Mode</h3>
+      <span class="quiz-score" id="quizScore">Score 0</span>
+      <span class="close" data-close="quizModal">&times;</span>
+    </div>
+    <div class="modal-body" id="quizBody"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+<script>
+/* =====================================================================
+   DATA MODEL  —  sections -> cards
+   card: {id,title,icon,diff,imp,time,notes(html),diagram(mermaid),
+          code:{lang,src}, q:[{q,a}], mistakes:[], revision:[],
+          pros:[], cons:[]}
+===================================================================== */
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+const DATA = [
+{ id:"java", title:"Java", icon:"fa-mug-hot", desc:"Core language, collections, concurrency & the JVM", cards:[
+  {
+    id:"oop", title:"OOP Principles & SOLID", icon:"fa-cubes", diff:"Easy", imp:"Very High", time:"7 min",
+    notes:`<p><b>Object-Oriented Programming</b> models software as interacting objects that bundle <b>state</b> (fields) and <b>behavior</b> (methods). The four pillars:</p>
+    <ul>
+      <li><b>Encapsulation</b> — hide internal state behind methods; expose a controlled API. Enables invariants and safe refactoring.</li>
+      <li><b>Inheritance</b> — a subclass reuses/extends a superclass (<code>is-a</code>). Prefer <b>composition over inheritance</b> to avoid fragile hierarchies.</li>
+      <li><b>Polymorphism</b> — one interface, many implementations. <i>Runtime</i> (method overriding / dynamic dispatch) vs <i>compile-time</i> (overloading).</li>
+      <li><b>Abstraction</b> — expose <i>what</i> not <i>how</i>, via interfaces/abstract classes.</li>
+    </ul>
+    <p><b>SOLID</b> makes OO code maintainable:</p>
+    <ul>
+      <li><b>S</b>ingle Responsibility — one reason to change.</li>
+      <li><b>O</b>pen/Closed — open for extension, closed for modification.</li>
+      <li><b>L</b>iskov Substitution — subtypes must be usable via the base type without surprises.</li>
+      <li><b>I</b>nterface Segregation — many small interfaces beat one fat one.</li>
+      <li><b>D</b>ependency Inversion — depend on abstractions, not concretions (the basis of Spring DI).</li>
+    </ul>`,
+    diagram:`graph TD
+  P["Payment (interface)<br/>+ pay(amount)"]
+  C["CardPayment<br/>implements pay()"]-->|implements| P
+  U["UpiPayment<br/>implements pay()"]-->|implements| P
+  CO["Checkout<br/>depends on Payment"]-->|uses abstraction| P`,
+    code:{lang:"java", src:`// Dependency Inversion + Polymorphism
+interface Payment { void pay(double amount); }
+
+class CardPayment implements Payment {
+  public void pay(double amt){ System.out.println("Card: " + amt); }
+}
+class UpiPayment implements Payment {
+  public void pay(double amt){ System.out.println("UPI: " + amt); }
+}
+
+class Checkout {              // depends on abstraction, not concretion
+  private final Payment payment;
+  Checkout(Payment payment){ this.payment = payment; }  // injected
+  void process(double amt){ payment.pay(amt); }
+}`},
+    q:[
+      {q:"Difference between abstraction and encapsulation?",a:"Abstraction hides <b>complexity</b> (what an object does) via interfaces/abstract classes. Encapsulation hides <b>data</b> (internal state) via access modifiers. Abstraction is design-level; encapsulation is implementation-level."},
+      {q:"Why prefer composition over inheritance?",a:"Inheritance creates tight coupling and a rigid hierarchy; changes in the parent ripple to children (fragile base class). Composition assembles behavior from smaller parts, is more flexible, and supports runtime swapping."},
+      {q:"Explain Liskov Substitution with an example.",a:"A subtype must honor the base type's contract. Classic violation: <code>Square extends Rectangle</code> — setting width also changes height, breaking code that assumes independent sides."},
+      {q:"Compile-time vs runtime polymorphism?",a:"Compile-time = overloading (same name, different params, resolved by compiler). Runtime = overriding (resolved via dynamic dispatch using the object's actual type)."},
+      {q:"How does SOLID relate to Spring?",a:"Spring is built on Dependency Inversion — beans depend on interfaces, the container injects concrete implementations, enabling testability and loose coupling."}
+    ],
+    mistakes:["Making everything <code>public</code> — breaks encapsulation.","Deep inheritance trees instead of composition.","Overriding but changing the contract (LSP violation).","Confusing overloading with overriding."],
+    revision:["4 pillars: Encapsulation, Inheritance, Polymorphism, Abstraction.","SOLID = SRP, OCP, LSP, ISP, DIP.","Favor composition & interfaces.","DIP is the heart of Spring DI."]
+  },
+  {
+    id:"collections", title:"Collections Framework", icon:"fa-layer-group", diff:"Medium", imp:"Very High", time:"9 min",
+    notes:`<p>The Collections framework provides reusable data structures under <code>Collection</code> and <code>Map</code>.</p>
+    <ul>
+      <li><b>ArrayList</b> — dynamic array; O(1) random access, O(n) middle insert/delete. Cache-friendly.</li>
+      <li><b>LinkedList</b> — doubly-linked; O(1) add/remove at ends, O(n) access. Rarely worth it in practice.</li>
+      <li><b>HashSet</b> — unordered unique elements (backed by HashMap), O(1) contains.</li>
+      <li><b>TreeSet</b> — sorted unique elements (red-black tree), O(log n).</li>
+      <li><b>LinkedHashMap</b> — insertion (or access) order; great for LRU caches via <code>removeEldestEntry</code>.</li>
+      <li><b>TreeMap</b> — sorted keys, O(log n), supports range queries (<code>floorKey</code>, <code>ceilingKey</code>).</li>
+      <li><b>PriorityQueue</b> — binary heap; O(log n) offer/poll; not sorted on iteration.</li>
+    </ul>
+    <div class="callout tip"><b>Rule of thumb:</b> default to <code>ArrayList</code> + <code>HashMap</code>; reach for Tree* when you need ordering, Linked* when you need predictable iteration order.</div>`,
+    diagram:`graph TD
+  A["Iterable"]-->B["Collection"]
+  B-->C["List<br/>ArrayList,LinkedList"]
+  B-->D["Set<br/>HashSet,TreeSet,LinkedHashSet"]
+  B-->E["Queue<br/>PriorityQueue,ArrayDeque"]
+  F["Map<br/>HashMap,TreeMap,LinkedHashMap"]`,
+    code:{lang:"java", src:`List<Integer> list = new ArrayList<>();      // O(1) get, O(n) insert-middle
+Set<String> unique = new HashSet<>();        // O(1) contains, no order
+NavigableSet<Integer> sorted = new TreeSet<>();  // O(log n), sorted
+Queue<Integer> pq = new PriorityQueue<>();   // min-heap by default
+pq.offer(5); pq.offer(1); pq.offer(3);
+pq.poll();  // -> 1 (smallest)
+
+// LinkedHashMap as an LRU cache
+Map<Integer,Integer> lru = new LinkedHashMap<>(16, .75f, true){
+  protected boolean removeEldestEntry(Map.Entry<Integer,Integer> e){ return size() > 100; }
+};`},
+    q:[
+      {q:"ArrayList vs LinkedList — when to use which?",a:"ArrayList for most cases (fast random access, cache-friendly). LinkedList only when you do many add/remove at both ends and rarely index — even then <code>ArrayDeque</code> is usually better."},
+      {q:"HashSet vs TreeSet?",a:"HashSet: O(1), unordered, allows one null. TreeSet: O(log n), sorted, no null, supports range operations. Use TreeSet when you need ordering/navigation."},
+      {q:"How do you implement an LRU cache in Java?",a:"Extend <code>LinkedHashMap</code> with access-order=true and override <code>removeEldestEntry</code>; or combine a HashMap with a doubly linked list for O(1) get/put."},
+      {q:"Difference between Comparable and Comparator?",a:"<code>Comparable</code> defines natural ordering inside the class (<code>compareTo</code>). <code>Comparator</code> is external, lets you define multiple orderings without touching the class."},
+      {q:"Fail-fast vs fail-safe iterators?",a:"Fail-fast (ArrayList, HashMap) throw <code>ConcurrentModificationException</code> on structural change during iteration. Fail-safe (CopyOnWriteArrayList, ConcurrentHashMap) iterate over a snapshot and don't throw."}
+    ],
+    mistakes:["Using LinkedList expecting speed — it's slower than ArrayList in most real workloads.","Modifying a collection while iterating with a for-each loop.","Assuming HashSet/HashMap preserve insertion order.","Using contains() on a List (O(n)) instead of a Set."],
+    revision:["ArrayList = array; LinkedList = nodes.","HashSet unordered, TreeSet sorted, LinkedHashSet insertion order.","PriorityQueue = heap, not fully sorted.","LinkedHashMap → LRU cache."]
+  },
+  {
+    id:"hashmap", title:"HashMap Internals", icon:"fa-table-cells", diff:"Hard", imp:"Very High", time:"10 min",
+    notes:`<p><b>HashMap</b> stores key-value pairs in an array of <b>buckets</b>. Index = <code>(n-1) & hash(key)</code> where <code>hash()</code> spreads bits by XOR-ing the high bits (<code>h ^ (h>>>16)</code>).</p>
+    <ul>
+      <li><b>Collision handling:</b> entries in the same bucket form a <b>linked list</b>; once a bucket exceeds <b>8</b> nodes (and table ≥ 64) it converts to a <b>red-black tree</b> → O(log n) worst case instead of O(n).</li>
+      <li><b>Load factor</b> (default 0.75) and <b>capacity</b> (default 16): when <code>size > capacity × loadFactor</code>, the map <b>resizes</b> (doubles) and <b>rehashes</b> all entries.</li>
+      <li><b>Complexity:</b> O(1) average get/put; O(log n) worst case (treeified).</li>
+      <li><b>Nulls:</b> one null key (bucket 0), multiple null values.</li>
+    </ul>
+    <div class="callout warn"><b>Contract:</b> if you override <code>equals()</code> you MUST override <code>hashCode()</code>, else lookups fail because the key lands in a different bucket.</div>`,
+    diagram:`graph LR
+  K["key.hashCode()"]-->H["hash = h ^ (h>>>16)"]
+  H-->I["index = (n-1) & hash"]
+  I-->B0["bucket 0"]
+  I-->B1["bucket 1 → node → node"]
+  I-->B2["bucket 2 (treeified if >8)"]`,
+    code:{lang:"java", src:`Map<String,Integer> map = new HashMap<>();
+map.put("a", 1);        // hash("a") -> bucket -> store Node
+map.put("a", 2);        // same key -> value overwritten (equals + hashCode)
+map.getOrDefault("b", 0);
+map.computeIfAbsent("c", k -> new ArrayList<>()); // atomic-ish init
+map.merge("a", 1, Integer::sum);                  // increment counter
+
+// WRONG: mutable key breaks the map
+// Once a key's hashCode changes after insertion, you can never find it again.`},
+    q:[
+      {q:"How does HashMap work internally?",a:"It hashes the key, spreads the bits, computes a bucket index with <code>(n-1)&hash</code>, and stores an entry there. Collisions chain as a linked list, converting to a red-black tree past 8 nodes. It resizes (doubles) when size exceeds capacity×loadFactor."},
+      {q:"Why 0.75 load factor?",a:"It's a balance: lower wastes memory (frequent resizes avoided but sparse), higher increases collisions. 0.75 gives a good time/space tradeoff empirically."},
+      {q:"Why treeify at 8?",a:"With a good hash, the probability of 8 collisions in one bucket is ~0.00000006 (Poisson). Below 8, list overhead is cheaper than a tree; past 8 the tree's O(log n) protects against bad/malicious hashes (DoS)."},
+      {q:"What happens if equals() and hashCode() are inconsistent?",a:"Two 'equal' keys with different hashCodes go to different buckets, so you can't retrieve a value you stored. Or unequal keys with same hashCode just collide (correct but slower)."},
+      {q:"HashMap vs Hashtable?",a:"Hashtable is legacy, fully synchronized (slow), no null keys/values. HashMap is unsynchronized and faster. For concurrency use ConcurrentHashMap, not Hashtable."},
+      {q:"What is a resize and why is it expensive?",a:"When the map grows past the threshold it allocates a table twice as big and re-distributes every entry into new buckets — O(n). Pre-size the map if you know the count."}
+    ],
+    mistakes:["Overriding equals() but not hashCode().","Using mutable objects as keys.","Assuming iteration order is stable.","Not pre-sizing large maps, causing repeated resizes."],
+    revision:["Bucket index = (n-1) & hash.","Treeify at 8 nodes + table≥64.","Resize when size > cap×0.75.","equals ⇔ hashCode contract."]
+  },
+  {
+    id:"chm", title:"ConcurrentHashMap", icon:"fa-diagram-project", diff:"Hard", imp:"High", time:"6 min",
+    notes:`<p><b>ConcurrentHashMap</b> is a thread-safe HashMap for high concurrency.</p>
+    <ul>
+      <li><b>Java 7:</b> segment locking (default 16 segments) — lock striping.</li>
+      <li><b>Java 8+:</b> abandoned segments; uses <b>CAS</b> for empty-bucket inserts and <b>synchronized on the first node</b> of a bucket for updates → finer-grained, higher throughput.</li>
+      <li>Reads are <b>lock-free</b> (volatile reads).</li>
+      <li>No null keys or values (ambiguity with "absent").</li>
+      <li>Iterators are <b>weakly consistent</b> — no <code>ConcurrentModificationException</code>.</li>
+    </ul>`,
+    diagram:`graph TD
+  T["put(k,v)"]-->E{"bucket empty?"}
+  E-->|yes| C["CAS new node (lock-free)"]
+  E-->|no| S["synchronized(firstNode)<br/>append / update"]
+  R["get(k)"]-->V["volatile read (no lock)"]`,
+    code:{lang:"java", src:`ConcurrentHashMap<String,Integer> counts = new ConcurrentHashMap<>();
+
+// atomic increment — safe under concurrency
+counts.merge("hits", 1, Integer::sum);
+counts.computeIfAbsent("list", k -> 0);
+
+// NOT atomic across two calls:
+// if (!m.containsKey(k)) m.put(k, v);  // race condition!
+counts.putIfAbsent("k", 0);            // do this instead`},
+    q:[
+      {q:"How is ConcurrentHashMap thread-safe without locking the whole map?",a:"Java 8+ uses CAS to insert into empty buckets and synchronizes only on the head node of a bucket for updates, so different buckets can be written concurrently. Reads use volatile and are lock-free."},
+      {q:"Why doesn't it allow null keys/values?",a:"With concurrency, <code>get(k)==null</code> is ambiguous — is the key absent or mapped to null? Disallowing null removes the ambiguity for lock-free reads."},
+      {q:"ConcurrentHashMap vs Collections.synchronizedMap()?",a:"synchronizedMap wraps a map with a single lock — every operation serializes. ConcurrentHashMap locks per-bucket, giving far better concurrent throughput."},
+      {q:"Is size() accurate under concurrency?",a:"It's an estimate (weakly consistent) computed from counter cells; exact only when no concurrent modifications."}
+    ],
+    mistakes:["Doing check-then-act (containsKey then put) instead of putIfAbsent/merge.","Expecting null keys/values.","Using it when you also need compound atomic operations across keys (needs external locking)."],
+    revision:["Java8: CAS + synchronized(head node).","Lock-free reads.","No nulls.","Use merge / computeIfAbsent for atomic updates."]
+  },
+  {
+    id:"java8", title:"Java 8 — Streams, Lambdas, Optional", icon:"fa-water", diff:"Medium", imp:"Very High", time:"8 min",
+    notes:`<p>Java 8 brought functional-style programming.</p>
+    <ul>
+      <li><b>Lambda</b> — anonymous function; instance of a <b>functional interface</b> (one abstract method).</li>
+      <li><b>Streams</b> — declarative pipelines: <i>source → intermediate (lazy) → terminal (eager)</i>. Intermediate ops (<code>map</code>, <code>filter</code>) don't run until a terminal op (<code>collect</code>, <code>reduce</code>, <code>forEach</code>).</li>
+      <li><b>Optional</b> — a container that may hold a value; avoids <code>NullPointerException</code> and makes absence explicit.</li>
+      <li><b>Method references</b> — <code>Class::method</code> shorthand for lambdas.</li>
+      <li><b>Collectors</b> — <code>groupingBy</code>, <code>toMap</code>, <code>joining</code>, <code>partitioningBy</code>.</li>
+    </ul>
+    <div class="callout warn">Streams are <b>not faster</b> than loops for small data; use them for readability. Avoid side-effects inside streams.</div>`,
+    diagram:`graph LR
+  S["list.stream()"]-->F["filter(lazy)"]-->M["map(lazy)"]-->So["sorted(lazy)"]-->C["collect(TERMINAL → runs pipeline)"]`,
+    code:{lang:"java", src:`record Employee(String name, String dept, int salary){}
+
+Map<String,Double> avgByDept = employees.stream()
+    .filter(e -> e.salary() > 30_000)
+    .collect(Collectors.groupingBy(
+        Employee::dept,
+        Collectors.averagingInt(Employee::salary)));
+
+Optional<Employee> top = employees.stream()
+    .max(Comparator.comparingInt(Employee::salary));
+top.map(Employee::name).ifPresent(System.out::println);
+
+String csv = names.stream().collect(Collectors.joining(", "));`},
+    q:[
+      {q:"Intermediate vs terminal operations?",a:"Intermediate ops (map, filter, sorted) are lazy and return a new stream. Terminal ops (collect, reduce, count, forEach) trigger execution and produce a result/side-effect. Without a terminal op nothing runs."},
+      {q:"map() vs flatMap()?",a:"map transforms each element 1→1. flatMap transforms each element into a stream and flattens them into one — used for nested collections (List<List<T>> → List<T>)."},
+      {q:"When should you NOT use Optional?",a:"As a field or method parameter, or in collections. It's designed for return types signalling 'maybe absent'. Never call get() without checking."},
+      {q:"Are streams parallel by default?",a:"No — use .parallelStream() or .parallel(). Only helps for large, CPU-bound, stateless, independent operations; can hurt for small or IO-bound work."},
+      {q:"What is a functional interface?",a:"An interface with exactly one abstract method (e.g. Runnable, Function, Predicate, Supplier, Consumer). Annotated @FunctionalInterface; can be implemented by a lambda."}
+    ],
+    mistakes:["Reusing a stream (they're one-shot).","Side-effects inside map/filter.","parallelStream on shared mutable state.","Calling Optional.get() without isPresent()."],
+    revision:["Lazy intermediates, eager terminals.","flatMap flattens nested streams.","Optional for return types only.","Functional interface = 1 abstract method."]
+  },
+  {
+    id:"threads", title:"Multithreading & Concurrency", icon:"fa-bolt", diff:"Hard", imp:"Very High", time:"11 min",
+    notes:`<p>Concurrency lets multiple tasks progress together. Java gives you threads plus high-level tools.</p>
+    <ul>
+      <li><b>Thread / Runnable</b> — Runnable is preferred (composition, thread-pool friendly).</li>
+      <li><b>ExecutorService</b> — manage a pool of reusable threads; submit <code>Runnable</code>/<code>Callable</code>, get a <code>Future</code>. Always shut it down.</li>
+      <li><b>CompletableFuture</b> — async composition (<code>thenApply</code>, <code>thenCompose</code>, <code>allOf</code>) without blocking.</li>
+      <li><b>volatile</b> — guarantees <b>visibility</b> (reads see latest write) but not atomicity.</li>
+      <li><b>synchronized</b> — mutual exclusion + visibility (happens-before on monitor enter/exit).</li>
+      <li><b>ReentrantLock</b> — like synchronized but with tryLock, fairness, interruptible, multiple conditions.</li>
+      <li><b>Atomic classes</b> — lock-free CAS-based counters (<code>AtomicInteger</code>).</li>
+    </ul>
+    <div class="callout warn"><b>Deadlock:</b> two threads each hold a lock the other needs. Prevent by <b>global lock ordering</b>, tryLock with timeout, or reducing lock scope.</div>`,
+    diagram:`sequenceDiagram
+  participant M as Main
+  participant P as ThreadPool
+  participant W as Worker
+  M->>P: submit(task) -> Future
+  P->>W: assign to idle thread
+  W-->>M: Future.complete(result)
+  M->>M: future.get() (blocks until done)`,
+    code:{lang:"java", src:`ExecutorService pool = Executors.newFixedThreadPool(4);
+
+CompletableFuture<Integer> f = CompletableFuture
+    .supplyAsync(() -> fetchFromDb(), pool)   // async
+    .thenApply(rows -> rows * 2)              // transform
+    .exceptionally(ex -> -1);                 // handle error
+
+int result = f.join();
+
+AtomicInteger counter = new AtomicInteger();
+counter.incrementAndGet();   // lock-free, thread-safe
+
+pool.shutdown();`},
+    q:[
+      {q:"volatile vs synchronized?",a:"volatile guarantees visibility of a single variable (no caching) but not atomicity of compound actions. synchronized gives both mutual exclusion and visibility for a block. Use volatile for flags, synchronized/locks for compound state."},
+      {q:"What causes a deadlock and how do you prevent it?",a:"Circular waiting on locks held in different order. Prevent by acquiring locks in a consistent global order, using tryLock with timeout, or minimizing lock scope / using higher-level concurrency utilities."},
+      {q:"Thread vs Runnable vs Callable?",a:"Thread is the unit of execution. Runnable is a task with no result/checked exception. Callable returns a value and can throw checked exceptions, used with ExecutorService returning a Future."},
+      {q:"Why prefer ExecutorService over new Thread()?",a:"Thread creation is expensive; pools reuse threads, bound concurrency, provide queuing, lifecycle management, and Futures. Raw threads leak and don't scale."},
+      {q:"What is a race condition?",a:"When correctness depends on the interleaving/timing of threads accessing shared mutable state without proper synchronization (e.g. read-modify-write of a counter)."},
+      {q:"How does CompletableFuture help?",a:"It composes async steps without blocking threads (thenApply/thenCompose/thenCombine), handles errors (exceptionally/handle), and coordinates many futures (allOf/anyOf)."},
+      {q:"What does ReentrantLock offer over synchronized?",a:"tryLock (non-blocking / timed), interruptible lock acquisition, fairness policy, and multiple Condition objects. Cost: you must unlock in finally."}
+    ],
+    mistakes:["Not shutting down ExecutorService (thread leak).","Using volatile for count++ (not atomic).","Catching InterruptedException and swallowing it.","Nested locks acquired in inconsistent order → deadlock.","Blocking inside CompletableFuture callbacks on the common pool."],
+    revision:["volatile = visibility; synchronized = visibility+atomicity.","Pools > raw threads.","CAS = AtomicInteger.","Lock ordering prevents deadlock.","CompletableFuture for async composition."]
+  },
+  {
+    id:"corejava", title:"Core Java — Strings, JVM, GC", icon:"fa-microchip", diff:"Medium", imp:"High", time:"9 min",
+    notes:`<p><b>Strings:</b> immutable; string literals live in the <b>String Pool</b> (part of the heap) so identical literals share one object. <code>new String("x")</code> forces a new heap object. Immutability enables safe sharing, caching of hashCode, and thread safety.</p>
+    <p><b>equals() vs ==</b>: <code>==</code> compares references; <code>equals()</code> compares content. Override both <code>equals</code> and <code>hashCode</code> together.</p>
+    <p><b>JVM memory:</b></p>
+    <ul>
+      <li><b>Heap</b> — objects; split into <b>Young</b> (Eden + 2 Survivors) and <b>Old</b> generation.</li>
+      <li><b>Stack</b> — per-thread frames, locals, method calls.</li>
+      <li><b>Metaspace</b> — class metadata (replaced PermGen in Java 8).</li>
+    </ul>
+    <p><b>Garbage Collection:</b> automatic reclamation of unreachable objects. Generational GC: minor GC cleans Young (fast, frequent); major/full GC cleans Old (slower). Modern collectors: <b>G1</b> (default), <b>ZGC</b>/<b>Shenandoah</b> (low pause).</p>`,
+    diagram:`graph TD
+  H["Heap"]-->Y["Young Gen"]
+  H-->O["Old Gen (tenured)"]
+  Y-->E["Eden"]
+  Y-->S0["Survivor 0"]
+  Y-->S1["Survivor 1"]
+  E-->|minor GC survivors| S0
+  S0-->|aged| O
+  M["Metaspace: class metadata"]`,
+    code:{lang:"java", src:`String a = "hello";            // pooled
+String b = "hello";            // same reference as a
+String c = new String("hello"); // new heap object
+System.out.println(a == b);       // true  (same pool ref)
+System.out.println(a == c);       // false (different object)
+System.out.println(a.equals(c));  // true  (same content)
+
+// Prefer StringBuilder in loops (String concat creates garbage)
+StringBuilder sb = new StringBuilder();
+for (int i=0;i<1000;i++) sb.append(i);`},
+    q:[
+      {q:"Why are Strings immutable in Java?",a:"Security (safe in class loading, network), thread-safety (shareable), enabling the string pool (dedup), and safe hashCode caching for HashMap keys."},
+      {q:"Explain the String pool.",a:"A special area where string literals are interned so equal literals share one object, saving memory. Use intern() to add a runtime string; new String() bypasses the pool."},
+      {q:"What is the difference between stack and heap?",a:"Stack holds per-thread method frames and local variables/references (fast, auto-freed on return). Heap holds all objects, shared across threads, cleaned by GC."},
+      {q:"How does garbage collection decide what to collect?",a:"Reachability: objects not reachable from GC roots (stack refs, static fields, JNI) are eligible. Generational GC assumes most objects die young, so it scans the Young gen frequently."},
+      {q:"What replaced PermGen and why?",a:"Metaspace (Java 8+), which grows in native memory instead of a fixed heap region, reducing OutOfMemoryError: PermGen and simplifying tuning."},
+      {q:"final vs finally vs finalize?",a:"final = constant/non-overridable/non-extendable. finally = block that always runs after try/catch. finalize = deprecated GC callback, never rely on it."}
+    ],
+    mistakes:["Comparing strings with == instead of equals().","String concatenation in loops instead of StringBuilder.","Relying on finalize() for cleanup (use try-with-resources).","Thinking GC prevents all memory leaks (references in static collections still leak)."],
+    revision:["Strings immutable → pool, thread-safe, cached hash.","== reference, equals content.","Heap=objects, Stack=frames, Metaspace=class data.","GC = reachability + generational."]
+  }
+]},
+
+{ id:"spring", title:"Spring Boot", icon:"fa-leaf", desc:"IoC/DI, beans, auto-config, transactions & request lifecycle", cards:[
+  {
+    id:"di", title:"IoC, Dependency Injection & Beans", icon:"fa-diagram-project", diff:"Medium", imp:"Very High", time:"9 min",
+    notes:`<p><b>Inversion of Control (IoC)</b>: the framework — not your code — creates and wires objects. The <b>ApplicationContext</b> is the IoC container.</p>
+    <p><b>Dependency Injection</b> is how IoC is implemented: dependencies are supplied to a bean rather than created by it.</p>
+    <ul>
+      <li><b>Constructor injection</b> (recommended) — immutable, testable, fails fast on missing deps, enables <code>final</code> fields.</li>
+      <li><b>Setter / field injection</b> — field (<code>@Autowired</code> on field) is discouraged (hard to test, hidden deps).</li>
+    </ul>
+    <p><b>Stereotypes:</b> <code>@Component</code> (generic), <code>@Service</code> (business logic), <code>@Repository</code> (data access + exception translation), <code>@Controller</code>/<code>@RestController</code> (web).</p>
+    <p><b>Bean scopes:</b> <code>singleton</code> (default, one per context), <code>prototype</code> (new each request), plus web scopes <code>request</code>/<code>session</code>.</p>
+    <p><b>Bean lifecycle:</b> instantiate → populate deps → <code>@PostConstruct</code> → in use → <code>@PreDestroy</code>.</p>`,
+    diagram:`sequenceDiagram
+  participant C as IoC Container
+  participant B as Bean
+  C->>B: 1. instantiate (constructor)
+  C->>B: 2. inject dependencies
+  C->>B: 3. @PostConstruct init
+  Note over B: bean is ready / in use
+  C->>B: 4. @PreDestroy (on shutdown)`,
+    code:{lang:"java", src:`@Service
+public class OrderService {
+  private final PaymentClient payment;      // final = safe
+  private final OrderRepository repo;
+
+  // constructor injection — no @Autowired needed on a single ctor
+  public OrderService(PaymentClient payment, OrderRepository repo){
+    this.payment = payment;
+    this.repo = repo;
+  }
+
+  @PostConstruct void warmUp(){ /* init cache */ }
+}`},
+    q:[
+      {q:"IoC vs Dependency Injection?",a:"IoC is the principle: control of object creation/wiring is inverted to the container. DI is a concrete technique to achieve IoC by injecting dependencies (constructor/setter/field)."},
+      {q:"Why is constructor injection preferred?",a:"Dependencies are explicit and mandatory, fields can be final (immutable), the object is always in a valid state, it's trivially unit-testable without Spring, and it avoids circular-dependency surprises."},
+      {q:"@Component vs @Service vs @Repository?",a:"All are stereotypes registering beans. @Service marks business logic, @Repository adds persistence exception translation, @Controller/@RestController mark web endpoints. Semantically different, technically similar."},
+      {q:"Default bean scope? Difference from prototype?",a:"Singleton — one shared instance per container. Prototype creates a new instance every time it's requested; Spring doesn't manage its full lifecycle (no @PreDestroy)."},
+      {q:"How does Spring resolve two beans of the same type?",a:"Ambiguity → use @Primary to pick a default, or @Qualifier(\"name\") at the injection point to choose explicitly."}
+    ],
+    mistakes:["Field injection (@Autowired on field) — hard to test, hides dependencies.","Injecting a prototype into a singleton and expecting new instances (use ObjectProvider/@Lookup).","Circular dependencies via constructor injection (redesign, don't @Lazy around it).","Doing heavy work in a constructor instead of @PostConstruct."],
+    revision:["IoC = container controls wiring; DI = the mechanism.","Prefer constructor injection.","Default scope = singleton.","Lifecycle: construct → inject → @PostConstruct → @PreDestroy."]
+  },
+  {
+    id:"autoconfig", title:"Auto-Configuration, Starters & Profiles", icon:"fa-gears", diff:"Medium", imp:"High", time:"7 min",
+    notes:`<p><b>Starters</b> are curated dependency bundles (e.g. <code>spring-boot-starter-web</code>) that pull compatible versions transitively.</p>
+    <p><b>Auto-configuration</b>: Spring Boot scans the classpath and conditionally configures beans via <code>@Conditional</code> (e.g. if <code>DataSource</code> class present and no user-defined one, create a default). Driven by <code>spring.factories</code> / <code>AutoConfiguration.imports</code>.</p>
+    <p><b>Profiles</b> (<code>@Profile("dev")</code>, <code>spring.profiles.active</code>) let you swap beans/config per environment.</p>
+    <p><b>Configuration properties</b>: bind <code>application.yml</code> keys to typed beans with <code>@ConfigurationProperties</code>. Externalized config precedence: command-line > env vars > profile yml > application.yml.</p>`,
+    diagram:`flowchart TD
+  A["App start"]-->B["@SpringBootApplication"]
+  B-->C["@EnableAutoConfiguration"]
+  C-->D["Scan classpath + AutoConfiguration.imports"]
+  D-->E{"@ConditionalOnClass / OnMissingBean?"}
+  E-->|match| F["Register auto bean"]
+  E-->|user bean exists| G["Back off"]`,
+    code:{lang:"java", src:`@ConfigurationProperties(prefix = "app.mail")
+public record MailProps(String host, int port, boolean tls) {}
+
+@Configuration
+class Cfg {
+  @Bean
+  @ConditionalOnMissingBean         // back off if user defines their own
+  MailSender mailSender(MailProps p){ return new SmtpSender(p); }
+}
+
+// application-dev.yml activated by: spring.profiles.active=dev`},
+    q:[
+      {q:"How does auto-configuration work?",a:"@EnableAutoConfiguration loads candidate config classes listed in META-INF/spring/...AutoConfiguration.imports. Each is guarded by @Conditional annotations (OnClass, OnMissingBean, OnProperty) so beans are created only when appropriate — and back off if you define your own."},
+      {q:"What is a Spring Boot starter?",a:"A dependency descriptor that transitively brings in a coherent set of libraries with managed versions, so you add one dependency instead of many."},
+      {q:"How do profiles work?",a:"Beans/config annotated with @Profile activate only when that profile is active (spring.profiles.active). application-{profile}.yml overrides base config per environment."},
+      {q:"@Value vs @ConfigurationProperties?",a:"@Value injects a single property with SpEL. @ConfigurationProperties binds a whole prefix to a typed, validated POJO — better for grouped, relaxed-binding config."},
+      {q:"How do you disable a specific auto-configuration?",a:"@SpringBootApplication(exclude = XxxAutoConfiguration.class) or spring.autoconfigure.exclude property."}
+    ],
+    mistakes:["Defining a bean that silently overrides auto-config and breaks defaults.","Hard-coding environment values instead of using profiles/externalized config.","Forgetting @EnableConfigurationProperties (older versions) for @ConfigurationProperties.","Putting secrets in application.yml committed to git."],
+    revision:["Starters = curated deps.","Auto-config = @Conditional beans that back off.","@Profile per environment.","@ConfigurationProperties for typed config."]
+  },
+  {
+    id:"reqflow", title:"Request Lifecycle & Startup Flow", icon:"fa-route", diff:"Medium", imp:"High", time:"7 min",
+    notes:`<p><b>Startup:</b> <code>main()</code> → <code>SpringApplication.run()</code> → create <code>ApplicationContext</code> → run auto-config → create beans → start embedded Tomcat → app ready (<code>ApplicationReadyEvent</code>).</p>
+    <p><b>Request flow (Spring MVC):</b> the <b>DispatcherServlet</b> is the front controller. It uses <b>HandlerMapping</b> to find the controller method, <b>HandlerAdapter</b> to invoke it (through interceptors/filters), the return value goes through <b>message converters</b> (Jackson → JSON), and exceptions are handled by <code>@ControllerAdice</code>/<code>@ExceptionHandler</code>.</p>`,
+    diagram:`sequenceDiagram
+  participant Cl as Client
+  participant F as Filter chain
+  participant DS as DispatcherServlet
+  participant HM as HandlerMapping
+  participant Ct as Controller
+  participant Sv as Service
+  Cl->>F: HTTP request
+  F->>DS: forward
+  DS->>HM: find handler
+  HM-->>DS: controller method
+  DS->>Ct: invoke (@RestController)
+  Ct->>Sv: business logic
+  Sv-->>Ct: result
+  Ct-->>DS: object
+  DS-->>Cl: JSON (message converter)`,
+    code:{lang:"java", src:`@RestControllerAdvice
+public class ApiExceptionHandler {
+  @ExceptionHandler(EntityNotFoundException.class)
+  public ResponseEntity<ApiError> handle(EntityNotFoundException ex){
+    return ResponseEntity.status(404)
+       .body(new ApiError("NOT_FOUND", ex.getMessage()));
+  }
+
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ResponseEntity<ApiError> invalid(MethodArgumentNotValidException ex){
+    return ResponseEntity.badRequest().body(ApiError.of(ex));
+  }
+}`},
+    q:[
+      {q:"What is the DispatcherServlet?",a:"The front controller in Spring MVC — a single servlet that receives every request and delegates to handler mappings, adapters, view resolvers / message converters, and exception handlers."},
+      {q:"Filter vs Interceptor?",a:"Filters are Servlet-level (before DispatcherServlet, work on raw request/response, e.g. auth, CORS). Interceptors are Spring MVC-level (preHandle/postHandle around the controller, have handler context)."},
+      {q:"How do you handle exceptions globally?",a:"@RestControllerAdvice with @ExceptionHandler methods mapping exception types to HTTP responses, centralizing error handling and response shape."},
+      {q:"What happens during Spring Boot startup?",a:"SpringApplication.run bootstraps the environment, creates the ApplicationContext, runs auto-configuration, instantiates singletons, starts the embedded server, and fires ApplicationReadyEvent."},
+      {q:"How is JSON produced from a controller return value?",a:"HttpMessageConverters (Jackson MappingJackson2HttpMessageConverter) serialize the returned object based on the Accept header / content negotiation."}
+    ],
+    mistakes:["Catching exceptions in each controller instead of a global advice.","Blocking calls on the request thread with no timeout.","Confusing filters (servlet) with interceptors (MVC).","Returning entities directly, leaking internal fields (use DTOs)."],
+    revision:["DispatcherServlet = front controller.","Filters (servlet) < Interceptors (MVC).","@RestControllerAdvice for global errors.","run() → context → auto-config → server → ready."]
+  },
+  {
+    id:"tx", title:"@Transactional Deep Dive", icon:"fa-right-left", diff:"Hard", imp:"High", time:"8 min",
+    notes:`<p><code>@Transactional</code> wraps a method in a DB transaction via an <b>AOP proxy</b>. On success it commits; on a <b>runtime (unchecked) exception</b> it rolls back (checked exceptions do <b>not</b> roll back by default).</p>
+    <ul>
+      <li><b>Propagation</b>: <code>REQUIRED</code> (default, join or start), <code>REQUIRES_NEW</code> (suspend current, start new), <code>NESTED</code> (savepoint).</li>
+      <li><b>Isolation</b>: READ_COMMITTED (default in most DBs), REPEATABLE_READ, SERIALIZABLE — trade consistency vs concurrency.</li>
+      <li><b>readOnly=true</b> hints the driver/ORM to optimize.</li>
+    </ul>
+    <div class="callout warn"><b>Self-invocation trap:</b> calling a <code>@Transactional</code> method from another method <i>in the same class</i> bypasses the proxy, so the annotation is ignored.</div>`,
+    diagram:`sequenceDiagram
+  participant P as AOP Proxy
+  participant M as Method
+  participant DB as Database
+  P->>DB: begin tx
+  P->>M: invoke business logic
+  M->>DB: insert/update
+  alt runtime exception
+    P->>DB: ROLLBACK
+  else success
+    P->>DB: COMMIT
+  end`,
+    code:{lang:"java", src:`@Service
+public class OrderService {
+
+  @Transactional                    // commit on success, rollback on RuntimeException
+  public void placeOrder(Order o){
+    orderRepo.save(o);
+    inventoryRepo.decrement(o.items());   // same tx
+    // if this throws a RuntimeException, BOTH statements roll back
+    payment.charge(o);
+  }
+
+  @Transactional(rollbackFor = Exception.class)  // also roll back checked
+  public void withChecked() throws IOException { /* ... */ }
+}`},
+    q:[
+      {q:"When does @Transactional roll back?",a:"By default only on unchecked (RuntimeException) and Error. Checked exceptions commit unless you set rollbackFor. You can also noRollbackFor specific types."},
+      {q:"Why does @Transactional sometimes not work?",a:"Common causes: self-invocation (calling the method from within the same bean bypasses the proxy), the method isn't public (proxy can't advise it), or the exception is checked and not in rollbackFor."},
+      {q:"Explain REQUIRES_NEW vs REQUIRED.",a:"REQUIRED joins an existing transaction or starts one. REQUIRES_NEW suspends the current transaction and runs in a brand-new independent one — useful for audit logging that must commit even if the outer tx rolls back."},
+      {q:"What are isolation levels for?",a:"They control visibility of concurrent changes: READ_COMMITTED avoids dirty reads, REPEATABLE_READ avoids non-repeatable reads, SERIALIZABLE avoids phantom reads — higher isolation reduces concurrency."},
+      {q:"What does readOnly=true do?",a:"Signals no writes, letting the ORM skip dirty checking/flush and the DB/driver optimize (e.g. route to replicas). It's a hint, not enforced by all DBs."}
+    ],
+    mistakes:["Calling a @Transactional method from the same class (self-invocation).","Expecting rollback on a checked exception without rollbackFor.","Making @Transactional methods non-public.","Long transactions holding locks (do external calls outside the tx)."],
+    revision:["Proxy-based; rollback on RuntimeException by default.","Self-invocation breaks it.","REQUIRES_NEW = independent tx.","readOnly optimizes reads."]
+  }
+]},
+
+{ id:"micro", title:"Microservices", icon:"fa-sitemap", desc:"Gateway, discovery, resilience, messaging & data patterns", cards:[
+  {
+    id:"patterns", title:"Core Patterns: Gateway, Discovery, Config", icon:"fa-network-wired", diff:"Medium", imp:"Very High", time:"9 min",
+    notes:`<p>Microservices split an app into small, independently deployable services owning their own data.</p>
+    <ul>
+      <li><b>API Gateway</b> — single entry point: routing, auth, rate limiting, aggregation (Spring Cloud Gateway).</li>
+      <li><b>Service Discovery</b> — services register (Eureka/Consul) so callers find instances dynamically instead of hard-coded hosts.</li>
+      <li><b>Config Server</b> — centralized, versioned config (Spring Cloud Config) with refresh.</li>
+      <li><b>Load Balancer</b> — client-side (Spring Cloud LoadBalancer) or server-side distributes traffic.</li>
+      <li><b>Distributed tracing</b> (Micrometer/Zipkin) + <b>centralized logging</b> (ELK) for observability across hops.</li>
+    </ul>`,
+    diagram:`graph TD
+  C["Client"]-->G["API Gateway"]
+  G-->O["Order Svc"]
+  G-->P["Payment Svc"]
+  G-->U["User Svc"]
+  O-->D["Discovery (Eureka)"]
+  P-->D
+  U-->D
+  O-.->CF["Config Server"]
+  O-.->T["Tracing/Logging"]`,
+    code:{lang:"yaml", src:`# Spring Cloud Gateway route
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: order-service
+          uri: lb://ORDER-SERVICE      # lb:// = via service discovery
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - name: RequestRateLimiter
+            - StripPrefix=2`},
+    q:[
+      {q:"Why use an API Gateway?",a:"It centralizes cross-cutting concerns (auth, rate limiting, CORS, TLS termination, routing, request aggregation), so individual services stay focused and clients have one endpoint."},
+      {q:"What problem does service discovery solve?",a:"In dynamic environments instances scale up/down and change IPs. Discovery lets services register and callers resolve healthy instances by logical name instead of hard-coded addresses."},
+      {q:"Client-side vs server-side load balancing?",a:"Client-side (the caller picks an instance from the registry, e.g. Spring Cloud LoadBalancer) avoids an extra hop. Server-side (a dedicated LB / gateway) is simpler for clients but adds a network hop."},
+      {q:"How do you trace a request across services?",a:"Propagate a correlation/trace ID (W3C traceparent) via headers; tools like Micrometer Tracing + Zipkin/Jaeger stitch spans into one trace."},
+      {q:"How do microservices handle configuration?",a:"A central Config Server serves environment-specific, versioned config; services fetch on startup and can refresh at runtime (@RefreshScope)."}
+    ],
+    mistakes:["Building a distributed monolith (services too chatty / share a DB).","No centralized tracing → debugging nightmares.","Hard-coding service URLs.","Gateway becoming a bottleneck / single point of failure without HA."],
+    revision:["Gateway = single entry, cross-cutting concerns.","Discovery = dynamic instance resolution.","Config Server = central config.","Tracing + logging = observability."]
+  },
+  {
+    id:"resilience", title:"Resilience: Circuit Breaker, Retry, Rate Limiter", icon:"fa-shield-halved", diff:"Hard", imp:"Very High", time:"8 min",
+    notes:`<p>Remote calls fail. Resilience patterns stop failures from cascading.</p>
+    <ul>
+      <li><b>Circuit Breaker</b> (Resilience4j) — after a failure threshold it <b>opens</b> and fails fast, avoiding hammering a dead service; after a wait it goes <b>half-open</b> to test recovery, then <b>closes</b>.</li>
+      <li><b>Retry</b> — re-attempt transient failures with <b>exponential backoff + jitter</b>. Only for idempotent operations.</li>
+      <li><b>Rate Limiter</b> — cap requests to protect downstreams (token bucket).</li>
+      <li><b>Bulkhead</b> — isolate resource pools so one slow dependency doesn't exhaust all threads.</li>
+      <li><b>Timeout</b> — never wait forever; always bound remote calls.</li>
+    </ul>`,
+    diagram:`stateDiagram-v2
+  [*] --> Closed
+  Closed --> Open: failures > threshold
+  Open --> HalfOpen: after wait duration
+  HalfOpen --> Closed: trial calls succeed
+  HalfOpen --> Open: trial calls fail`,
+    code:{lang:"java", src:`@CircuitBreaker(name = "payment", fallbackMethod = "fallback")
+@Retry(name = "payment")
+@TimeLimiter(name = "payment")
+public CompletableFuture<Receipt> charge(Order o){
+  return CompletableFuture.supplyAsync(() -> paymentClient.charge(o));
+}
+
+public CompletableFuture<Receipt> fallback(Order o, Throwable t){
+  return CompletableFuture.completedFuture(Receipt.pending(o)); // graceful degrade
+}`},
+    q:[
+      {q:"Explain the circuit breaker states.",a:"Closed: calls pass through, failures counted. Open: calls fail fast (short-circuit) for a wait period. Half-Open: a few trial calls are allowed; success → Closed, failure → Open again."},
+      {q:"When is retry dangerous?",a:"For non-idempotent operations (e.g. charge a card) retries can double-execute. Also retry storms amplify load on a struggling service — use backoff + jitter and cap attempts."},
+      {q:"Circuit breaker vs retry — how do they combine?",a:"Retry handles transient blips; circuit breaker handles sustained failures. Together: retry a couple of times, but if failures persist the breaker opens to stop retrying a dead dependency."},
+      {q:"What is a bulkhead?",a:"Isolating resources (thread pools/semaphores) per dependency so a slow one can't consume all threads and take down the whole service — like watertight compartments in a ship."},
+      {q:"Why are timeouts essential?",a:"Without them a slow downstream ties up threads/connections indefinitely, causing cascading resource exhaustion. Always bound remote calls."}
+    ],
+    mistakes:["Retrying non-idempotent operations.","No jitter → synchronized retry storms.","No timeout on remote calls.","Fallback that hides real errors without alerting."],
+    revision:["Breaker: Closed→Open→HalfOpen.","Retry only idempotent + backoff+jitter.","Bulkhead isolates pools.","Always set timeouts."]
+  },
+  {
+    id:"data", title:"Data Patterns: Saga, CQRS, DB-per-Service", icon:"fa-database", diff:"Hard", imp:"High", time:"9 min",
+    notes:`<p><b>Database per service</b> keeps services loosely coupled — but you lose cross-service ACID transactions.</p>
+    <ul>
+      <li><b>Saga</b> — a sequence of local transactions coordinated by events; each step has a <b>compensating action</b> to undo on failure. <b>Choreography</b> (event-driven, no central coordinator) vs <b>Orchestration</b> (a central saga orchestrator).</li>
+      <li><b>CQRS</b> — separate the write model (commands) from the read model (queries), often with different stores optimized for each.</li>
+      <li><b>Event-driven / async</b> (Kafka) decouples producers from consumers and smooths load.</li>
+      <li><b>Outbox pattern</b> — write the event to an outbox table in the same DB transaction, then a relay publishes to Kafka → avoids dual-write inconsistency.</li>
+    </ul>`,
+    diagram:`sequenceDiagram
+  participant O as Order
+  participant P as Payment
+  participant I as Inventory
+  O->>P: OrderCreated (event)
+  P->>I: PaymentDone (event)
+  I-->>O: InventoryReserved
+  Note over O,I: On failure, emit compensating events (refund, cancel)`,
+    code:{lang:"java", src:`// Outbox: write event + state in ONE local transaction
+@Transactional
+public void placeOrder(Order o){
+  orderRepo.save(o);
+  outboxRepo.save(new OutboxEvent("OrderCreated", toJson(o))); // same tx
+}
+// A separate relay polls outbox -> publishes to Kafka -> marks sent
+// Guarantees at-least-once delivery without dual-write inconsistency.`},
+    q:[
+      {q:"How do you maintain consistency without distributed transactions?",a:"Use the Saga pattern: a chain of local transactions with compensating actions, coordinated by events (choreography) or an orchestrator. Embrace eventual consistency."},
+      {q:"Choreography vs orchestration saga?",a:"Choreography: services react to each other's events — decentralized, but hard to follow. Orchestration: a central orchestrator tells each service what to do — clearer, testable, but a coordination component to maintain."},
+      {q:"What is CQRS and when is it worth it?",a:"Command Query Responsibility Segregation splits writes and reads into separate models/stores. Worth it for read-heavy systems with complex queries or very different read/write scaling — otherwise it adds complexity."},
+      {q:"What is the dual-write problem and how does the outbox pattern solve it?",a:"Writing to the DB and publishing to Kafka in two steps can partially fail (DB commits, publish fails). The outbox writes the event into the same DB transaction; a relay later publishes it reliably (at-least-once)."},
+      {q:"Why database-per-service?",a:"It enforces loose coupling and lets each service choose the right store and evolve its schema independently. Cost: no cross-service joins/transactions, so you use APIs, events, and sagas."}
+    ],
+    mistakes:["Sharing one database across services (hidden coupling).","Dual writes to DB and Kafka without an outbox.","Adopting CQRS everywhere by default.","Ignoring idempotency in event consumers."],
+    revision:["DB-per-service → no cross-service ACID.","Saga + compensations for consistency.","CQRS splits read/write models.","Outbox fixes dual-write."]
+  }
+]},
+
+{ id:"rest", title:"REST APIs", icon:"fa-plug", desc:"HTTP semantics, status codes, auth & best practices", cards:[
+  {
+    id:"http", title:"HTTP Methods, Idempotency & Status Codes", icon:"fa-signs-post", diff:"Easy", imp:"Very High", time:"7 min",
+    notes:`<p>REST maps resources to URLs and operations to HTTP verbs.</p>
+    <ul>
+      <li><b>GET</b> — read, safe & idempotent, cacheable.</li>
+      <li><b>POST</b> — create / non-idempotent action.</li>
+      <li><b>PUT</b> — full replace, idempotent.</li>
+      <li><b>PATCH</b> — partial update (not necessarily idempotent).</li>
+      <li><b>DELETE</b> — remove, idempotent.</li>
+    </ul>
+    <p><b>Idempotent</b> = repeating the same request yields the same server state (GET, PUT, DELETE). POST is not — protect it with an <b>idempotency key</b>.</p>
+    <p><b>Status codes:</b> 200 OK · 201 Created · 204 No Content · 400 Bad Request · 401 Unauthorized (not authenticated) · 403 Forbidden (authenticated, not allowed) · 404 Not Found · 409 Conflict · 429 Too Many Requests · 500 Server Error.</p>`,
+    diagram:`graph LR
+  A["2xx Success<br/>200,201,204"]
+  B["4xx Client error<br/>400,401,403,404,409,429"]
+  C["5xx Server error<br/>500,502,503"]`,
+    code:{lang:"java", src:`@PostMapping("/orders")
+public ResponseEntity<OrderDto> create(@Valid @RequestBody CreateOrder req){
+  Order saved = service.create(req);
+  return ResponseEntity
+      .created(URI.create("/orders/" + saved.id()))  // 201 + Location
+      .body(OrderDto.from(saved));
+}
+
+@PutMapping("/orders/{id}")   // idempotent full replace
+public OrderDto replace(@PathVariable Long id, @RequestBody OrderDto dto){ ... }`},
+    q:[
+      {q:"Which HTTP methods are idempotent?",a:"GET, PUT, DELETE, HEAD, OPTIONS. POST and (usually) PATCH are not. Idempotent means repeating the request leaves the server in the same state."},
+      {q:"401 vs 403?",a:"401 Unauthorized = not authenticated (who are you?). 403 Forbidden = authenticated but not permitted (you can't do this)."},
+      {q:"200 vs 201 vs 204?",a:"200 OK with body, 201 Created (new resource, usually with Location header), 204 No Content (success, no body — e.g. DELETE)."},
+      {q:"How do you make POST idempotent?",a:"Client sends an Idempotency-Key header; the server stores the key + result and returns the cached response on retries, preventing duplicate creation."},
+      {q:"When would you return 409 Conflict?",a:"When the request conflicts with current state — e.g. optimistic-lock version mismatch, duplicate unique key, or trying to create something that already exists."}
+    ],
+    mistakes:["Using GET for state-changing operations.","Returning 200 for everything (including errors).","Confusing 401 and 403.","Non-idempotent PUT implementations."],
+    revision:["GET/PUT/DELETE idempotent; POST not.","401 auth, 403 permission.","201 create + Location; 204 no body.","Idempotency-Key for safe retries."]
+  },
+  {
+    id:"bestpractices", title:"Auth (JWT), Versioning & Best Practices", icon:"fa-key", diff:"Medium", imp:"High", time:"8 min",
+    notes:`<p><b>JWT</b> is a signed token (header.payload.signature). The server verifies the signature (HS256 secret or RS256 public key) — no server session needed (stateless). Keep them short-lived; use refresh tokens.</p>
+    <p><b>Best practices:</b></p>
+    <ul>
+      <li><b>Nouns, not verbs</b>: <code>/orders/123</code> not <code>/getOrder</code>.</li>
+      <li><b>Pagination</b>: <code>?page=2&size=20</code> or cursor-based for large/scrolling data.</li>
+      <li><b>Filtering / sorting</b>: <code>?status=PAID&sort=createdAt,desc</code>.</li>
+      <li><b>Versioning</b>: URI (<code>/v1/</code>), header, or media-type. URI is simplest.</li>
+      <li>Use DTOs (never expose entities), consistent error shape, HATEOAS optional.</li>
+    </ul>`,
+    diagram:`sequenceDiagram
+  participant C as Client
+  participant A as Auth Server
+  participant R as Resource API
+  C->>A: login (credentials)
+  A-->>C: JWT (signed, short-lived) + refresh token
+  C->>R: request + Authorization: Bearer JWT
+  R->>R: verify signature + expiry (no DB session)
+  R-->>C: 200 data`,
+    code:{lang:"java", src:`// Cursor pagination beats OFFSET for large tables
+GET /api/orders?limit=20&cursor=eyJpZCI6MTIzfQ
+
+// JWT verification (simplified)
+Jws<Claims> jws = Jwts.parserBuilder()
+    .setSigningKey(publicKey)
+    .build()
+    .parseClaimsJws(token);        // throws if invalid/expired
+String user = jws.getBody().getSubject();`},
+    q:[
+      {q:"Why is JWT stateless and what's the downside?",a:"The token itself carries claims and is verified by signature, so no server session lookup. Downside: you can't easily revoke a token before expiry — mitigate with short expiry + refresh tokens or a denylist."},
+      {q:"How do you version an API?",a:"URI versioning (/v1/orders) is most common and cache-friendly; alternatives are header or media-type (Accept) versioning. Keep old versions until clients migrate."},
+      {q:"Offset vs cursor pagination?",a:"OFFSET/LIMIT is simple but slow and inconsistent on large, changing datasets (rows shift). Cursor (keyset) pagination uses a stable pointer (e.g. last id) — fast and consistent."},
+      {q:"Where should you store a JWT on the client?",a:"HttpOnly Secure cookie (mitigates XSS token theft) or memory. Avoid localStorage for sensitive tokens due to XSS exposure."},
+      {q:"Why use DTOs instead of returning entities?",a:"To decouple API contract from the DB schema, avoid leaking internal/sensitive fields, prevent lazy-loading serialization issues, and version the API independently."}
+    ],
+    mistakes:["Exposing JPA entities directly in responses.","Long-lived JWTs with no rotation/revocation.","OFFSET pagination on huge tables.","Verbs in URLs and inconsistent error formats."],
+    revision:["JWT = stateless, signed, short-lived + refresh.","Nouns + plural resources.","Cursor pagination for scale.","DTOs, consistent errors, /v1 versioning."]
+  }
+]},
+
+{ id:"db", title:"Database", icon:"fa-database", desc:"SQL, indexes, transactions, locking & performance", cards:[
+  {
+    id:"indexes", title:"Indexes, Joins & Execution Plans", icon:"fa-magnifying-glass-chart", diff:"Medium", imp:"Very High", time:"9 min",
+    notes:`<p>An <b>index</b> is a sorted data structure (usually a <b>B-tree</b>) that speeds up lookups from O(n) scan to O(log n), at the cost of slower writes and extra storage.</p>
+    <ul>
+      <li><b>Primary key</b> — unique + not null; usually the clustered index (rows stored in PK order in InnoDB).</li>
+      <li><b>Composite index</b> <code>(a,b,c)</code> — follows the <b>left-most prefix rule</b>: usable for <code>a</code>, <code>a,b</code>, <code>a,b,c</code> — not for <code>b</code> alone.</li>
+      <li><b>Covering index</b> — includes all columns a query needs, so the DB never touches the table.</li>
+      <li><b>Joins</b>: INNER (matching), LEFT (all left + matched right), nested-loop vs hash vs merge join chosen by the planner.</li>
+    </ul>
+    <div class="callout tip">Use <code>EXPLAIN</code>/<code>EXPLAIN ANALYZE</code> to see if a query uses an index (<code>ref</code>/<code>range</code>) or does a full scan (<code>ALL</code>).</div>`,
+    diagram:`graph TD
+  Q["SELECT ... WHERE email=?"]-->P{"Index on email?"}
+  P-->|yes| I["B-tree seek O(log n)"]
+  P-->|no| F["Full table scan O(n)"]
+  I-->R["fetch row(s)"]`,
+    code:{lang:"sql", src:`-- Composite index: left-most prefix rule
+CREATE INDEX idx_orders_user_status ON orders(user_id, status, created_at);
+
+-- Uses the index (prefix user_id, status):
+SELECT * FROM orders WHERE user_id = 42 AND status = 'PAID';
+
+-- Does NOT use it efficiently (skips leading column):
+SELECT * FROM orders WHERE status = 'PAID';
+
+EXPLAIN ANALYZE
+SELECT * FROM orders WHERE user_id = 42 ORDER BY created_at DESC LIMIT 20;`},
+    q:[
+      {q:"How does a database index work?",a:"It's typically a B-tree keeping indexed column values sorted with pointers to rows, turning a full O(n) scan into an O(log n) seek. Writes must also update the index, so they cost more."},
+      {q:"Explain the left-most prefix rule.",a:"A composite index (a,b,c) can serve queries filtering on a, or a+b, or a+b+c — always starting from the left. It can't be used to filter on b or c alone."},
+      {q:"When do indexes hurt?",a:"They slow down INSERT/UPDATE/DELETE (index maintenance), consume storage, and too many indexes confuse the planner. Low-cardinality columns (e.g. boolean) rarely benefit."},
+      {q:"INNER JOIN vs LEFT JOIN?",a:"INNER returns only matching rows from both tables. LEFT returns all rows from the left table plus matches (NULLs where none) from the right."},
+      {q:"What is a covering index?",a:"An index that contains every column a query reads, so the engine answers from the index alone (index-only scan) without visiting the table."},
+      {q:"How do you diagnose a slow query?",a:"Run EXPLAIN/EXPLAIN ANALYZE, look for full scans, missing indexes, bad row estimates, filesort/temp tables; add/adjust indexes, rewrite the query, or fix statistics."}
+    ],
+    mistakes:["Indexing every column 'just in case'.","Function on an indexed column in WHERE (breaks index use).","Ignoring left-most prefix rule.","SELECT * when a covering index could serve fewer columns."],
+    revision:["Index = B-tree, O(log n).","Composite = left-most prefix.","Covering index = index-only scan.","EXPLAIN to verify."]
+  },
+  {
+    id:"tx-db", title:"Transactions, Isolation & Locking", icon:"fa-lock", diff:"Hard", imp:"High", time:"9 min",
+    notes:`<p><b>ACID</b>: Atomicity, Consistency, Isolation, Durability.</p>
+    <p><b>Isolation levels</b> (weak → strong) and the anomalies they prevent:</p>
+    <ul>
+      <li><b>READ UNCOMMITTED</b> — dirty reads possible.</li>
+      <li><b>READ COMMITTED</b> — no dirty reads (default in Postgres/Oracle).</li>
+      <li><b>REPEATABLE READ</b> — no non-repeatable reads (default in MySQL InnoDB).</li>
+      <li><b>SERIALIZABLE</b> — no phantom reads; fully isolated, lowest concurrency.</li>
+    </ul>
+    <p><b>Locking:</b> <b>Optimistic</b> (version column, no locks, check-on-commit — best for low contention) vs <b>Pessimistic</b> (<code>SELECT ... FOR UPDATE</code> locks rows — best for high contention/hot rows).</p>`,
+    diagram:`graph TD
+  A["Isolation Level"]-->B["READ UNCOMMITTED → dirty read"]
+  A-->C["READ COMMITTED → non-repeatable read"]
+  A-->D["REPEATABLE READ → phantom read"]
+  A-->E["SERIALIZABLE → none (slowest)"]`,
+    code:{lang:"sql", src:`-- Optimistic locking (JPA @Version): update fails if version changed
+UPDATE product SET stock = stock - 1, version = version + 1
+WHERE id = 10 AND version = 5;      -- 0 rows updated => conflict (retry)
+
+-- Pessimistic locking: block others until commit
+BEGIN;
+SELECT stock FROM product WHERE id = 10 FOR UPDATE;  -- row locked
+UPDATE product SET stock = stock - 1 WHERE id = 10;
+COMMIT;`},
+    q:[
+      {q:"Explain dirty, non-repeatable and phantom reads.",a:"Dirty read: seeing another tx's uncommitted change. Non-repeatable read: re-reading a row returns different committed values. Phantom read: re-running a range query returns new rows inserted by another committed tx."},
+      {q:"Optimistic vs pessimistic locking — when to use each?",a:"Optimistic (version check) suits low-contention, high-read workloads — no locks, retry on conflict. Pessimistic (FOR UPDATE) suits high-contention hot rows where retries would be wasteful, at the cost of blocking."},
+      {q:"What's the default isolation level?",a:"Postgres/Oracle: READ COMMITTED. MySQL InnoDB: REPEATABLE READ. Higher isolation reduces anomalies but lowers concurrency and can cause more lock waits/deadlocks."},
+      {q:"What is the N+1 query problem?",a:"Loading N parent rows then firing one query per parent for its children (N+1 total). Fix with a JOIN FETCH, @EntityGraph, or batch fetching."},
+      {q:"How do deadlocks happen in a database?",a:"Two transactions lock rows in opposite order and each waits for the other. The DB detects the cycle and kills one (deadlock victim). Prevent with consistent lock ordering and short transactions."}
+    ],
+    mistakes:["Long transactions holding locks during external calls.","Lazy loading in a loop → N+1.","Choosing SERIALIZABLE everywhere (kills throughput).","No retry logic for optimistic-lock conflicts."],
+    revision:["ACID; isolation trades consistency vs concurrency.","Optimistic=version, Pessimistic=FOR UPDATE.","N+1 → JOIN FETCH.","Keep transactions short."]
+  }
+]},
+
+{ id:"kafka", title:"Kafka", icon:"fa-tower-broadcast", desc:"Brokers, partitions, offsets, delivery & ordering", cards:[
+  {
+    id:"kafka-arch", title:"Architecture: Brokers, Topics, Partitions", icon:"fa-server", diff:"Medium", imp:"Very High", time:"9 min",
+    notes:`<p>Kafka is a distributed, append-only <b>commit log</b> for streaming events.</p>
+    <ul>
+      <li><b>Producer</b> → writes records to a <b>topic</b>. <b>Consumer</b> → reads them.</li>
+      <li><b>Broker</b> — a Kafka server; a cluster has many. <b>Partition</b> — a topic is split into partitions for parallelism; each is an ordered, immutable log.</li>
+      <li><b>Offset</b> — a record's position within a partition. Consumers track committed offsets to resume.</li>
+      <li><b>Consumer group</b> — consumers share the work: each partition is consumed by exactly one consumer in the group (max parallelism = partition count).</li>
+      <li><b>Replication</b> — each partition has a leader + follower replicas. <b>ISR</b> (in-sync replicas) can become leader on failure. <code>acks=all</code> + <code>min.insync.replicas</code> guarantees durability.</li>
+      <li><b>Ordering</b> is guaranteed only <b>within a partition</b> — use a partition key to keep related events ordered.</li>
+    </ul>`,
+    diagram:`graph TD
+  P["Producer"]-->|key→hash| T["Topic: orders"]
+  T-->P0["Partition 0 (leader b1)"]
+  T-->P1["Partition 1 (leader b2)"]
+  P0-->C1["Consumer A (group g)"]
+  P1-->C2["Consumer B (group g)"]
+  P0-.replica.->R0["follower b2 (ISR)"]`,
+    code:{lang:"java", src:`@KafkaListener(topics = "orders", groupId = "billing")
+public void consume(ConsumerRecord<String,Order> rec, Acknowledgment ack){
+  process(rec.value());
+  ack.acknowledge();        // manual commit AFTER processing (at-least-once)
+}
+
+// Producer: key controls partition => ordering per key
+kafkaTemplate.send("orders", order.customerId(), order);`},
+    q:[
+      {q:"How does Kafka guarantee ordering?",a:"Ordering is guaranteed only within a single partition. Records with the same key hash to the same partition, so all events for one entity (e.g. a customer) stay ordered. Across partitions there's no global order."},
+      {q:"What is a consumer group?",a:"A set of consumers cooperating to read a topic. Each partition is assigned to exactly one consumer in the group, enabling horizontal scaling; adding more consumers than partitions leaves some idle."},
+      {q:"What is ISR and why does it matter?",a:"In-Sync Replicas are followers caught up with the leader. Only ISR members can be elected leader. With acks=all and min.insync.replicas=2, a write is acknowledged only after enough replicas have it — preventing data loss."},
+      {q:"How does a consumer resume after a crash?",a:"It commits offsets (the last processed position per partition). On restart/rebalance it reads from the last committed offset. Commit after processing for at-least-once semantics."},
+      {q:"How do you scale consumers?",a:"Increase partitions and add consumers to the group (up to the partition count). Parallelism is bounded by partition count, so plan partitions for peak throughput."}
+    ],
+    mistakes:["Expecting global ordering across partitions.","More consumers than partitions (idle consumers).","Committing offsets before processing (data loss on crash).","acks=1 when you need durability."],
+    revision:["Order only within a partition (use keys).","1 partition → 1 consumer per group.","ISR + acks=all = durability.","Offset = resume point."]
+  },
+  {
+    id:"kafka-delivery", title:"Delivery Semantics & Exactly-Once", icon:"fa-check-double", diff:"Hard", imp:"High", time:"7 min",
+    notes:`<p>Three delivery guarantees:</p>
+    <ul>
+      <li><b>At-most-once</b> — commit offset before processing; on crash you lose messages. Fastest, lossy.</li>
+      <li><b>At-least-once</b> — commit after processing; on crash you reprocess → possible <b>duplicates</b>. Most common; make consumers <b>idempotent</b>.</li>
+      <li><b>Exactly-once (EOS)</b> — idempotent producer (dedup by sequence number) + transactions (atomic write across partitions + offset commit). Enabled with <code>enable.idempotence=true</code> and transactional producers.</li>
+    </ul>
+    <div class="callout tip">In practice, most teams use <b>at-least-once + idempotent consumers</b> (dedup on a unique key) — it's simpler and robust.</div>`,
+    diagram:`graph LR
+  A["At-most-once<br/>commit → process (lossy)"]
+  B["At-least-once<br/>process → commit (dupes)"]
+  C["Exactly-once<br/>idempotent producer + tx"]`,
+    code:{lang:"java", src:`// Idempotent consumer: dedup by message id (at-least-once safe)
+public void handle(Event e){
+  if (!processedRepo.markIfNew(e.id())) return;   // already handled -> skip
+  apply(e);
+}
+
+// Exactly-once producer
+props.put("enable.idempotence", true);
+props.put("transactional.id", "orders-tx-1");
+producer.beginTransaction();
+producer.send(rec);
+producer.sendOffsetsToTransaction(offsets, groupMetadata);
+producer.commitTransaction();`},
+    q:[
+      {q:"Compare the three delivery semantics.",a:"At-most-once: commit-then-process, can lose messages. At-least-once: process-then-commit, can duplicate. Exactly-once: no loss, no duplicates, via idempotent producer + transactions — but with more overhead."},
+      {q:"How do you achieve exactly-once in Kafka?",a:"Idempotent producer (dedups retries by producer-id + sequence number) plus transactions that atomically write output records and commit consumer offsets together, so partial results never appear."},
+      {q:"How do you handle duplicate messages in practice?",a:"Make consumers idempotent: dedup by a natural/business key or message id (store processed ids, or upsert). This makes at-least-once safe without full EOS complexity."},
+      {q:"Why is at-least-once the common default?",a:"It never loses data and is much simpler/cheaper than exactly-once. Combined with idempotent processing it gives effectively-once behavior for most systems."}
+    ],
+    mistakes:["Assuming Kafka is exactly-once by default (it's not).","At-least-once without idempotent consumers → duplicates in DB.","Committing offsets before processing.","Enabling transactions without understanding throughput cost."],
+    revision:["At-most (lossy), at-least (dupes), exactly (idempotent+tx).","Idempotent consumers make at-least-once safe.","EOS = idempotent producer + transactions."]
+  }
+]},
+
+{ id:"docker", title:"Docker", icon:"fa-docker", iconBrand:true, desc:"Images, containers, Dockerfile, volumes & networking", cards:[
+  {
+    id:"docker-core", title:"Images, Containers & Dockerfile", icon:"fa-box", diff:"Easy", imp:"High", time:"8 min",
+    notes:`<p><b>Image</b> = a read-only template (layers) built from a Dockerfile. <b>Container</b> = a running instance of an image (image + writable layer + isolated process/namespace).</p>
+    <ul>
+      <li><b>Layers</b> are cached — order Dockerfile from least- to most-frequently changing to maximize cache hits.</li>
+      <li><b>Multi-stage builds</b> compile in a heavy image and copy only the artifact into a slim runtime image → small, secure images.</li>
+      <li><b>Volumes</b> persist data outside the container's ephemeral layer; <b>bind mounts</b> map host paths.</li>
+      <li><b>Networks</b>: containers on the same user-defined bridge resolve each other by name.</li>
+    </ul>`,
+    diagram:`graph TD
+  D["Dockerfile"]-->|docker build| I["Image (layers)"]
+  I-->|docker run| C1["Container 1"]
+  I-->|docker run| C2["Container 2"]
+  V["Volume"]-.persists.->C1
+  N["Bridge network"]---C1
+  N---C2`,
+    code:{lang:"docker", src:`# Multi-stage build for a Spring Boot app
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline        # cached layer
+COPY src ./src
+RUN mvn -q package -DskipTests
+
+FROM eclipse-temurin:21-jre-alpine   # slim runtime
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","app.jar"]`},
+    q:[
+      {q:"Image vs container?",a:"An image is an immutable, layered template (the blueprint). A container is a running (or stopped) instance of an image with its own writable layer and isolated namespace — many containers can run from one image."},
+      {q:"Why use multi-stage builds?",a:"To keep the final image small and secure: build/compile in a large toolchain image, then copy only the resulting artifact into a minimal runtime image, dropping build tools and source."},
+      {q:"How does Docker layer caching work?",a:"Each Dockerfile instruction is a cached layer keyed by its content and prior layers. If nothing above changed, Docker reuses the cache — so put rarely-changing steps (dependency install) before copying source."},
+      {q:"Volume vs bind mount?",a:"Volumes are managed by Docker (portable, backup-friendly, best for data). Bind mounts map an exact host path (great for dev/live-reload) but couple you to the host filesystem."},
+      {q:"CMD vs ENTRYPOINT?",a:"ENTRYPOINT sets the executable that always runs; CMD provides default arguments (overridable at run). Combine ENTRYPOINT (java -jar) with CMD (flags)."}
+    ],
+    mistakes:["Copying source before installing dependencies (busts cache).","Running as root inside the container.","Baking secrets into image layers.","Using huge base images instead of slim/alpine/distroless."],
+    revision:["Image = template; container = instance.","Multi-stage → small images.","Order layers by change frequency.","Volumes persist data."]
+  }
+]},
+
+{ id:"k8s", title:"Kubernetes", icon:"fa-dharmachakra", desc:"Pods, deployments, services, scaling & config", cards:[
+  {
+    id:"k8s-core", title:"Pods, Deployments, Services & Scaling", icon:"fa-ship", diff:"Medium", imp:"High", time:"9 min",
+    notes:`<p>Kubernetes orchestrates containers across a cluster.</p>
+    <ul>
+      <li><b>Pod</b> — smallest deployable unit; one or more containers sharing network/storage. Ephemeral.</li>
+      <li><b>ReplicaSet</b> — keeps N identical pod replicas running.</li>
+      <li><b>Deployment</b> — manages ReplicaSets, enabling <b>rolling updates</b> and rollbacks.</li>
+      <li><b>Service</b> — stable virtual IP/DNS load-balancing to a set of pods (ClusterIP, NodePort, LoadBalancer). <b>Ingress</b> — HTTP routing/host-based rules into services.</li>
+      <li><b>ConfigMap</b> (non-secret config) & <b>Secret</b> (base64, sensitive) injected as env/volumes.</li>
+      <li><b>HPA</b> — Horizontal Pod Autoscaler scales replicas on CPU/custom metrics.</li>
+    </ul>`,
+    diagram:`graph TD
+  I["Ingress"]-->S["Service (ClusterIP)"]
+  S-->P1["Pod"]
+  S-->P2["Pod"]
+  S-->P3["Pod"]
+  D["Deployment"]-->RS["ReplicaSet"]
+  RS-->P1
+  RS-->P2
+  RS-->P3
+  H["HPA"]-.scales.->RS`,
+    code:{lang:"yaml", src:`apiVersion: apps/v1
+kind: Deployment
+metadata: { name: order-service }
+spec:
+  replicas: 3
+  strategy: { type: RollingUpdate, rollingUpdate: { maxSurge: 1, maxUnavailable: 0 } }
+  selector: { matchLabels: { app: order } }
+  template:
+    metadata: { labels: { app: order } }
+    spec:
+      containers:
+        - name: order
+          image: myrepo/order:1.4.2
+          readinessProbe: { httpGet: { path: /actuator/health, port: 8080 } }
+          resources: { requests: { cpu: 250m, memory: 256Mi } }`},
+    q:[
+      {q:"Pod vs Deployment?",a:"A Pod is a single running unit (ephemeral). A Deployment declaratively manages ReplicaSets of Pods, providing scaling, rolling updates, and rollbacks. You almost always deploy via Deployments, not bare Pods."},
+      {q:"How does a rolling update work?",a:"The Deployment gradually replaces old-version pods with new ones (respecting maxSurge/maxUnavailable), waiting for readiness probes, so there's zero downtime; you can roll back if it fails."},
+      {q:"What does a Service do?",a:"Provides a stable virtual IP and DNS name that load-balances to healthy pods (selected by labels), decoupling clients from ephemeral pod IPs."},
+      {q:"ConfigMap vs Secret?",a:"Both externalize config injected as env vars or files. ConfigMap for non-sensitive data; Secret for sensitive data (base64-encoded, can be encrypted at rest / RBAC-restricted)."},
+      {q:"Readiness vs liveness probe?",a:"Readiness gates traffic — pod removed from Service endpoints until ready. Liveness restarts a hung pod. Wrong liveness config can cause restart loops."},
+      {q:"How does autoscaling work?",a:"HPA watches metrics (CPU/memory/custom) and adjusts replica count between min/max to meet a target utilization; Cluster Autoscaler adds/removes nodes."}
+    ],
+    mistakes:["Deploying bare Pods instead of Deployments.","No readiness probe → traffic hits unready pods during rollout.","Secrets in plain ConfigMaps.","No resource requests/limits → noisy-neighbor and eviction issues."],
+    revision:["Deployment→ReplicaSet→Pods.","Service = stable LB; Ingress = HTTP routing.","Rolling update + readiness = zero downtime.","HPA scales on metrics."]
+  }
+]},
+
+{ id:"sysdesign", title:"System Design", icon:"fa-diagram-project", desc:"Scalability building blocks & trade-offs", cards:[
+  {
+    id:"scaling", title:"Scalability, Caching & Load Balancing", icon:"fa-chart-line", diff:"Hard", imp:"Very High", time:"11 min",
+    notes:`<p><b>Scaling:</b> <b>vertical</b> (bigger machine — simple, limited) vs <b>horizontal</b> (more machines — needs statelessness + a load balancer).</p>
+    <ul>
+      <li><b>Load Balancer</b> distributes traffic (round-robin, least-connections) and health-checks instances. L4 (transport) vs L7 (HTTP-aware).</li>
+      <li><b>Cache (Redis)</b> stores hot data in memory (O(1)). Patterns: <b>cache-aside</b> (app loads on miss), write-through, write-back. Set TTLs; beware <b>stampede</b> and <b>stale data</b>.</li>
+      <li><b>CDN</b> caches static assets near users (edge) to cut latency & origin load.</li>
+      <li><b>Sharding</b> partitions data horizontally by a shard key; <b>Consistent Hashing</b> minimizes reshuffling when nodes join/leave.</li>
+      <li><b>Message queue</b> decouples and smooths spikes (async processing).</li>
+    </ul>`,
+    diagram:`graph TD
+  U["Users"]-->CDN["CDN (static)"]
+  U-->LB["Load Balancer (L7)"]
+  LB-->A1["App 1 (stateless)"]
+  LB-->A2["App 2 (stateless)"]
+  A1-->R["Redis cache"]
+  A1-->Q["Message Queue"]
+  A1-->DB[("Sharded DB")]
+  R-.miss.->DB`,
+    code:{lang:"java", src:`// Cache-aside pattern
+public Product get(long id){
+  String key = "product:" + id;
+  Product p = redis.get(key);
+  if (p != null) return p;                 // cache hit
+  p = db.findById(id);                     // miss -> load
+  redis.set(key, p, Duration.ofMinutes(10)); // populate + TTL
+  return p;
+}`},
+    q:[
+      {q:"Vertical vs horizontal scaling?",a:"Vertical = bigger server (simple but capped, single point of failure). Horizontal = more servers behind a load balancer (near-limitless, needs stateless services + shared state in caches/DBs)."},
+      {q:"Explain the cache-aside pattern and its pitfalls.",a:"The app checks the cache; on a miss it loads from the DB and populates the cache with a TTL. Pitfalls: stale data (invalidate on write), cache stampede (many misses at once — use locks/jitter/refresh-ahead), and cold cache."},
+      {q:"What is consistent hashing and why is it used?",a:"Nodes and keys map onto a hash ring; each key goes to the next node clockwise. Adding/removing a node only remaps keys near it (K/N keys) instead of nearly all — crucial for caches and sharded stores."},
+      {q:"When do you introduce a message queue?",a:"To decouple producers/consumers, absorb traffic spikes, enable async/background processing, and improve resilience (retry, buffering). Trade-off: eventual consistency and added ops complexity."},
+      {q:"L4 vs L7 load balancing?",a:"L4 balances on TCP/UDP (fast, protocol-agnostic). L7 understands HTTP (path/host routing, TLS termination, header-based rules) at slightly higher cost."},
+      {q:"How do you handle cache invalidation?",a:"TTL expiry, write-through/update-on-write, or explicit eviction on change. It's famously hard — prefer short TTLs + event-driven invalidation and design for eventual consistency."}
+    ],
+    mistakes:["Stateful app servers that block horizontal scaling.","Caching without TTL/invalidation → stale data.","Ignoring cache stampede.","Choosing a poor shard key causing hotspots."],
+    revision:["Horizontal scaling needs stateless + LB.","Cache-aside + TTL; watch stampede.","Consistent hashing minimizes remap.","Queues decouple + smooth spikes."]
+  },
+  {
+    id:"cap", title:"CAP Theorem & Consistency", icon:"fa-scale-balanced", diff:"Hard", imp:"High", time:"7 min",
+    notes:`<p><b>CAP theorem</b>: a distributed system can guarantee only <b>2 of 3</b> during a network <b>partition</b>: <b>Consistency</b>, <b>Availability</b>, <b>Partition tolerance</b>. Since partitions <i>will</i> happen, the real choice is <b>CP</b> (reject some requests to stay consistent) vs <b>AP</b> (stay available, allow stale/eventual data).</p>
+    <ul>
+      <li><b>CP</b> examples: HBase, MongoDB (default), ZooKeeper, RDBMS clusters.</li>
+      <li><b>AP</b> examples: Cassandra, DynamoDB, Riak (eventual consistency, tunable).</li>
+      <li><b>PACELC</b> extends CAP: even without a partition (E), you trade Latency vs Consistency.</li>
+    </ul>`,
+    diagram:`graph TD
+  P["Network Partition happens"]-->Q{"Choose"}
+  Q-->|Consistency| CP["CP: reject/blocks to stay correct"]
+  Q-->|Availability| AP["AP: serve possibly-stale data"]`,
+    code:{lang:"text", src:`Design guideline:
+- Money / inventory / bookings  -> favor Consistency (CP)
+- Feeds / likes / product views -> favor Availability (AP, eventual)
+- Tunable stores (Cassandra/Dynamo): pick per-operation
+  QUORUM reads+writes (R + W > N) => strong-ish consistency`},
+    q:[
+      {q:"State the CAP theorem simply.",a:"During a network partition you must choose between Consistency (every read sees the latest write) and Availability (every request gets a non-error response). Partition tolerance is mandatory in distributed systems."},
+      {q:"Is a single-node database CA?",a:"Effectively yes — with no network partition possible it can be consistent and available. But real distributed systems must tolerate partitions, so CA isn't a meaningful choice at scale."},
+      {q:"CP vs AP example decision?",a:"A banking ledger picks CP (never show wrong balance, even if it means brief unavailability). A social feed picks AP (always available; slightly stale likes are fine)."},
+      {q:"What is eventual consistency?",a:"After writes stop, all replicas converge to the same value given enough time. Reads may temporarily return stale data — acceptable for many high-availability use cases."},
+      {q:"What does PACELC add?",a:"Even without partitions (Else), systems trade Latency vs Consistency — e.g. Dynamo favors low latency (eventual), while a strongly-consistent store accepts higher latency."}
+    ],
+    mistakes:["Claiming a system is 'CA' at scale.","Assuming eventual consistency means data loss.","Using strong consistency where eventual is fine (hurting availability/latency).","Ignoring quorum math (R+W>N)."],
+    revision:["Pick 2 of 3 under partition; P is mandatory → CP vs AP.","CP = correct, AP = available.","Eventual consistency converges.","PACELC: latency vs consistency otherwise."]
+  }
+]},
+
+{ id:"project", title:"Project Discussion", icon:"fa-briefcase", desc:"Tell your project story with the STAR method", cards:[
+  {
+    id:"star", title:"Architecture & STAR Storytelling", icon:"fa-star", diff:"Medium", imp:"Very High", time:"8 min",
+    notes:`<p>Interviewers probe your project to gauge ownership and depth. Use <b>STAR</b>: <b>S</b>ituation, <b>T</b>ask, <b>A</b>ction, <b>R</b>esult (with numbers).</p>
+    <p>Be ready to whiteboard <b>your</b> architecture: clients → gateway → services → DB/cache/Kafka → observability. Know <b>why</b> each choice was made and its trade-offs.</p>
+    <p>Prepare crisp stories for: a <b>production incident</b> you debugged, a <b>performance win</b> (with before/after metrics), how you used <b>Kafka</b>, your <b>DB design</b> decisions, <b>deployment</b> (CI/CD, K8s), and <b>monitoring/logging</b>.</p>
+    <div class="callout tip">Quantify everything: "reduced p99 latency from 800ms → 180ms by adding a Redis cache + fixing an N+1 query."</div>`,
+    diagram:`graph TD
+  C["Web / Mobile"]-->G["API Gateway"]
+  G-->O["Order Service"]
+  G-->U["User Service"]
+  O-->K["Kafka"]-->N["Notification Service"]
+  O-->R["Redis"]
+  O-->DB[("PostgreSQL")]
+  O-.metrics.->M["Prometheus + Grafana"]`,
+    code:{lang:"text", src:`STAR example — Performance improvement
+S: Checkout API p99 latency hit 800ms under peak load; users dropping off.
+T: I owned bringing p99 under 200ms without new infra spend.
+A: Profiled with Grafana/traces -> found an N+1 query + repeated DB reads.
+   Added a JOIN FETCH, introduced Redis cache-aside (10m TTL), tuned the
+   HikariCP pool, and added a circuit breaker on a slow downstream.
+R: p99 dropped 800ms -> 180ms (-77%), DB CPU -40%, zero checkout timeouts.`},
+    q:[
+      {q:"Walk me through your project's architecture.",a:"Give a 60-second top-down tour: entry point (gateway), core services and their responsibilities, data stores (why each), async via Kafka, and observability. Then pause for follow-ups. Always explain the 'why' and trade-offs."},
+      {q:"Tell me about a production issue you solved.",a:"Use STAR: the symptom & impact, how you diagnosed it (logs/traces/metrics), the root cause, the fix, and the measurable result + what you added to prevent recurrence (alerts, tests)."},
+      {q:"How did you improve performance?",a:"Pick one concrete win with before/after numbers — caching, query/index fix, connection pool tuning, async processing — and explain how you measured it."},
+      {q:"Why did you choose Kafka / this database?",a:"Tie it to requirements: Kafka for decoupling + async + replay + throughput; the DB for consistency/query needs. Mention alternatives you considered and why you rejected them."},
+      {q:"What was the hardest challenge and what did you learn?",a:"Choose a genuine technical/team challenge, show your reasoning and ownership, the outcome, and a concrete lesson you now apply."}
+    ],
+    mistakes:["Vague answers with no metrics.","Taking credit for the whole team's work (or none).","Not knowing why a technology was chosen.","Rambling — structure with STAR."],
+    revision:["STAR with numbers.","Know your architecture + trade-offs.","Have incident + perf-win stories ready.","Explain the 'why' behind every choice."]
+  }
+]},
+
+{ id:"hr", title:"HR Questions", icon:"fa-user-tie", desc:"Behavioral answers with tips & pitfalls", cards:[
+  {
+    id:"hr-core", title:"Common HR Questions & Sample Answers", icon:"fa-comments", diff:"Easy", imp:"High", time:"9 min",
+    notes:`<p>HR/behavioral rounds assess communication, motivation, and culture fit. Be authentic, concise (60–90s), and positive — never bad-mouth an employer.</p>`,
+    q:[
+      {q:"Tell me about yourself.",a:"<b>Sample:</b> \"I'm a backend engineer with 3 years building Java/Spring Boot microservices. Most recently I owned the order service in an e-commerce platform, handling ~2M requests/day, where I cut p99 latency by 77% and integrated Kafka for async notifications. I enjoy performance work and clean design, and I'm looking for a role with bigger scale.\"<br><b>Tip:</b> Present → Past → Future, ~60s, tailored to the role.<br><b>Mistake:</b> Reciting your resume or personal life."},
+      {q:"Why are you switching / looking?",a:"<b>Sample:</b> \"I've grown a lot in my current role, but I'm looking for larger-scale distributed systems and more ownership, which this role offers.\"<br><b>Tip:</b> Frame positively — move toward growth, not away from problems.<br><b>Mistake:</b> Complaining about your manager/company."},
+      {q:"What are your strengths?",a:"<b>Sample:</b> \"Debugging complex production issues and performance tuning — e.g., I traced a memory leak to an unbounded cache and fixed it under an SLA.\"<br><b>Tip:</b> Pick strengths relevant to the job and back with a story.<br><b>Mistake:</b> Generic claims with no evidence."},
+      {q:"What is your weakness?",a:"<b>Sample:</b> \"I used to over-optimize early; I now start with the simplest solution and profile before optimizing.\"<br><b>Tip:</b> A real weakness + concrete steps you're taking.<br><b>Mistake:</b> Fake weakness ('I work too hard') or a fatal one."},
+      {q:"Describe your biggest challenge.",a:"<b>Sample (STAR):</b> a tough incident/migration, your actions and the measurable outcome.<br><b>Tip:</b> Show ownership and learning.<br><b>Mistake:</b> Choosing a trivial challenge."},
+      {q:"Tell me about a conflict in your team.",a:"<b>Sample:</b> \"A teammate and I disagreed on sync vs async design. We listed trade-offs, prototyped both, and chose async based on data. We stayed respectful and shipped on time.\"<br><b>Tip:</b> Focus on resolution and respect, not blame.<br><b>Mistake:</b> Painting the other person as the villain."},
+      {q:"Tell me about a mistake you made.",a:"<b>Sample:</b> \"I once deployed a config change without a feature flag and caused a brief outage. I rolled back in minutes, added flags + a checklist, and it never recurred.\"<br><b>Tip:</b> Own it, show the fix and prevention.<br><b>Mistake:</b> Claiming you've never made one."},
+      {q:"Give an example of leadership.",a:"<b>Sample:</b> \"I led the migration to a shared logging standard — I wrote the guide, ran a brown-bag, and mentored two juniors through it.\"<br><b>Tip:</b> Leadership ≠ title; show initiative and influence.<br><b>Mistake:</b> Only describing solo work."},
+      {q:"What are your career goals?",a:"<b>Sample:</b> \"Grow into a senior/staff engineer with deep expertise in scalable distributed systems and mentoring.\"<br><b>Tip:</b> Align with the role and company trajectory.<br><b>Mistake:</b> 'I want your job in a year' or no direction."},
+      {q:"Why should we hire you?",a:"<b>Sample:</b> \"I bring proven Spring Boot + Kafka experience at scale, a track record of measurable performance wins, and I ramp fast and take ownership — which maps directly to what this role needs.\"<br><b>Tip:</b> Match your top 2–3 strengths to their needs.<br><b>Mistake:</b> Generic enthusiasm with no specifics."}
+    ],
+    mistakes:["Speaking negatively about past employers.","Memorized, robotic answers.","No concrete examples/metrics.","Answers longer than ~90 seconds."],
+    revision:["Be authentic, concise, positive.","Use STAR for behavioral stories.","Tailor to the role.","Never bad-mouth anyone."]
+  }
+]},
+
+{ id:"revision", title:"Rapid Revision", icon:"fa-stopwatch", desc:"30-minute last-mile checklist", cards:[] }
+];
+
+/* Rapid-revision checklist items (rendered specially) */
+const REVISION_ITEMS = [
+  ["HashMap","Bucket index (n-1)&hash · treeify at 8 · resize at 0.75 · equals⇔hashCode."],
+  ["Spring Annotations","@Component/@Service/@Repository/@RestController · constructor injection · @Transactional rollback on RuntimeException · self-invocation trap."],
+  ["SQL Joins","INNER=match, LEFT=all left · composite index left-most prefix · covering index · EXPLAIN."],
+  ["Kafka","Order within partition · 1 partition→1 consumer/group · ISR+acks=all · at-least-once + idempotent consumers."],
+  ["REST","GET/PUT/DELETE idempotent · 401 auth vs 403 perm · 201+Location · Idempotency-Key."],
+  ["Docker","Image=template, container=instance · multi-stage → small images · layer cache order · volumes persist."],
+  ["Kubernetes","Deployment→ReplicaSet→Pods · Service=LB, Ingress=HTTP · rolling update + readiness · HPA."],
+  ["System Design","Horizontal scaling needs stateless+LB · cache-aside+TTL · consistent hashing · CAP: CP vs AP."],
+  ["Project","STAR with numbers · know your architecture & trade-offs · have an incident + a perf-win story."],
+  ["HR","Present-Past-Future intro · STAR for behavior · stay positive · quantify impact."],
+  ["Concurrency","volatile=visibility, synchronized=both · pools>threads · CAS(Atomic) · lock ordering avoids deadlock."],
+  ["Transactions/DB","ACID · isolation trades consistency/concurrency · optimistic vs pessimistic · N+1 → JOIN FETCH."]
+];
+
+/* Quiz bank */
+const QUIZ = [
+  {q:"At what bucket size does a HashMap treeify a bucket (with table ≥ 64)?", opts:["4","6","8","16"], a:2, ex:"A bucket converts from linked list to red-black tree once it holds more than 8 nodes (and the table has ≥ 64 slots)."},
+  {q:"Which HTTP status means authenticated but NOT permitted?", opts:["401","403","404","409"], a:1, ex:"403 Forbidden = authenticated but lacking permission. 401 = not authenticated."},
+  {q:"@Transactional rolls back by default on which exception type?", opts:["Checked exceptions","RuntimeException (unchecked)","All exceptions","None"], a:1, ex:"By default rollback happens on unchecked RuntimeException/Error; checked exceptions commit unless rollbackFor is set."},
+  {q:"Kafka guarantees message ordering…", opts:["Globally across a topic","Within a partition","Across a consumer group","Never"], a:1, ex:"Ordering is guaranteed only within a single partition; use a key to route related events together."},
+  {q:"Which provides visibility but NOT atomicity?", opts:["synchronized","ReentrantLock","volatile","AtomicInteger"], a:2, ex:"volatile guarantees visibility of a variable but not atomic compound operations like count++."},
+  {q:"A composite index (a,b,c) can efficiently serve a query filtering on…", opts:["b only","c only","a and b","b and c"], a:2, ex:"Left-most prefix rule: it serves a, a+b, or a+b+c — always starting from the leftmost column."},
+  {q:"Under a network partition, CAP forces you to choose between…", opts:["Consistency and Availability","Latency and Cost","Speed and Storage","Reads and Writes"], a:0, ex:"Partition tolerance is mandatory, so you trade Consistency vs Availability (CP vs AP)."},
+  {q:"Which injection style does Spring recommend?", opts:["Field injection","Setter injection","Constructor injection","Static injection"], a:2, ex:"Constructor injection enables final fields, immutability, easy testing, and fails fast on missing deps."},
+  {q:"Best default delivery approach in Kafka for most systems?", opts:["At-most-once","At-least-once + idempotent consumers","Fire and forget","Exactly-once always"], a:1, ex:"At-least-once with idempotent consumers gives robust, effectively-once behavior without EOS overhead."},
+  {q:"What does a multi-stage Docker build primarily achieve?", opts:["Faster networking","Smaller, secure final images","More layers","Root access"], a:1, ex:"You build in a heavy image and copy only the artifact into a slim runtime image, dropping build tools/source."},
+  {q:"Which Kubernetes object enables zero-downtime rolling updates?", opts:["Pod","Deployment","ConfigMap","Secret"], a:1, ex:"A Deployment manages ReplicaSets and orchestrates rolling updates/rollbacks with readiness gating."},
+  {q:"The N+1 query problem is best fixed with…", opts:["More indexes","JOIN FETCH / batch fetching","SERIALIZABLE isolation","A bigger connection pool"], a:1, ex:"Fetch children in one query via JOIN FETCH/@EntityGraph or batch fetching instead of one query per parent."}
+];
+
+/* =====================================================================
+   STATE (localStorage)
+===================================================================== */
+const LS = {
+  get(k, d){ try{ return JSON.parse(localStorage.getItem("iprep_"+k)) ?? d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("iprep_"+k, JSON.stringify(v)); }catch(e){} }
+};
+let completed = new Set(LS.get("completed", []));
+let bookmarks = new Set(LS.get("bookmarks", []));
+let checklist = new Set(LS.get("checklist", []));
+
+const allCards = () => DATA.flatMap(s => s.cards.map(c => ({...c, sectionId:s.id, sectionTitle:s.title})));
+const TOTAL_CARDS = allCards().length;
+const TOTAL_Q = allCards().reduce((n,c)=> n + (c.q?c.q.length:0), 0);
+
+/* =====================================================================
+   RENDER
+===================================================================== */
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => { const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; };
+const diffClass = d => ({["Easy"]:"easy",["Medium"]:"medium",["Hard"]:"hard"}[d]||"medium");
+const iconFam = s => s.iconBrand ? "fa-brands" : "fa-solid";
+
+function renderSidebar(){
+  const nav = $("nav");
+  nav.innerHTML = "";
+  DATA.forEach(s=>{
+    const total = s.id==="revision" ? REVISION_ITEMS.length : s.cards.length;
+    const done = s.cards.filter(c=>completed.has(c.id)).length;
+    const link = el("a","nav-link");
+    link.href = "#sec-"+s.id;
+    link.dataset.sec = s.id;
+    link.innerHTML = `<i class="${iconFam(s)} ${s.icon}"></i><span>${s.title}</span><span class="cnt">${total}</span>`;
+    if(s.cards.length && done===s.cards.length) link.classList.add("done");
+    nav.appendChild(link);
+  });
+}
+
+function questionsHtml(card){
+  if(!card.q || !card.q.length) return "";
+  return `<div class="block-title"><i class="fa-solid fa-circle-question"></i> Interview Questions (${card.q.length})</div>` +
+    card.q.map((qa,i)=>`
+      <div class="qa">
+        <div class="q"><span class="num">${i+1}</span><span class="qtxt">${qa.q}</span><i class="fa-solid fa-plus qx"></i></div>
+        <div class="a"><div>${qa.a}</div></div>
+      </div>`).join("");
+}
+
+function cardHtml(card){
+  const bm = bookmarks.has(card.id) ? "on":"";
+  const cmp = completed.has(card.id) ? "on":"";
+  const done = completed.has(card.id) ? "done":"";
+  const prosCons = (card.pros||card.cons) ? `
+    <div class="two-col">
+      ${card.pros?`<div class="col-box good"><h4><i class="fa-solid fa-thumbs-up"></i> Advantages</h4><ul>${card.pros.map(x=>`<li>${x}</li>`).join("")}</ul></div>`:""}
+      ${card.cons?`<div class="col-box bad"><h4><i class="fa-solid fa-thumbs-down"></i> Disadvantages</h4><ul>${card.cons.map(x=>`<li>${x}</li>`).join("")}</ul></div>`:""}
+    </div>`:"";
+  return `
+  <article class="card ${done}" id="card-${card.id}" data-card="${card.id}"
+     data-text="${(card.title+' '+(card.notes||'')+' '+(card.q||[]).map(q=>q.q).join(' ')).replace(/<[^>]+>/g,' ').replace(/"/g,'').toLowerCase()}">
+    <div class="card-head">
+      <div class="c-ico"><i class="fa-solid ${card.icon}"></i></div>
+      <div class="card-title-wrap">
+        <div class="card-title"><span class="ctitle">${card.title}</span></div>
+        <div class="card-meta">
+          <span class="badge ${diffClass(card.diff)}">${card.diff}</span>
+          <span class="badge imp"><i class="fa-solid fa-fire"></i> ${card.imp}</span>
+          <span class="badge time"><i class="fa-regular fa-clock"></i> ${card.time}</span>
+        </div>
+      </div>
+      <div class="card-tools">
+        <div class="icon-btn bm ${bm}" title="Bookmark" data-bm="${card.id}"><i class="fa-solid fa-bookmark"></i></div>
+        <div class="icon-btn cmp ${cmp}" title="Mark complete" data-cmp="${card.id}"><i class="fa-solid fa-circle-check"></i></div>
+        <div class="icon-btn"><i class="fa-solid fa-chevron-down chev"></i></div>
+      </div>
+    </div>
+    <div class="card-body"><div class="card-inner">
+      <div class="block-title"><i class="fa-solid fa-book-open"></i> Detailed Notes</div>
+      <div class="notes">${card.notes||""}</div>
+      ${card.diagram?`<div class="block-title"><i class="fa-solid fa-project-diagram"></i> Visual Diagram</div>
+        <div class="mermaid-wrap"><div class="mermaid">${card.diagram}</div></div>`:""}
+      ${card.code?`<div class="block-title"><i class="fa-solid fa-code"></i> Code Example</div>
+        <pre><code class="language-${card.code.lang}">${esc(card.code.src)}</code></pre>`:""}
+      ${prosCons}
+      ${questionsHtml(card)}
+      ${card.mistakes?`<div class="block-title"><i class="fa-solid fa-triangle-exclamation"></i> Common Mistakes</div>
+        <div class="col-box bad"><ul>${card.mistakes.map(m=>`<li>${m}</li>`).join("")}</ul></div>`:""}
+      ${card.revision?`<div class="block-title"><i class="fa-solid fa-bolt"></i> Quick Revision</div>
+        <ul class="revision-list">${card.revision.map(r=>`<li><i class="fa-solid fa-angle-right"></i><span>${r}</span></li>`).join("")}</ul>`:""}
+      <div style="margin-top:18px"><button class="btn primary" data-toggle-complete="${card.id}"><i class="fa-solid fa-circle-check"></i> ${completed.has(card.id)?"Completed":"Mark as Completed"}</button></div>
+    </div></div>
+  </article>`;
+}
+
+function revisionSectionHtml(){
+  return `<div class="checklist">
+    ${REVISION_ITEMS.map(([t,d],i)=>`
+      <div class="check-item ${checklist.has(t)?"on":""}" data-check="${t}">
+        <div class="check-box"><i class="fa-solid fa-check"></i></div>
+        <div><div class="ct">${t}</div><div style="font-size:12.5px;color:var(--muted)">${d}</div></div>
+      </div>`).join("")}
+  </div>`;
+}
+
+function renderSections(){
+  const root = $("sections");
+  root.innerHTML = "";
+  DATA.forEach(s=>{
+    const sec = el("section","section");
+    sec.id = "sec-"+s.id;
+    const count = s.id==="revision" ? REVISION_ITEMS.length : s.cards.length;
+    sec.innerHTML = `
+      <div class="sec-head">
+        <div class="ico"><i class="${iconFam(s)} ${s.icon}"></i></div>
+        <div><h2>${s.title}</h2><p>${s.desc}</p></div>
+        <span class="sec-count">${count} ${s.id==="revision"?"items":"topics"}</span>
+      </div>`;
+    if(s.id==="revision"){
+      sec.insertAdjacentHTML("beforeend", revisionSectionHtml());
+    }else{
+      const grid = el("div","grid");
+      grid.innerHTML = s.cards.map(cardHtml).join("");
+      sec.appendChild(grid);
+    }
+    root.appendChild(sec);
+  });
+}
+
+/* =====================================================================
+   PROGRESS
+===================================================================== */
+function updateProgress(){
+  const done = completed.size;
+  const pct = TOTAL_CARDS ? Math.round(done/TOTAL_CARDS*100) : 0;
+  $("heroBar").style.width = pct+"%";
+  $("heroPct").textContent = pct+"%";
+  $("sideProgBar").style.width = pct+"%";
+  $("sideProgTxt").textContent = pct+"%";
+  $("stTopics").textContent = TOTAL_CARDS;
+  $("stQuestions").textContent = TOTAL_Q;
+  $("stDone").textContent = done;
+  $("stBm").textContent = bookmarks.size;
+  renderSidebar(); highlightNav();
+}
+
+/* =====================================================================
+   INTERACTIONS
+===================================================================== */
+function toggleCard(card, force){
+  const open = force!=null ? force : !card.classList.contains("open");
+  card.classList.toggle("open", open);
+  if(open){
+    // lazy-render mermaid + prism once
+    if(!card.dataset.rendered){
+      const m = card.querySelector(".mermaid");
+      if(m && window.mermaid){
+        try{ mermaid.run({nodes:[m]}).then(()=>m.classList.add("ready")).catch(()=>m.classList.add("ready")); }
+        catch(e){ m.classList.add("ready"); }
+      }
+      card.querySelectorAll("pre code").forEach(b=>{ if(window.Prism) Prism.highlightElement(b); });
+      card.dataset.rendered = "1";
+    }
+  }
+}
+
+function bindEvents(){
+  document.body.addEventListener("click", e=>{
+    // card header toggle
+    const head = e.target.closest(".card-head");
+    if(head && !e.target.closest(".icon-btn")){
+      toggleCard(head.closest(".card")); return;
+    }
+    // bookmark
+    const bmBtn = e.target.closest("[data-bm]");
+    if(bmBtn){ const id=bmBtn.dataset.bm; bookmarks.has(id)?bookmarks.delete(id):bookmarks.add(id);
+      LS.set("bookmarks",[...bookmarks]); bmBtn.classList.toggle("on"); $("stBm").textContent=bookmarks.size; return; }
+    // complete (icon)
+    const cmpBtn = e.target.closest("[data-cmp]");
+    if(cmpBtn){ setComplete(cmpBtn.dataset.cmp, !completed.has(cmpBtn.dataset.cmp)); return; }
+    // complete (button)
+    const tc = e.target.closest("[data-toggle-complete]");
+    if(tc){ setComplete(tc.dataset.toggleComplete, !completed.has(tc.dataset.toggleComplete)); return; }
+    // Q&A accordion
+    const q = e.target.closest(".qa .q");
+    if(q){ q.closest(".qa").classList.toggle("open"); return; }
+    // revision checklist
+    const chk = e.target.closest("[data-check]");
+    if(chk){ const t=chk.dataset.check; checklist.has(t)?checklist.delete(t):checklist.add(t);
+      LS.set("checklist",[...checklist]); chk.classList.toggle("on"); return; }
+    // nav link
+    const nav = e.target.closest(".nav-link");
+    if(nav){ closeSidebar(); }
+  });
+}
+
+function setComplete(id, val){
+  if(val) completed.add(id); else completed.delete(id);
+  LS.set("completed",[...completed]);
+  const card = $("card-"+id);
+  if(card){
+    card.classList.toggle("done", val);
+    const icon = card.querySelector("[data-cmp]"); if(icon) icon.classList.toggle("on", val);
+    const btn = card.querySelector("[data-toggle-complete]");
+    if(btn) btn.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${val?"Completed":"Mark as Completed"}`;
+  }
+  updateProgress();
+}
+
+/* expand / collapse all */
+let allOpen=false;
+function toggleAll(){
+  allOpen=!allOpen;
+  document.querySelectorAll(".card").forEach(c=>{ if(isVisible(c)) toggleCard(c, allOpen); });
+  $("toggleAll").innerHTML = allOpen
+    ? '<i class="fa-solid fa-angles-up"></i><span class="label">Collapse All</span>'
+    : '<i class="fa-solid fa-angles-down"></i><span class="label">Expand All</span>';
+}
+const isVisible = elm => elm.style.display!=="none";
+
+/* =====================================================================
+   SEARCH
+===================================================================== */
+function runSearch(term){
+  term = term.trim().toLowerCase();
+  let anyHit=false;
+  document.querySelectorAll(".card").forEach(card=>{
+    const match = !term || card.dataset.text.includes(term);
+    card.style.display = match ? "" : "none";
+    card.classList.toggle("hit", !!term && match);
+    // highlight title
+    const titleEl = card.querySelector(".ctitle");
+    const raw = titleEl.textContent;
+    if(term && raw.toLowerCase().includes(term)){
+      const i = raw.toLowerCase().indexOf(term);
+      titleEl.innerHTML = raw.slice(0,i)+"<mark>"+raw.slice(i,i+term.length)+"</mark>"+raw.slice(i+term.length);
+    } else titleEl.textContent = raw;
+    if(match) { anyHit=true; if(term) toggleCard(card, true); }
+  });
+  // hide sections with no visible cards
+  document.querySelectorAll(".section").forEach(sec=>{
+    if(sec.id==="sec-revision"){ sec.style.display = term?"none":""; return; }
+    const visible = [...sec.querySelectorAll(".card")].some(c=>c.style.display!=="none");
+    sec.style.display = visible ? "" : "none";
+  });
+  $("empty").classList.toggle("show", term && !anyHit);
+}
+
+/* =====================================================================
+   SCROLLSPY
+===================================================================== */
+function highlightNav(){
+  const links = [...document.querySelectorAll(".nav-link")];
+  let current = null;
+  document.querySelectorAll(".section").forEach(sec=>{
+    if(sec.style.display==="none") return;
+    const r = sec.getBoundingClientRect();
+    if(r.top <= 140) current = sec.id.replace("sec-","");
+  });
+  links.forEach(l=>l.classList.toggle("active", l.dataset.sec===current));
+}
+
+/* =====================================================================
+   SIDEBAR (mobile)
+===================================================================== */
+function openSidebar(){ $("sidebar").classList.add("open"); $("overlay").classList.add("show"); }
+function closeSidebar(){ $("sidebar").classList.remove("open"); $("overlay").classList.remove("show"); }
+
+/* =====================================================================
+   FLASHCARDS
+===================================================================== */
+let flashSet=[], flashIdx=0;
+function buildFlashScope(){
+  const sel=$("flashScope");
+  sel.innerHTML = `<option value="all">All sections</option>` +
+    DATA.filter(s=>s.cards.length).map(s=>`<option value="${s.id}">${s.title}</option>`).join("") +
+    `<option value="bookmarks">★ Bookmarked</option>`;
+}
+function loadFlash(scope){
+  let cards = allCards();
+  if(scope==="bookmarks") cards = cards.filter(c=>bookmarks.has(c.id));
+  else if(scope && scope!=="all") cards = cards.filter(c=>c.sectionId===scope);
+  flashSet = cards.flatMap(c=>(c.q||[]).map(q=>({q:q.q, a:q.a})));
+  flashIdx=0; showFlash();
+}
+function showFlash(){
+  const f=$("flash"); f.classList.remove("flipped");
+  if(!flashSet.length){ $("flashQ").textContent="No flashcards here yet."; $("flashA").textContent=""; $("flashIdx").textContent="0 / 0"; return; }
+  const c=flashSet[flashIdx];
+  $("flashQ").textContent=c.q;
+  $("flashA").innerHTML=c.a;
+  $("flashIdx").textContent=`${flashIdx+1} / ${flashSet.length}`;
+}
+
+/* =====================================================================
+   QUIZ
+===================================================================== */
+let quizIdx=0, quizScore=0, quizAnswered=false;
+function startQuiz(){ quizIdx=0; quizScore=0; renderQuiz(); }
+function renderQuiz(){
+  quizAnswered=false;
+  $("quizScore").textContent = `Score ${quizScore}`;
+  if(quizIdx>=QUIZ.length){ renderQuizResult(); return; }
+  const item=QUIZ[quizIdx];
+  $("quizBody").innerHTML = `
+    <div class="quiz-q"><span class="qn">Q${quizIdx+1}/${QUIZ.length}.</span>${item.q}</div>
+    <div id="opts">${item.opts.map((o,i)=>`<label class="opt" data-opt="${i}">${o}</label>`).join("")}</div>
+    <div class="quiz-explain" id="quizExplain"></div>
+    <div class="quiz-foot">
+      <span class="quiz-score">Correct so far: ${quizScore}</span>
+      <button class="btn primary" id="quizNext" disabled>Next <i class="fa-solid fa-arrow-right"></i></button>
+    </div>`;
+  $("opts").querySelectorAll(".opt").forEach(opt=>{
+    opt.onclick=()=>{
+      if(quizAnswered) return; quizAnswered=true;
+      const pick=+opt.dataset.opt, correct=item.a;
+      $("opts").querySelectorAll(".opt").forEach(o=>{
+        o.classList.add("disabled");
+        if(+o.dataset.opt===correct) o.classList.add("correct");
+      });
+      if(pick===correct) quizScore++; else opt.classList.add("wrong");
+      $("quizScore").textContent=`Score ${quizScore}`;
+      const ex=$("quizExplain"); ex.style.display="block"; ex.innerHTML=`<b>${pick===correct?"Correct! ":"Answer: "}</b>${item.ex}`;
+      $("quizNext").disabled=false;
+    };
+  });
+  $("quizNext").onclick=()=>{ quizIdx++; renderQuiz(); };
+}
+function renderQuizResult(){
+  const pct=Math.round(quizScore/QUIZ.length*100);
+  const msg = pct>=80?"Excellent — you're interview ready!":pct>=50?"Good — review the weak spots.":"Keep revising, you'll get there.";
+  $("quizBody").innerHTML=`<div class="quiz-result">
+    <div class="big">${quizScore}/${QUIZ.length}</div>
+    <p style="margin:8px 0 4px;font-size:18px;font-weight:700">${pct}%</p>
+    <p style="color:var(--muted)">${msg}</p>
+    <button class="btn primary" id="quizRetry" style="margin-top:18px"><i class="fa-solid fa-rotate-right"></i> Retry Quiz</button>
+  </div>`;
+  $("quizRetry").onclick=startQuiz;
+}
+
+/* =====================================================================
+   MODALS
+===================================================================== */
+function openModal(id){ $(id).classList.add("show"); }
+function closeModal(id){ $(id).classList.remove("show"); }
+
+/* =====================================================================
+   INIT
+===================================================================== */
+function init(){
+  if(window.mermaid){ mermaid.initialize({startOnLoad:false, theme:"dark", themeVariables:{
+    primaryColor:"#202024", primaryTextColor:"#f4f4f5", primaryBorderColor:"#7C3AED",
+    lineColor:"#8b8b93", secondaryColor:"#1a1a1c", tertiaryColor:"#111114", fontSize:"13px"
+  }}); }
+
+  renderSidebar();
+  renderSections();
+  buildFlashScope();
+  updateProgress();
+  bindEvents();
+
+  // reveal cards on scroll
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); } });
+  },{threshold:.08});
+  document.querySelectorAll(".card").forEach((c,i)=>{ c.style.transitionDelay=(Math.min(i,6)*40)+"ms"; io.observe(c); });
+  // safety net: guarantee cards become visible even if IntersectionObserver misfires
+  setTimeout(()=>document.querySelectorAll(".card:not(.in)").forEach(c=>c.classList.add("in")), 1200);
+
+  // search
+  const search=$("search");
+  search.addEventListener("input", e=>runSearch(e.target.value));
+  document.addEventListener("keydown", e=>{
+    if(e.key==="/" && document.activeElement!==search){ e.preventDefault(); search.focus(); }
+    if(e.key==="Escape"){ ["flashModal","quizModal"].forEach(closeModal); if(search.value){ search.value=""; runSearch(""); } }
+  });
+
+  // top actions
+  $("toggleAll").onclick=toggleAll;
+  $("flashBtn").onclick=()=>{ loadFlash($("flashScope").value||"all"); openModal("flashModal"); };
+  $("quizBtn").onclick=()=>{ startQuiz(); openModal("quizModal"); };
+  $("flash").onclick=()=>$("flash").classList.toggle("flipped");
+  $("flashPrev").onclick=()=>{ if(flashIdx>0){flashIdx--;showFlash();} };
+  $("flashNext").onclick=()=>{ if(flashIdx<flashSet.length-1){flashIdx++;showFlash();} };
+  $("flashScope").onchange=e=>loadFlash(e.target.value);
+  document.querySelectorAll("[data-close]").forEach(x=>x.onclick=()=>closeModal(x.dataset.close));
+  document.querySelectorAll(".modal").forEach(m=>m.addEventListener("click",e=>{ if(e.target===m) closeModal(m.id); }));
+
+  // mobile sidebar
+  $("hamburger").onclick=openSidebar;
+  $("overlay").onclick=closeSidebar;
+
+  // scrollspy
+  window.addEventListener("scroll", ()=>{ highlightNav(); }, {passive:true});
+  highlightNav();
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>System Design Lab — Interactive Learning Platform</title>
+<style>
+  :root{
+    --bg:#0f0f11; --panel:#16171b; --panel-2:#1d1e23; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.3);
+    --green:#00C853; --green-soft:rgba(0,200,83,.22); --blue:#3b82f6;
+    --gray:#24252b; --border:#32333c; --bad:#f8524b; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--line);overflow:hidden;user-select:none;
+    font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;font-size:14px}
+  button,input{font-family:inherit}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#44454f}
+
+  /* ---------------- TOP BAR ---------------- */
+  #topbar{position:fixed;top:0;left:0;right:0;height:54px;z-index:50;display:flex;align-items:center;
+    gap:12px;padding:0 14px;background:rgba(22,23,27,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;white-space:nowrap}
+  .brand .logo{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);box-shadow:0 0 14px var(--accent-soft)}
+  .brand small{display:block;color:var(--muted);font-weight:500;font-size:10.5px}
+  #searchWrap{position:relative;margin-left:8px}
+  #search{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;color:var(--line);
+    padding:8px 12px 8px 32px;font-size:13px;width:260px;outline:none;transition:border .15s}
+  #search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  #searchWrap svg{position:absolute;left:9px;top:8px;width:16px;height:16px;color:var(--muted)}
+  .spacer{flex:1}
+  .btn{background:var(--panel-2);color:var(--line);border:1px solid var(--border);border-radius:9px;
+    padding:8px 13px;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:all .15s}
+  .btn:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 10px var(--accent-soft)}
+  .btn.green{background:var(--green);border-color:var(--green);color:#04210f;font-weight:700}
+  .btn.green:hover{background:#00e676}
+  .btn.purple{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.purple:hover{background:#8b48f0}
+  .zoomlbl{font-size:12px;color:var(--muted);min-width:42px;text-align:center;font-variant-numeric:tabular-nums}
+
+  /* ---------------- LEFT SIDEBAR ---------------- */
+  #sidebar{position:fixed;top:54px;left:0;bottom:0;width:230px;z-index:30;background:var(--panel);
+    border-right:1px solid var(--border);display:flex;flex-direction:column}
+  #sidebar .s-head{padding:12px 14px 8px;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:600}
+  #catList{overflow-y:auto;flex:1;padding:0 8px 14px}
+  .cat{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:13px;color:#c9c9d1;transition:background .12s,color .12s}
+  .cat:hover{background:var(--panel-2);color:#fff}
+  .cat.active{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1px var(--accent)}
+  .cat .c-ico{width:24px;height:24px;border-radius:6px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+  .cat.hidden{display:none}
+  .cat.match{background:var(--green-soft);color:#fff}
+
+  /* ---------------- TOOLBAR ---------------- */
+  #toolbar{position:fixed;left:244px;top:50%;transform:translateY(-50%);z-index:28;display:flex;flex-direction:column;gap:5px;
+    background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:7px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .tool{width:36px;height:36px;border-radius:10px;cursor:pointer;border:none;background:transparent;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .tool:hover{background:var(--panel-2);color:#fff}
+  .tool.active{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1px var(--accent)}
+  .tool svg{width:18px;height:18px}
+  .tsep{height:1px;background:var(--border);margin:3px 2px}
+
+  /* ---------------- CANVAS ---------------- */
+  #viewport{position:fixed;inset:54px 0 0 230px;overflow:hidden;cursor:grab;
+    background:radial-gradient(circle at 1px 1px,rgba(255,255,255,.045) 1px,transparent 0);background-size:26px 26px}
+  #viewport.grabbing{cursor:grabbing}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+  .edge{fill:none;stroke:rgba(244,244,245,.24);stroke-width:1.7;transition:stroke .2s,stroke-width .2s}
+  .edge.hot{stroke:var(--accent);stroke-width:2.6;filter:drop-shadow(0 0 6px var(--accent))}
+  .packet{filter:drop-shadow(0 0 5px rgba(255,255,255,.9))}
+
+  .node{position:absolute;background:var(--gray);border:1px solid var(--border);border-radius:13px;padding:11px 13px;cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,.45);transition:box-shadow .2s,border-color .2s,transform .12s,opacity .2s,background .2s;width:170px}
+  .node:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .n-head{display:flex;align-items:center;gap:9px}
+  .n-ico{width:30px;height:30px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--border);font-size:16px}
+  .n-title{font-size:13px;font-weight:600;line-height:1.15}
+  .n-sub{font-size:10px;color:var(--muted);margin-top:1px}
+  .node.pulse .n-ico{animation:iconpulse 2s ease-in-out infinite}
+  @keyframes iconpulse{0%,100%{box-shadow:0 0 0 rgba(124,58,237,0)}50%{box-shadow:0 0 12px var(--accent)}}
+  .node.glow{border-color:var(--accent);background:#211833;box-shadow:0 0 0 1px var(--accent),0 0 24px var(--accent-soft)}
+  .node.match{border-color:var(--green);background:#12301d;box-shadow:0 0 0 1px var(--green),0 0 26px var(--green-soft)}
+  .node.dim{opacity:.22}
+  .node.learn{border-color:var(--green);box-shadow:0 0 0 2px var(--green),0 0 34px var(--green-soft);transform:scale(1.06)}
+  .section-tag{position:absolute;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+  /* ---------------- RIGHT PANEL ---------------- */
+  #panel{position:fixed;top:54px;right:0;bottom:0;width:520px;max-width:94vw;z-index:45;background:var(--panel);
+    border-left:1px solid var(--border);transform:translateX(105%);transition:transform .38s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;box-shadow:-20px 0 60px rgba(0,0,0,.5)}
+  #panel.open{transform:translateX(0)}
+  #panel .ph{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border);
+    background:linear-gradient(135deg,var(--accent-soft),transparent)}
+  #panel .ph .ph-ico{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:22px;
+    background:var(--panel-2);border:1px solid var(--border)}
+  #panel .ph .ph-title{font-size:19px;font-weight:800}
+  #panel .ph .ph-cat{font-size:11.5px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  #panel .ph-close{margin-left:auto;cursor:pointer;color:var(--muted);width:30px;height:30px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;font-size:22px}
+  #panel .ph-close:hover{background:var(--panel-2);color:#fff}
+  #pbody{overflow-y:auto;padding:18px;flex:1}
+  .sec{margin-bottom:20px}
+  .sec > h4{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:9px;
+    display:flex;align-items:center;gap:7px}
+  .sec > h4::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+  .sec p{font-size:13.5px;line-height:1.65;color:#d4d4d8}
+  .sec ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+  .sec ul li{font-size:13px;line-height:1.5;color:#d4d4d8;padding-left:18px;position:relative}
+  .sec ul li::before{content:"▸";position:absolute;left:0;color:var(--accent)}
+  .sec ul.good li::before{content:"✓";color:var(--green)}
+  .sec ul.bad li::before{content:"✕";color:var(--bad)}
+  .sec ul.q li::before{content:"?";color:var(--warn);font-weight:700}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:11.5px;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;padding:4px 9px;color:#c9c9d1}
+  .chip.link{cursor:pointer}
+  .chip.link:hover{border-color:var(--accent);color:#fff}
+  .callout{background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:9px;padding:11px 13px;font-size:12.5px;color:#c9c9d1;line-height:1.6}
+  pre{background:#0b0b0d;border:1px solid var(--border);border-radius:10px;padding:13px;overflow-x:auto;font-size:12px;line-height:1.55;
+    font-family:"JetBrains Mono","Consolas",monospace;color:#d4d4d8}
+  pre .cm{color:#6b7280}.pre-lang{font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:1px}
+  .subsec{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+  .subsec h5{font-size:13px;color:#fff;margin-bottom:5px;display:flex;align-items:center;gap:7px}
+  .subsec p{font-size:12.5px;color:#b3b3bb;line-height:1.55}
+  .viz{background:#0b0b0d;border:1px solid var(--border);border-radius:12px;padding:10px;position:relative;overflow:hidden}
+  .viz svg{width:100%;height:auto;display:block}
+  .viz-ctrl{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+  .viz-ctrl button{background:var(--panel-2);border:1px solid var(--border);color:var(--line);border-radius:7px;padding:5px 10px;font-size:11.5px;cursor:pointer}
+  .viz-ctrl button:hover{border-color:var(--accent)}
+  .viz-cap{font-size:11.5px;color:var(--muted);margin-top:7px;min-height:16px;line-height:1.5}
+
+  /* ---------------- MINIMAP ---------------- */
+  #minimap{position:fixed;right:14px;bottom:14px;z-index:35;width:190px;height:120px;background:rgba(13,13,15,.9);
+    border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:right .38s}
+  #minimap.shift{right:534px}
+  #minimap svg{width:100%;height:100%;display:block}
+  #mm-view{fill:rgba(124,58,237,.16);stroke:var(--accent);stroke-width:1.5}
+
+  #zoomctl{position:fixed;right:14px;bottom:146px;z-index:35;display:flex;flex-direction:column;gap:6px;transition:right .38s}
+  #zoomctl.shift{right:534px}
+  #zoomctl button{width:34px;height:34px;border-radius:9px;cursor:pointer;background:var(--panel);border:1px solid var(--border);
+    color:var(--line);font-size:17px;display:flex;align-items:center;justify-content:center}
+  #zoomctl button:hover{border-color:var(--accent)}
+
+  /* ---------------- LEARNING OVERLAY ---------------- */
+  #learn{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:48;width:560px;max-width:92vw;display:none;
+    background:var(--panel);border:1px solid var(--green);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.7),0 0 30px var(--green-soft);overflow:hidden}
+  #learn .lh{display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg,var(--green-soft),transparent);border-bottom:1px solid var(--border)}
+  #learn .lstep{width:30px;height:30px;border-radius:8px;background:var(--green);color:#04210f;font-weight:800;display:flex;align-items:center;justify-content:center}
+  #learn .ltitle{font-size:14px;font-weight:700}
+  #learn .lcount{margin-left:auto;font-size:11px;color:var(--muted)}
+  #learn .lbody{padding:13px 16px;font-size:13px;line-height:1.55;color:#d4d4d8;min-height:44px}
+  #learn .lfoot{display:flex;gap:8px;padding:0 16px 14px}
+  #learn .lprog{height:4px;background:var(--panel-2)}
+  #learn .lprog>i{display:block;height:100%;background:var(--green);transition:width .3s}
+
+  /* ---------------- INTERVIEW MODAL ---------------- */
+  #quiz{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center}
+  #quiz .card{width:560px;max-width:92vw;background:var(--panel);border:1px solid var(--accent);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  #quiz .qh{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--accent-soft),transparent)}
+  #quiz .qh .badge{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700}
+  #quiz .q-close{margin-left:auto;cursor:pointer;color:var(--muted);font-size:22px}
+  #quiz .qbody{padding:20px}
+  #quiz .qq{font-size:19px;font-weight:700;line-height:1.4;margin-bottom:16px}
+  #quiz .qans{font-size:13.5px;line-height:1.65;color:#c9c9d1;display:none;background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:14px;max-height:220px;overflow-y:auto}
+  #quiz .qans.show{display:block;animation:fade .3s}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  #quiz .qfoot{display:flex;gap:8px;padding:0 20px 20px}
+  .hint{position:fixed;left:244px;bottom:12px;z-index:20;font-size:11px;color:var(--muted)}
+  .kbd{font-size:10px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+  <!-- ============ TOP BAR ============ -->
+  <div id="topbar">
+    <div class="brand"><span class="logo"></span><div>System Design Lab<small>Interactive interview prep</small></div></div>
+    <div id="searchWrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input id="search" placeholder="Search topics… (Kafka, Redis, CAP)" />
+    </div>
+    <div class="spacer"></div>
+    <button class="btn green" id="btnLearn">▶ Start Learning</button>
+    <button class="btn purple" id="btnQuiz">🎲 Interview Mode</button>
+    <button class="btn" id="btnZin">＋</button>
+    <span class="zoomlbl" id="zoomLbl">100%</span>
+    <button class="btn" id="btnZout">－</button>
+    <button class="btn" id="btnFit">⤢ Fit</button>
+  </div>
+
+  <!-- ============ LEFT SIDEBAR ============ -->
+  <div id="sidebar">
+    <div class="s-head">Concepts</div>
+    <div id="catList"></div>
+  </div>
+
+  <!-- ============ TOOLBAR ============ -->
+  <div id="toolbar">
+    <button class="tool active" data-tool="pointer" title="Selection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3l7 17 2-7 7-2z"/></svg></button>
+    <button class="tool" data-tool="hand" title="Hand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11V6a1.5 1.5 0 013 0v4m0 0V4.5a1.5 1.5 0 013 0V10m0 0V6a1.5 1.5 0 013 0v6c0 4-2 8-6 8s-6-3-6-6l-1.5-3a1.4 1.4 0 012.4-1.4L10 11"/></svg></button>
+    <div class="tsep"></div>
+    <button class="tool" data-tool="rect" title="Rectangle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="2"/></svg></button>
+    <button class="tool" data-tool="circle" title="Circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg></button>
+    <button class="tool" data-tool="arrow" title="Arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h14m0 0l-5-5m5 5l-5 5"/></svg></button>
+    <button class="tool" data-tool="text" title="Text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6h14M12 6v12"/></svg></button>
+    <div class="tsep"></div>
+    <button class="tool" data-tool="fit" title="Fit" id="toolFit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+
+  <!-- ============ CANVAS ============ -->
+  <div id="viewport"><div id="world"><svg id="edges"></svg></div></div>
+  <div class="hint">Drag to pan • Scroll to zoom • Click a node or concept • <span class="kbd">L</span> learn • <span class="kbd">Q</span> quiz • <span class="kbd">Esc</span> close</div>
+
+  <!-- ============ MINIMAP + ZOOM ============ -->
+  <div id="zoomctl"><button id="zin2">＋</button><button id="zout2">－</button><button id="zfit2" style="font-size:13px">⤢</button></div>
+  <div id="minimap"><svg id="mmSvg"></svg></div>
+
+  <!-- ============ RIGHT PANEL ============ -->
+  <div id="panel">
+    <div class="ph">
+      <div class="ph-ico" id="phIco">⚙️</div>
+      <div><div class="ph-cat" id="phCat">Category</div><div class="ph-title" id="phTitle">Topic</div></div>
+      <div class="ph-close" id="phClose">×</div>
+    </div>
+    <div id="pbody"></div>
+  </div>
+
+  <!-- ============ LEARNING OVERLAY ============ -->
+  <div id="learn">
+    <div class="lh"><div class="lstep" id="lStep">1</div><div class="ltitle" id="lTitle">—</div><div class="lcount" id="lCount">1 / 10</div></div>
+    <div class="lbody" id="lBody"></div>
+    <div class="lfoot"><button class="btn" id="lPrev">◀ Back</button><button class="btn green" id="lNext" style="flex:1">Next ▶</button><button class="btn" id="lExit">Exit</button></div>
+    <div class="lprog"><i id="lProg" style="width:10%"></i></div>
+  </div>
+
+  <!-- ============ INTERVIEW MODAL ============ -->
+  <div id="quiz">
+    <div class="card">
+      <div class="qh"><span class="badge">Interview Question</span><span id="qTopic" style="font-size:12px;color:var(--muted)"></span><span class="q-close" id="qClose">×</span></div>
+      <div class="qbody">
+        <div class="qq" id="qQ">—</div>
+        <div class="qans" id="qA"></div>
+      </div>
+      <div class="qfoot"><button class="btn purple" id="qReveal" style="flex:1">Reveal Answer</button><button class="btn" id="qNext">Next Question ▶</button><button class="btn" id="qOpen">Open Topic</button></div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+/* =====================================================================
+   SYSTEM DESIGN LAB — modular vanilla JS
+   Classes: SVGRenderer, Component, TopicManager, DiagramRenderer,
+            AnimationEngine, Canvas, PopupPanel, VisualLab,
+            SearchEngine, LearningEngine, InterviewEngine, App
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const svg=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1));
+
+/* =====================================================================
+   TOPIC DATA
+   ===================================================================== */
+const T = {}; // registry
+function topic(o){ T[o.id]=o; return o; }
+
+/* ---- helper for code blocks (kept as plain strings) ---- */
+const CODE = {
+  rate:
+`// Spring Boot + Redis (Token Bucket via Lua)
+String lua =
+  "local tokens = tonumber(redis.call('get', KEYS[1]) or ARGV[1]) " +
+  "if tokens > 0 then " +
+  "  redis.call('set', KEYS[1], tokens - 1) return 1 " +
+  "else return 0 end";
+
+@GetMapping("/api")
+ResponseEntity<?> handle(@RequestHeader String clientId){
+  Long ok = redis.execute(new DefaultRedisScript<>(lua, Long.class),
+              List.of("rl:"+clientId), "100");
+  if (ok == 0) return ResponseEntity.status(429).body("Too Many Requests");
+  return ResponseEntity.ok(service.process());
+}`,
+  kafka:
+`// Producer
+var props = new Properties();
+props.put("bootstrap.servers","broker:9092");
+props.put("acks","all");            // wait for ISR
+var p = new KafkaProducer<String,String>(props);
+p.send(new ProducerRecord<>("orders", orderId, payload));
+
+// Consumer (group => partitions auto-assigned)
+props.put("group.id","order-processor");
+props.put("enable.auto.commit","false");
+var c = new KafkaConsumer<String,String>(props);
+c.subscribe(List.of("orders"));
+while(true){
+  var recs = c.poll(Duration.ofMillis(100));
+  for (var r : recs) process(r);
+  c.commitSync();                   // commit offset after processing
+}`,
+  lb:
+`# NGINX load balancing
+upstream backend {
+  least_conn;                 # or: ip_hash;  (sticky)
+  server app1:8080 weight=3;  # weighted round robin
+  server app2:8080;
+  server app3:8080 backup;
+}
+server {
+  location / { proxy_pass http://backend; }
+}`,
+  cache:
+`// Cache-Aside (lazy loading)
+async function getUser(id){
+  let u = await redis.get("user:"+id);
+  if (u) return JSON.parse(u);          // HIT
+  u = await db.query("SELECT * FROM users WHERE id=$1",[id]); // MISS
+  await redis.set("user:"+id, JSON.stringify(u), "EX", 300);  // TTL 5m
+  return u;
+}`,
+  cap:
+`// A partitioned system MUST choose C or A:
+// CP  -> reject/timeout writes to stay consistent (HBase, Mongo, etcd)
+// AP  -> serve possibly-stale data, stay available (Cassandra, DynamoDB)
+// CA  -> only without partitions (single-node RDBMS)`,
+  chash:
+`// Consistent hashing with virtual nodes
+class HashRing {
+  constructor(vnodes=150){ this.ring=new TreeMap(); this.v=vnodes; }
+  add(node){ for(let i=0;i<this.v;i++) this.ring.put(hash(node+"#"+i), node); }
+  get(key){ let h=hash(key); let e=this.ring.ceilingEntry(h);
+            return (e??this.ring.firstEntry()).value; }
+}`,
+  redis:
+`SET  session:42 "{...}" EX 3600      # string + TTL
+LPUSH queue:jobs  job1               # list (queue)
+SADD tags:post:9  redis nosql        # set
+HSET user:7 name Ana age 30          # hash
+ZADD leaderboard 4200 ana            # sorted set (rank)
+SUBSCRIBE news                       # pub/sub
+CONFIG SET maxmemory-policy allkeys-lru`,
+  auth:
+`// JWT issue + verify (Node)
+const token = jwt.sign({ sub:user.id, role:user.role },
+                       SECRET, { expiresIn:"15m" });    // access
+const refresh = crypto.randomUUID();                    // store in DB
+// verify middleware
+const { sub, role } = jwt.verify(req.headers.authorization.slice(7), SECRET);`,
+  k8s:
+`apiVersion: apps/v1
+kind: Deployment
+metadata: { name: orders }
+spec:
+  replicas: 3                       # ReplicaSet keeps 3 pods
+  selector: { matchLabels: { app: orders } }
+  template:
+    metadata: { labels: { app: orders } }
+    spec:
+      containers:
+      - name: orders
+        image: orders:1.4.2
+        resources: { requests: { cpu: "250m" } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+spec: { minReplicas: 3, maxReplicas: 20, metrics: [cpu 70%] }`,
+  circuit:
+`// Circuit breaker (Resilience4j)
+CircuitBreaker cb = CircuitBreaker.of("payments",
+  CircuitBreakerConfig.custom()
+    .failureRateThreshold(50)          // open at 50% failures
+    .waitDurationInOpenState(Duration.ofSeconds(10))
+    .slidingWindowSize(20).build());
+Supplier<Resp> call = CircuitBreaker.decorateSupplier(cb, () -> payments.charge());`,
+};
+
+/* -------- headline / interactive topics -------- */
+topic({id:"rate-limiting",title:"Rate Limiter",icon:"⏱️",cat:"Resilience",visual:"rate",
+  definition:"A rate limiter controls how many requests a client may make within a time window, rejecting or delaying excess traffic (typically HTTP 429).",
+  why:["Protect APIs and downstream services from abuse and overload","Mitigate DDoS and credential-stuffing / brute-force attacks","Enforce fair usage and monetized API quotas / tiers"],
+  problem:"Without limits a single misbehaving or malicious client can exhaust CPU, connections, DB pools and take the whole service down for everyone.",
+  advantages:["Cheap, first line of defense against abuse","Predictable capacity planning","Improves fairness across tenants"],
+  disadvantages:["Distributed counters need shared state (Redis) → added latency","Poorly tuned limits reject legitimate bursts","Clock/window boundary effects can allow 2× bursts"],
+  sections:[{title:"Algorithms",items:["Token Bucket — tokens refill at fixed rate; request consumes 1; allows bursts up to capacity","Leaky Bucket — requests queue and drain at constant rate; smooths spikes","Fixed Window — count per calendar window; simple but boundary bursts","Sliding Window Log — store timestamps; exact but memory heavy","Sliding Window Counter — weighted blend of two windows; good accuracy/cost"]}],
+  interview:["Why choose Token Bucket over Fixed Window?","Difference between Sliding Window Counter and Token Bucket?","How would you implement rate limiting in Redis atomically?","How do you rate-limit across many API servers consistently?"],
+  companies:["Stripe","GitHub","Cloudflare","AWS API Gateway","Twitter/X"],
+  best:["Centralize counters in Redis; make check+decrement atomic with Lua","Return Retry-After and X-RateLimit-* headers","Rate-limit at the edge / API gateway before hitting services","Use separate buckets per client, per route, and global"],
+  mistakes:["Non-atomic read-then-write causing race conditions","Per-instance in-memory counters in a multi-node fleet","Same limit for cheap and expensive endpoints"],
+  code:{lang:"Java · Redis",text:CODE.rate},
+  related:["redis","api-gateway","reverse-proxy","circuit-breaker"],
+  refs:[["Stripe: Scaling your API with rate limiters","https://stripe.com/blog/rate-limiters"],["Cloudflare rate limiting","https://developers.cloudflare.com/waf/rate-limiting-rules/"]]});
+
+topic({id:"kafka",title:"Apache Kafka",icon:"🪵",cat:"Messaging",visual:"kafka",
+  definition:"Kafka is a distributed, partitioned, replicated commit log. Producers append events to topics; consumers read them at their own pace using durable offsets.",
+  why:["Decouple producers from consumers (async, buffering)","Replay & durability — events persist and can be re-read","Massive horizontal throughput via partitioning"],
+  problem:"Synchronous service-to-service calls create tight coupling, back-pressure cascades and data loss on downstream outages. Kafka buffers and decouples them.",
+  advantages:["Very high throughput, ordered per partition","Durable & replayable log with retention","Scales linearly by adding partitions/brokers"],
+  disadvantages:["Operationally complex (brokers, ISR, rebalancing)","Ordering only within a partition, not across","At-least-once by default → consumers must be idempotent"],
+  sections:[{title:"Core Concepts",items:["Producer — publishes records to a topic","Broker — a Kafka server holding partitions","Topic — named stream, split into partitions","Partition — ordered, immutable log; unit of parallelism","Offset — position of a record in a partition","Consumer Group — consumers sharing partitions (1 partition → 1 consumer)","Leader / Follower — each partition has 1 leader replica + followers","ISR — in-sync replicas caught up to the leader","Replication — leader streams to followers (RF copies)","Leader Election — controller promotes an ISR follower if leader dies","Retention — time/size based log cleanup","acks — 0 / 1 / all durability levels"]},
+    {title:"Delivery Guarantees",items:["At most once — commit before processing (may lose)","At least once — commit after processing (may duplicate)","Exactly once — idempotent producer + transactions"]}],
+  interview:["What is a Kafka partition and why does it matter?","How does a consumer group assign partitions?","Explain leader, follower and ISR.","How does Kafka achieve exactly-once semantics?","Where are consumer offsets stored?"],
+  companies:["LinkedIn","Uber","Netflix","Airbnb","Shopify"],
+  best:["Choose partition count for target parallelism up front","Use keys for ordering guarantees per entity","Set acks=all + min.insync.replicas=2 for durability","Make consumers idempotent; commit after processing"],
+  mistakes:["Assuming global ordering across partitions","Auto-commit before processing → data loss","Too few partitions capping consumer parallelism"],
+  code:{lang:"Java",text:CODE.kafka},
+  related:["event-driven","rabbitmq","microservices","replication"],
+  refs:[["Kafka documentation","https://kafka.apache.org/documentation/"],["Confluent: Kafka internals","https://developer.confluent.io/"]]});
+
+topic({id:"load-balancer",title:"Load Balancer",icon:"⚖️",cat:"Networking",visual:"lb",
+  definition:"A load balancer distributes incoming traffic across a pool of servers to maximize throughput, minimize latency and provide high availability.",
+  why:["Spread load so no single server is a hotspot","Health-check & remove failed instances automatically","Enable horizontal scaling and zero-downtime deploys"],
+  problem:"A single server can't handle production traffic and is a single point of failure. LBs give one stable entry point over a changing fleet.",
+  advantages:["High availability + failover","Elastic horizontal scaling","TLS termination and centralized routing"],
+  disadvantages:["Can become a bottleneck / SPOF if not redundant","Sticky sessions complicate scaling","L7 inspection adds latency"],
+  sections:[{title:"Algorithms",items:["Round Robin — rotate through servers evenly","Least Connections — send to the least-busy server","Weighted — bigger servers get more traffic","IP Hash — same client → same server (deterministic)","Sticky Sessions — pin a session to one server"]},
+    {title:"Layers",items:["L4 (transport) — routes by IP/port, very fast","L7 (application) — routes by URL/header/cookie"]}],
+  interview:["Round Robin vs Least Connections — when each?","How do you avoid the LB being a SPOF?","What are sticky sessions and their downside?","L4 vs L7 load balancing?"],
+  companies:["AWS ELB/ALB","Google Cloud LB","NGINX","HAProxy","Cloudflare"],
+  best:["Run LBs in an active-active HA pair","Prefer stateless services over sticky sessions","Use health checks + connection draining","Terminate TLS at the LB, mTLS internally"],
+  mistakes:["Single LB instance (SPOF)","Sticky sessions blocking clean scale-out","No health checks → routing to dead nodes"],
+  code:{lang:"NGINX",text:CODE.lb},
+  related:["reverse-proxy","api-gateway","service-discovery","networking"],
+  refs:[["NGINX load balancing guide","https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/"]]});
+
+topic({id:"caching",title:"Caching",icon:"⚡",cat:"Performance",visual:"cache",
+  definition:"Caching stores copies of expensive-to-produce data in fast storage (memory) so future reads are served quickly, reducing latency and backend load.",
+  why:["Cut read latency from ms(DB) to µs(memory)","Reduce load on databases and services","Absorb read spikes cheaply"],
+  problem:"Databases are slow and expensive under heavy read load. Caches serve hot data fast, but introduce the hard problem of consistency & invalidation.",
+  advantages:["Dramatic latency & throughput gains","Lower DB cost and contention","Smooths traffic spikes"],
+  disadvantages:["Stale data / invalidation is hard","Cache stampede on expiry","Extra moving part & memory cost"],
+  sections:[{title:"Patterns",items:["Cache-Aside — app checks cache, on miss loads DB then fills cache","Read-Through — cache library loads from DB on miss","Write-Through — write to cache and DB synchronously","Write-Behind — write cache now, flush to DB async","Refresh-Ahead — proactively refresh hot keys before expiry"]},
+    {title:"Eviction",items:["LRU — evict least recently used","LFU — evict least frequently used","TTL — expire after fixed time","FIFO — evict oldest inserted"]}],
+  interview:["Cache-Aside vs Write-Through — trade-offs?","How do you prevent a cache stampede?","How do you keep cache and DB consistent?","When would you use Write-Behind?"],
+  companies:["Facebook (memcached)","Twitter","Instagram","Reddit"],
+  best:["Set sensible TTLs; add jitter to avoid synchronized expiry","Use request coalescing / locks against stampede","Cache at multiple layers (CDN, app, DB)","Prefer cache-aside for read-heavy workloads"],
+  mistakes:["No TTL → unbounded stale data","Caching everything, including rarely-read data","Thundering herd on popular key expiry"],
+  code:{lang:"JavaScript",text:CODE.cache},
+  related:["redis","cdn","database","api-gateway"],
+  refs:[["AWS caching best practices","https://aws.amazon.com/caching/best-practices/"]]});
+
+topic({id:"database",title:"Database",icon:"🗄️",cat:"Data",visual:"db",
+  definition:"A database is an organized, durable store for structured or unstructured data with query, transaction and integrity guarantees.",
+  why:["Persist application state durably","Query and aggregate data efficiently","Enforce integrity and concurrency control"],
+  problem:"Applications need durable, consistent, queryable state that survives restarts and scales with load — files and memory can't provide this safely.",
+  advantages:["Durability + ACID guarantees (SQL)","Powerful querying & indexing","Mature tooling & ecosystem"],
+  disadvantages:["Vertical scaling limits; sharding is complex","Schema changes can be painful","Distributed transactions are hard"],
+  sections:[{title:"Key Concepts",items:["Replication — copies for HA and read scaling","Sharding — horizontal partitioning by key","Partitioning — split large tables (range/hash/list)","Indexing — B-Tree/Hash structures for fast lookups","ACID — Atomicity, Consistency, Isolation, Durability","Normalization — remove redundancy (1NF→3NF)","Transactions — all-or-nothing units of work","Locking — pessimistic vs optimistic concurrency"]}],
+  interview:["SQL vs NoSQL — how do you choose?","What does an index cost on writes?","Explain the isolation levels.","How does sharding break JOINs and transactions?"],
+  companies:["PostgreSQL","MySQL","MongoDB","Cassandra","DynamoDB"],
+  best:["Index for your read patterns, not blindly","Use read replicas to scale reads","Pick a shard key with even distribution","Keep transactions short"],
+  mistakes:["Over-indexing → slow writes","Choosing a hot shard key","N+1 query patterns"],
+  code:{lang:"SQL",text:"-- covering index for a hot query\nCREATE INDEX idx_orders_user_status\n  ON orders (user_id, status) INCLUDE (total);\n\nEXPLAIN ANALYZE\nSELECT total FROM orders WHERE user_id=42 AND status='PAID';"},
+  related:["sharding","replication","indexing","sql","nosql"],
+  refs:[["Use The Index, Luke","https://use-the-index-luke.com/"]]});
+
+topic({id:"api-gateway",title:"API Gateway",icon:"🚪",cat:"Networking",visual:"gateway",
+  definition:"An API gateway is a single entry point that fronts microservices, handling cross-cutting concerns like routing, auth, rate limiting and aggregation.",
+  why:["One stable public entry point for many services","Centralize auth, rate limiting, TLS, logging","Hide internal topology from clients"],
+  problem:"Exposing dozens of microservices directly forces clients to know internal addresses and duplicate auth/limiting logic everywhere.",
+  advantages:["Centralized cross-cutting concerns","Request aggregation reduces client round-trips","Decouples clients from internal services"],
+  disadvantages:["Potential bottleneck / SPOF","Extra network hop & latency","Can become a monolith of logic"],
+  sections:[{title:"Responsibilities",items:["Routing — map paths to services","Authentication — verify identity (JWT/OAuth)","Authorization — enforce permissions","Rate Limiting — throttle abusive clients","Caching — cache responses at the edge","Circuit Breaker — fail fast on unhealthy services","Load Balancing — spread across instances","Request Aggregation — fan-out & combine (BFF)"]}],
+  interview:["Gateway vs Load Balancer — difference?","How does a gateway avoid being a SPOF?","What is the BFF (Backend-for-Frontend) pattern?"],
+  companies:["Kong","AWS API Gateway","Apigee","Netflix Zuul"],
+  best:["Keep business logic out of the gateway","Run multiple instances behind an LB","Offload auth & rate limiting here","Use timeouts + circuit breakers to services"],
+  mistakes:["Putting domain logic in the gateway","Single instance SPOF","No timeouts → cascading hangs"],
+  code:{lang:"YAML · Kong",text:"routes:\n- name: orders\n  paths: [/orders]\n  service: orders-svc\n  plugins:\n  - name: rate-limiting\n    config: { minute: 100, policy: redis }\n  - name: jwt"},
+  related:["load-balancer","rate-limiting","authentication","circuit-breaker","microservices"],
+  refs:[["Kong gateway docs","https://docs.konghq.com/"]]});
+
+topic({id:"cap-theorem",title:"CAP Theorem",icon:"🔺",cat:"Theory",visual:"cap",
+  definition:"CAP states that a distributed data store can guarantee at most two of: Consistency, Availability, Partition tolerance. Under a network partition you must trade C for A.",
+  why:["Frames the fundamental trade-off of distributed data","Guides database & replication choices","Explains why 'strong + always-up' is impossible during partitions"],
+  problem:"Networks partition. When nodes can't talk, a system must either refuse requests (stay consistent) or answer with possibly-stale data (stay available).",
+  advantages:["Simple mental model for trade-offs","Helps classify databases (CP vs AP)"],
+  disadvantages:["Oversimplified — ignores latency (see PACELC)","'Two of three' framing is misleading; P is mandatory"],
+  sections:[{title:"The three properties",items:["Consistency — every read sees the latest write","Availability — every request gets a (non-error) response","Partition Tolerance — system works despite dropped messages"]},
+    {title:"Real systems",items:["CP — MongoDB, HBase, etcd, ZooKeeper (reject to stay correct)","AP — Cassandra, DynamoDB, Riak (stay up, eventual consistency)","CA — only a single node with no partitions"]}],
+  interview:["Explain CAP in one minute.","Give a CP and an AP database and why.","What does PACELC add to CAP?","Is CA achievable in a distributed system?"],
+  companies:["Amazon (Dynamo paper)","Google (Spanner)","Cassandra","MongoDB"],
+  best:["Since P is unavoidable, decide C-vs-A per use case","Money/inventory → prefer CP; feeds/likes → prefer AP","Consider tunable consistency (quorums)"],
+  mistakes:["Claiming you can have all three","Ignoring latency trade-offs (PACELC)"],
+  code:{lang:"Concept",text:CODE.cap},
+  related:["replication","sharding","consistent-hashing","nosql"],
+  refs:[["Gilbert & Lynch CAP proof","https://groups.csail.mit.edu/tds/papers/Gilbert/Brewer2.pdf"]]});
+
+topic({id:"consistent-hashing",title:"Consistent Hashing",icon:"🔁",cat:"Theory",visual:"chash",
+  definition:"Consistent hashing maps keys and nodes onto a hash ring so that adding/removing a node only remaps a small fraction (≈K/N) of keys, not all of them.",
+  why:["Minimize key movement when the cluster changes","Even data distribution across nodes","Foundation for sharding, caches, and DHTs"],
+  problem:"Naive hash % N remaps almost every key when N changes, causing massive cache misses / data reshuffles. Consistent hashing avoids this.",
+  advantages:["Only K/N keys move on membership change","Scales smoothly up and down","Virtual nodes give even load"],
+  disadvantages:["Uneven load without virtual nodes","More complex than modulo hashing","Hotspots if keys are skewed"],
+  sections:[{title:"Ideas",items:["Ring — hash space arranged in a circle (0…2³²)","Node placement — hash each node onto the ring","Key assignment — key goes to first node clockwise","Virtual Nodes — many points per node → balanced load","Add node — steals keys only from its ring neighbor","Remove node — its keys pass to the next node clockwise"]}],
+  interview:["Why not just hash % N?","How do virtual nodes help?","How many keys move when a node joins?","Where is consistent hashing used in practice?"],
+  companies:["Amazon DynamoDB","Cassandra","Discord","Akamai","memcached clients"],
+  best:["Use 100–200 virtual nodes per physical node","Hash with a good uniform function (murmur/xxhash)","Replicate to the next R nodes clockwise"],
+  mistakes:["Skipping virtual nodes → unbalanced ring","Poor hash function → clustering","Ignoring replication placement"],
+  code:{lang:"JavaScript",text:CODE.chash},
+  related:["sharding","cap-theorem","caching","database"],
+  refs:[["Consistent Hashing (Karger et al.)","https://en.wikipedia.org/wiki/Consistent_hashing"]]});
+
+topic({id:"redis",title:"Redis",icon:"🧠",cat:"Data",visual:"redis",
+  definition:"Redis is an in-memory data structure store used as a cache, database and message broker, offering sub-millisecond access to rich data types.",
+  why:["Microsecond reads/writes for hot data","Rich structures beyond key-value","Pub/Sub, streams, TTL, atomic ops"],
+  problem:"Applications need ultra-fast shared state (sessions, counters, leaderboards, queues) that a disk DB can't serve at scale.",
+  advantages:["Blazing fast (in-memory)","Versatile data structures","Atomic ops + Lua scripting"],
+  disadvantages:["Data must (mostly) fit in RAM","Durability is weaker than a disk DB","Single-threaded command execution"],
+  sections:[{title:"Data Structures",items:["Strings — values, counters (INCR)","Lists — queues/stacks (LPUSH/RPOP)","Sets — unique members, intersections","Hashes — object fields","Sorted Sets — leaderboards, ranking by score"]},
+    {title:"Features",items:["Pub/Sub — lightweight messaging","TTL — key expiry for caching","Eviction — LRU/LFU/TTL policies","Persistence — RDB snapshots + AOF log"]}],
+  interview:["When Redis vs Memcached?","How does TTL + eviction interact?","How do you build a distributed lock in Redis?","Why is Redis single-threaded yet fast?"],
+  companies:["Twitter","GitHub","Snapchat","Stack Overflow"],
+  best:["Set maxmemory + an eviction policy","Use pipelines to reduce round-trips","Use Redis Cluster for horizontal scale","Prefer Lua for atomic multi-step ops"],
+  mistakes:["Storing huge values / unbounded keys","No eviction policy → OOM","Using KEYS * in production"],
+  code:{lang:"Redis CLI",text:CODE.redis},
+  related:["caching","rate-limiting","database","event-driven"],
+  refs:[["Redis documentation","https://redis.io/docs/"]]});
+
+topic({id:"authentication",title:"Authentication",icon:"🔑",cat:"Security",visual:"auth",
+  definition:"Authentication verifies WHO a user is (identity). It commonly uses tokens (JWT), OAuth2 flows, and short-lived access + long-lived refresh tokens.",
+  why:["Establish and prove user identity","Enable stateless, scalable sessions","Delegate access safely (OAuth2)"],
+  problem:"Services must know who is calling without a shared session store; tokens let any instance verify identity independently.",
+  advantages:["Stateless JWT scales horizontally","Standardized flows (OAuth2/OIDC)","Fine-grained token scopes"],
+  disadvantages:["JWT can't be easily revoked before expiry","Token theft = impersonation","Clock skew & key rotation complexity"],
+  sections:[{title:"Concepts",items:["Access Token — short-lived (mins), sent on each request","Refresh Token — long-lived, exchanges for new access token","JWT — signed header.payload.signature, self-contained","OAuth2 — delegated authorization (Authorization Code + PKCE)","OIDC — identity layer on top of OAuth2"]},
+    {title:"AuthN vs AuthZ",items:["Authentication — who are you? (login)","Authorization — what can you do? (permissions)"]}],
+  interview:["JWT vs session cookies — trade-offs?","How do you revoke a JWT?","Explain the OAuth2 Authorization Code flow.","Why short access + long refresh tokens?"],
+  companies:["Auth0","Okta","Google Identity","AWS Cognito"],
+  best:["Keep access tokens short-lived (5–15m)","Store refresh tokens server-side / httpOnly cookie","Rotate signing keys; validate iss/aud/exp","Use PKCE for public clients"],
+  mistakes:["Long-lived JWTs with no revocation","Storing tokens in localStorage (XSS risk)","Not validating token signature/claims"],
+  code:{lang:"Node.js",text:CODE.auth},
+  related:["authorization","api-gateway","security","rate-limiting"],
+  refs:[["OAuth 2.0","https://oauth.net/2/"],["JWT introduction","https://jwt.io/introduction"]]});
+
+topic({id:"kubernetes",title:"Kubernetes",icon:"☸️",cat:"Infrastructure",visual:"k8s",
+  definition:"Kubernetes is a container orchestration platform that automates deployment, scaling, healing and networking of containerized workloads across a cluster.",
+  why:["Self-healing & automated rollouts","Declarative desired-state management","Horizontal auto-scaling and bin-packing"],
+  problem:"Running containers by hand across many machines (placement, restarts, scaling, networking) is error-prone. K8s reconciles desired vs actual state.",
+  advantages:["Self-healing + rolling updates","Portable across clouds","Rich ecosystem (Helm, operators)"],
+  disadvantages:["Steep learning curve & operational cost","Networking/RBAC complexity","Overkill for small apps"],
+  sections:[{title:"Objects",items:["Pod — smallest unit; one or more containers","ReplicaSet — keeps N pod replicas running","Deployment — declarative updates over ReplicaSets","Service — stable virtual IP + LB for pods","Ingress — HTTP routing into the cluster","Node — a worker machine","Cluster — control plane + nodes","HPA — auto-scale pods on metrics","Rolling Update — gradual, zero-downtime deploy"]}],
+  interview:["Pod vs Deployment vs ReplicaSet?","How does a Service find pods?","Explain a rolling update & rollback.","How does the HPA decide to scale?"],
+  companies:["Google","Spotify","Airbnb","Pinterest","CERN"],
+  best:["Set resource requests/limits on every container","Add liveness & readiness probes","Use rolling updates + PodDisruptionBudgets","Externalize config via ConfigMaps/Secrets"],
+  mistakes:["No resource limits → noisy neighbors","Missing readiness probes → traffic to cold pods","Treating pods as pets, not cattle"],
+  code:{lang:"YAML",text:CODE.k8s},
+  related:["docker","microservices","service-discovery","monitoring"],
+  refs:[["Kubernetes docs","https://kubernetes.io/docs/home/"]]});
+
+/* -------- supporting topics (concise but real) -------- */
+const mk=(id,title,icon,cat,definition,extra={})=>topic(Object.assign({id,title,icon,cat,definition},extra));
+
+mk("networking","Networking","🌐","Networking",
+  "The protocols and infrastructure (DNS, TCP/IP, TLS, HTTP) that move requests between clients and servers.",
+  {why:["Reliable client↔server communication","Name resolution and secure transport","Foundation of every distributed system"],
+   sections:[{title:"Essentials",items:["DNS — resolves domains → IPs","TCP/UDP — reliable vs fast transport","TLS — encryption + identity","HTTP/1.1 · HTTP/2 · HTTP/3 (QUIC)","Latency vs bandwidth vs throughput"]}],
+   interview:["What happens when you type a URL and hit enter?","TCP vs UDP?","How does TLS handshake work?"],
+   companies:["Cloudflare","Akamai","AWS Route 53"],best:["Use HTTP/2+ and keep-alive","Terminate TLS at the edge","Cache DNS with sensible TTLs"],
+   related:["cdn","load-balancer","reverse-proxy","security"]});
+
+mk("cdn","CDN","📡","Networking",
+  "A Content Delivery Network caches static (and edge-computed) content on servers near users to cut latency and offload origin.",
+  {why:["Serve assets from the nearest edge PoP","Offload origin bandwidth & load","Absorb traffic spikes and DDoS"],
+   advantages:["Lower latency worldwide","Origin offload","Edge security (WAF/DDoS)"],
+   disadvantages:["Cache invalidation lag","Cost for dynamic content","Stale content if misconfigured"],
+   sections:[{title:"Concepts",items:["Edge/PoP — cache near users","Origin — source of truth","TTL & purge — freshness control","Cache-Control headers","Edge compute (Workers/Lambda@Edge)"]}],
+   interview:["How does a CDN decide cache hit vs miss?","How do you invalidate CDN cache?","Push vs pull CDN?"],
+   companies:["Cloudflare","Akamai","Fastly","CloudFront"],best:["Version asset URLs for easy busting","Long TTL for immutable assets","Use stale-while-revalidate"],
+   related:["caching","networking","load-balancer"]});
+
+mk("authorization","Authorization","🛂","Security",
+  "Authorization decides WHAT an authenticated identity is allowed to do — via roles (RBAC), attributes (ABAC) or policies.",
+  {why:["Enforce least-privilege access","Separate identity from permissions","Protect sensitive resources"],
+   sections:[{title:"Models",items:["RBAC — roles grant permissions","ABAC — rules over attributes","ACL — per-resource allow lists","Scopes/Claims — token-embedded permissions","Policy engines — OPA / Cedar"]}],
+   interview:["RBAC vs ABAC?","Where do you enforce authorization?","How do you model multi-tenant permissions?"],
+   companies:["Okta","AWS IAM","Google Zanzibar"],best:["Enforce on the server, never client-only","Default-deny","Centralize policy (OPA)"],
+   related:["authentication","security","api-gateway"]});
+
+mk("microservices","Microservices","🧩","Architecture",
+  "An architecture that structures an app as small, independently deployable services owning their own data and communicating over the network.",
+  {why:["Independent deploy & scaling per service","Team autonomy and tech diversity","Fault isolation"],
+   advantages:["Independent scaling/deploys","Fault isolation","Polyglot freedom"],
+   disadvantages:["Distributed-system complexity","Network latency & partial failure","Harder debugging & data consistency"],
+   sections:[{title:"Concerns",items:["Service boundaries (DDD bounded contexts)","Inter-service comms (REST/gRPC/events)","Data per service (no shared DB)","Observability (tracing/logging)","Resilience (timeouts, retries, breakers)"]}],
+   interview:["Monolith vs microservices trade-offs?","How do services share data consistently?","How do you handle a failing dependency?"],
+   companies:["Netflix","Amazon","Uber","Spotify"],best:["One database per service","Design for failure (timeouts/breakers)","Async events to decouple"],
+   mistakes:["Distributed monolith (shared DB)","Chatty synchronous calls","No distributed tracing"],
+   related:["api-gateway","service-discovery","kafka","circuit-breaker","saga"]});
+
+mk("service-discovery","Service Discovery","🧭","Architecture",
+  "A mechanism for services to find each other's dynamic network locations, via a registry (client-side) or a proxy (server-side).",
+  {why:["Locate ephemeral service instances","Enable auto-scaling & self-healing","Avoid hard-coded addresses"],
+   sections:[{title:"Approaches",items:["Client-side — client queries registry then LBs (Eureka)","Server-side — LB/proxy resolves (K8s Service, Consul)","Registry — Consul, etcd, ZooKeeper","Health checks deregister dead instances"]}],
+   interview:["Client vs server-side discovery?","How are unhealthy instances removed?","How does K8s DNS-based discovery work?"],
+   companies:["Netflix Eureka","HashiCorp Consul","Kubernetes"],best:["Health-check & TTL registrations","Cache lookups with sane TTLs"],
+   related:["microservices","load-balancer","kubernetes"]});
+
+mk("reverse-proxy","Reverse Proxy","↩️","Networking",
+  "A server that sits in front of backends, forwarding client requests and adding TLS, caching, compression and routing.",
+  {why:["Hide & protect backend servers","Centralize TLS, caching, compression","Route by path/host"],
+   sections:[{title:"Duties",items:["TLS termination","Static caching & gzip/brotli","Path/host routing","Load balancing","Security (WAF, headers)"]}],
+   interview:["Forward vs reverse proxy?","Reverse proxy vs API gateway vs LB?"],
+   companies:["NGINX","HAProxy","Envoy","Traefik"],best:["Terminate TLS + set security headers","Enable caching + compression"],
+   related:["load-balancer","api-gateway","cdn","networking"]});
+
+mk("sharding","Sharding","🪓","Data",
+  "Sharding splits one logical dataset across multiple databases (shards) by a shard key so each holds a subset, enabling horizontal write scaling.",
+  {why:["Scale writes/storage beyond one node","Reduce per-node data size","Isolate load by key range/hash"],
+   advantages:["Horizontal write scale","Smaller indexes per shard","Blast-radius isolation"],
+   disadvantages:["Cross-shard JOINs/txns are hard","Rebalancing is complex","Hot shards from bad keys"],
+   sections:[{title:"Strategies",items:["Range-based — by key range (risk: hotspots)","Hash-based — even spread, no range queries","Directory/lookup — flexible mapping table","Consistent hashing — minimal reshuffle"]}],
+   interview:["How do you pick a shard key?","How do cross-shard transactions work?","How do you rebalance shards?"],
+   companies:["Instagram","Vitess (YouTube)","MongoDB","Citus"],best:["Choose a high-cardinality, even key","Avoid cross-shard transactions","Plan resharding early"],
+   related:["consistent-hashing","database","replication","cap-theorem"]});
+
+mk("replication","Replication","📑","Data",
+  "Replication keeps copies of data on multiple nodes for high availability, read scaling and durability.",
+  {why:["Survive node failures (HA)","Scale reads via replicas","Geo-locality & backups"],
+   advantages:["Fault tolerance","Read scalability","Lower read latency (geo)"],
+   disadvantages:["Replication lag → stale reads","Write conflicts (multi-leader)","Extra storage/cost"],
+   sections:[{title:"Topologies",items:["Single-leader — one writer, many readers","Multi-leader — multiple writers, conflict resolution","Leaderless (quorum) — Dynamo-style R+W>N","Sync vs async replication"]}],
+   interview:["Sync vs async replication trade-offs?","What is replication lag and how to handle it?","How do quorums (R+W>N) work?"],
+   companies:["PostgreSQL","MySQL","Cassandra","DynamoDB"],best:["Async replicas for reads, sync for durability","Read-your-writes via sticky routing"],
+   related:["sharding","database","cap-theorem","kafka"]});
+
+mk("indexing","Database Indexing","🔎","Data",
+  "Indexes are auxiliary data structures (usually B-Trees) that let the database find rows without scanning the whole table.",
+  {why:["Turn O(n) scans into O(log n) lookups","Speed up filters, joins, sorts","Enforce uniqueness"],
+   advantages:["Fast reads & lookups","Support ORDER BY / range scans","Unique constraints"],
+   disadvantages:["Slows writes (index maintenance)","Uses extra storage","Wrong indexes are ignored"],
+   sections:[{title:"Types",items:["B-Tree — ranges & equality (default)","Hash — equality only","Composite — multi-column (order matters!)","Covering — includes all needed columns","Partial — index a subset of rows"]}],
+   interview:["Why can too many indexes hurt?","What is a covering index?","Why does column order in a composite index matter?"],
+   companies:["PostgreSQL","MySQL","Oracle"],best:["Index by real query patterns","Prefer composite over many single-column","Use EXPLAIN to verify usage"],
+   related:["database","sql","sharding"]});
+
+mk("sql","SQL","🧮","Data",
+  "SQL (relational) databases store data in tables with a fixed schema and provide ACID transactions and powerful joins.",
+  {why:["Strong consistency & integrity","Complex queries and joins","Mature, well understood"],
+   advantages:["ACID transactions","Rich querying/joins","Strong schema & constraints"],
+   disadvantages:["Harder horizontal scaling","Rigid schema migrations","Joins costly at huge scale"],
+   sections:[{title:"When to use",items:["Financial / transactional data","Complex relationships & reporting","Strong consistency required"]}],
+   interview:["When SQL over NoSQL?","Explain ACID.","How do you scale a relational DB?"],
+   companies:["PostgreSQL","MySQL","SQL Server"],best:["Normalize then selectively denormalize","Use transactions for invariants"],
+   related:["nosql","database","indexing","replication"]});
+
+mk("nosql","NoSQL","🍃","Data",
+  "NoSQL databases trade some relational features for scale and flexibility: document, key-value, wide-column and graph models.",
+  {why:["Horizontal scale & high write throughput","Flexible/evolving schemas","Model-fit for specific access patterns"],
+   advantages:["Scales horizontally","Flexible schema","High availability (AP)"],
+   disadvantages:["Weaker/eventual consistency","Limited joins/transactions","Query patterns must be known upfront"],
+   sections:[{title:"Types",items:["Document — MongoDB, Couchbase","Key-Value — Redis, DynamoDB","Wide-Column — Cassandra, HBase","Graph — Neo4j, Neptune"]}],
+   interview:["Document vs wide-column — when?","How does eventual consistency affect design?","How do you model for query patterns?"],
+   companies:["MongoDB","Cassandra","DynamoDB","Neo4j"],best:["Model around access patterns","Embrace denormalization","Pick consistency level per operation"],
+   related:["sql","database","cap-theorem","sharding"]});
+
+mk("event-driven","Event-Driven Architecture","📨","Architecture",
+  "Services communicate by producing and reacting to events asynchronously, decoupling producers from consumers.",
+  {why:["Loose coupling & independent scaling","Resilience to downstream outages","Natural audit log / replay"],
+   advantages:["Decoupled & scalable","Async resilience","Extensible (add consumers freely)"],
+   disadvantages:["Eventual consistency","Harder to trace/debug","Ordering & duplicate handling"],
+   sections:[{title:"Patterns",items:["Event notification vs event-carried state","Event sourcing","CQRS","Choreography vs orchestration","Outbox pattern for reliable publish"]}],
+   interview:["Events vs commands?","How do you guarantee delivery?","Choreography vs orchestration?"],
+   companies:["Netflix","Uber","Shopify"],best:["Idempotent consumers","Use the transactional outbox","Version your event schemas"],
+   related:["kafka","rabbitmq","cqrs","event-sourcing","saga"]});
+
+mk("circuit-breaker","Circuit Breaker","🔌","Resilience",
+  "A circuit breaker stops calling a failing dependency after a failure threshold, failing fast and giving it time to recover.",
+  {why:["Prevent cascading failures","Fail fast instead of hanging","Give dependencies time to heal"],
+   advantages:["Contains failure blast radius","Faster user-facing errors","Auto-recovery via half-open"],
+   disadvantages:["Tuning thresholds is tricky","Can hide real issues if misused"],
+   sections:[{title:"States",items:["Closed — calls flow, failures counted","Open — calls rejected immediately","Half-Open — trial calls test recovery"]}],
+   interview:["Explain the three breaker states.","Circuit breaker vs retry — how combine?","How do you pick thresholds?"],
+   companies:["Netflix Hystrix","Resilience4j","Envoy"],best:["Combine with timeouts + bulkheads","Expose breaker metrics","Add fallbacks/degradation"],
+   mistakes:["Retrying through an open breaker","No timeouts underneath"],
+   code:{lang:"Java",text:CODE.circuit},
+   related:["retry","microservices","api-gateway"]});
+
+mk("retry","Retry Pattern","🔁","Resilience",
+  "Automatically retrying transient failures — with exponential backoff and jitter — to improve success without overwhelming the target.",
+  {why:["Recover from transient glitches","Improve effective reliability","Smooth over brief blips"],
+   advantages:["Higher success on flaky networks","Simple to add"],
+   disadvantages:["Retry storms amplify outages","Duplicates without idempotency","Added latency"],
+   sections:[{title:"Do it right",items:["Exponential backoff (2^n)","Add jitter to avoid thundering herd","Cap max attempts","Only retry idempotent/transient errors","Pair with a circuit breaker"]}],
+   interview:["Why add jitter to backoff?","Which errors are safe to retry?","How do retries + breakers interact?"],
+   companies:["AWS SDKs","Google Cloud clients"],best:["Backoff + jitter + max cap","Retry only idempotent ops","Respect Retry-After"],
+   mistakes:["Immediate fixed retries","Retrying non-idempotent writes"],
+   related:["circuit-breaker","microservices","kafka"]});
+
+mk("saga","Saga Pattern","🧵","Architecture",
+  "A saga manages a distributed transaction as a sequence of local transactions, using compensating actions to undo on failure (no 2PC).",
+  {why:["Consistency across services without 2PC","Long-running business workflows","Avoid distributed locks"],
+   advantages:["No global locks / 2PC","Scales across services","Explicit failure handling"],
+   disadvantages:["Complex compensation logic","Only eventual consistency","Hard to reason about"],
+   sections:[{title:"Coordination",items:["Choreography — services react to events","Orchestration — central coordinator drives steps","Compensating transactions undo prior steps"]}],
+   interview:["Saga vs 2PC?","Choreography vs orchestration saga?","How do you design compensations?"],
+   companies:["Uber","Airbnb","banking systems"],best:["Idempotent steps + compensations","Persist saga state","Prefer orchestration for complex flows"],
+   related:["microservices","event-driven","kafka","cqrs"]});
+
+mk("cqrs","CQRS","✂️","Architecture",
+  "Command Query Responsibility Segregation separates the write model (commands) from the read model (queries), often with different stores.",
+  {why:["Optimize reads and writes independently","Scale read side separately","Fit complex domains"],
+   advantages:["Independent read/write scaling","Tailored read models","Pairs with event sourcing"],
+   disadvantages:["More complexity & moving parts","Eventual consistency between models","Sync/replay logic"],
+   sections:[{title:"Idea",items:["Commands mutate state (write model)","Queries read denormalized views (read model)","Events project into read models","Often combined with Event Sourcing"]}],
+   interview:["When is CQRS worth the complexity?","How do read models stay updated?","CQRS vs simple CRUD?"],
+   companies:["EventStore users","banking/trading systems"],best:["Adopt only where read/write needs diverge","Keep projections idempotent"],
+   related:["event-sourcing","event-driven","microservices","kafka"]});
+
+mk("event-sourcing","Event Sourcing","📜","Architecture",
+  "Instead of storing current state, event sourcing stores the full sequence of state-changing events; current state is derived by replaying them.",
+  {why:["Complete audit trail / history","Rebuild state & time-travel debugging","Natural fit for event-driven systems"],
+   advantages:["Full history & auditability","Replay to rebuild/repair state","Temporal queries"],
+   disadvantages:["Event schema evolution is hard","Replays get slow → need snapshots","Steep mental model"],
+   sections:[{title:"Concepts",items:["Event store — append-only log of events","Aggregate — replays its events to state","Snapshots — cache state to speed replay","Projections — build read models (CQRS)"]}],
+   interview:["Event sourcing vs CRUD?","How do you handle schema changes?","Why snapshots?"],
+   companies:["EventStoreDB","banking/ledger systems"],best:["Version events; never mutate history","Snapshot large aggregates","Keep events business-meaningful"],
+   related:["cqrs","event-driven","kafka"]});
+
+mk("docker","Docker","🐳","Infrastructure",
+  "Docker packages an app and its dependencies into a portable image that runs consistently as an isolated container anywhere.",
+  {why:["'Works on my machine' → runs everywhere","Lightweight isolation vs VMs","Fast, reproducible deploys"],
+   advantages:["Portable & reproducible","Fast startup, small overhead","Great for CI/CD"],
+   disadvantages:["Shared kernel (weaker isolation than VM)","Stateful/networking nuances","Image bloat if careless"],
+   sections:[{title:"Concepts",items:["Image — immutable template (layers)","Container — running instance of an image","Dockerfile — build recipe","Registry — image store (Docker Hub/ECR)","Volumes — persistent storage"]}],
+   interview:["Container vs VM?","Image vs container?","How do you shrink an image?"],
+   companies:["Docker","most modern engineering teams"],best:["Multi-stage builds; slim base images","One process per container","Pin versions; scan images"],
+   related:["kubernetes","microservices","monitoring"]});
+
+mk("monitoring","Monitoring","📈","Observability",
+  "Monitoring collects metrics and fires alerts on the health and performance of systems (Prometheus for metrics, Grafana for dashboards).",
+  {why:["Detect incidents fast (MTTD)","Track SLIs/SLOs & capacity","Data-driven scaling decisions"],
+   advantages:["Early failure detection","Trend & capacity insight","SLO enforcement"],
+   disadvantages:["Alert fatigue if noisy","Cardinality/cost explosions","Metrics ≠ root cause alone"],
+   sections:[{title:"Stack",items:["Metrics — Prometheus (pull, time-series)","Dashboards — Grafana","Alerting — Alertmanager","RED (Rate/Errors/Duration) & USE methods","SLI / SLO / SLA"]}],
+   interview:["Metrics vs logs vs traces?","What are RED and USE methods?","How do you avoid alert fatigue?"],
+   companies:["Prometheus","Grafana","Datadog"],best:["Alert on symptoms/SLOs, not causes","Watch metric cardinality","Dashboard the golden signals"],
+   related:["logging","tracing","kubernetes","microservices"]});
+
+mk("logging","Logging","🧾","Observability",
+  "Logging records discrete, timestamped events; centralized structured logs make debugging and auditing across services possible.",
+  {why:["Debug and audit behavior","Reconstruct incident timelines","Search across many services"],
+   advantages:["Rich contextual detail","Auditability","Flexible ad-hoc search"],
+   disadvantages:["High volume & storage cost","Sensitive-data leakage risk","Noisy without structure"],
+   sections:[{title:"Best form",items:["Structured (JSON) logs","Correlation/trace IDs","Log levels (DEBUG…ERROR)","Centralized: ELK / Loki","Retention & sampling"]}],
+   interview:["Structured vs plain logs?","How do you correlate logs across services?","How do you control log cost?"],
+   companies:["Elastic (ELK)","Grafana Loki","Splunk"],best:["Always log a correlation ID","Never log secrets/PII","Sample high-volume logs"],
+   related:["monitoring","tracing","microservices"]});
+
+mk("tracing","Distributed Tracing","🧬","Observability",
+  "Tracing follows a single request across services as a tree of spans, exposing latency and failures in distributed call chains.",
+  {why:["Find latency bottlenecks across services","Understand request flow & dependencies","Pinpoint failing hop"],
+   advantages:["End-to-end request visibility","Latency breakdown per span","Dependency mapping"],
+   disadvantages:["Instrumentation effort","Sampling trade-offs","Overhead if unsampled"],
+   sections:[{title:"Concepts",items:["Trace — one request end-to-end","Span — one operation with timing","Context propagation (trace/span IDs)","OpenTelemetry standard","Backends: Jaeger, Tempo, Zipkin"]}],
+   interview:["Trace vs span?","How is context propagated?","How do you choose a sampling rate?"],
+   companies:["Jaeger","Zipkin","Honeycomb","Datadog APM"],best:["Adopt OpenTelemetry","Propagate context everywhere","Tail-sample interesting traces"],
+   related:["monitoring","logging","microservices"]});
+
+mk("security","Security","🛡️","Security",
+  "Defense-in-depth practices protecting systems: WAF, encryption, secrets management, least privilege and secure defaults.",
+  {why:["Protect data & users from attackers","Meet compliance (GDPR/PCI/SOC2)","Reduce breach blast radius"],
+   advantages:["Reduced risk & liability","Customer trust","Regulatory compliance"],
+   disadvantages:["Adds friction/latency","Ongoing effort & cost","False sense from checkboxes"],
+   sections:[{title:"Layers",items:["WAF — filter malicious HTTP (SQLi/XSS)","TLS everywhere (in transit) + encryption at rest","Secrets management (Vault/KMS)","Least privilege / zero trust","OWASP Top 10 awareness","DDoS protection at the edge"]}],
+   interview:["How do you store secrets safely?","Explain defense in depth.","How do you prevent SQL injection?"],
+   companies:["Cloudflare","AWS WAF","HashiCorp Vault"],best:["Encrypt in transit & at rest","Rotate secrets; never commit them","Validate & parameterize all input"],
+   related:["authentication","authorization","rate-limiting","api-gateway"]});
+
+mk("rabbitmq","RabbitMQ","🐰","Messaging",
+  "RabbitMQ is a traditional message broker implementing AMQP, routing messages through exchanges to queues for reliable task distribution.",
+  {why:["Reliable task/work queues","Flexible routing (exchanges)","Per-message ack & delivery control"],
+   advantages:["Rich routing (direct/topic/fanout)","Per-message acknowledgements","Mature, easy to start"],
+   disadvantages:["Lower throughput than Kafka","No long-term replay/retention","Queues can back up under load"],
+   sections:[{title:"Concepts",items:["Producer → Exchange → Queue → Consumer","Exchange types: direct, topic, fanout, headers","Binding & routing keys","Ack/Nack + dead-letter queues","Prefetch (QoS) for fair dispatch"]},
+    {title:"Kafka vs RabbitMQ",items:["RabbitMQ — smart broker, task queues, routing, transient","Kafka — dumb broker/smart consumer, replayable log, huge throughput"]}],
+   interview:["Kafka vs RabbitMQ — when each?","Explain exchanges and bindings.","How do dead-letter queues work?"],
+   companies:["Reddit","Instagram (early)","many enterprises"],best:["Use manual acks + DLQs","Set prefetch to balance consumers","Make handlers idempotent"],
+   related:["kafka","event-driven","microservices"]});
+
+/* canvas-only helper topics */
+mk("users","Users","👥","Client","Clients (browsers, mobile apps, services) that originate requests into the system.",
+  {why:["Origin of all traffic & load","Define latency & availability expectations"],related:["cdn","networking","load-balancer"]});
+mk("dns","DNS","🌐","Networking","The Domain Name System resolves human-readable domains into IP addresses so clients can connect.",
+  {why:["Human-friendly addressing","Enables failover & geo-routing"],sections:[{title:"Record types",items:["A/AAAA — IPv4/IPv6","CNAME — alias","MX — mail","TXT — verification"]}],interview:["What happens during DNS resolution?","How does DNS-based failover work?"],companies:["Route 53","Cloudflare DNS"],related:["networking","cdn","load-balancer"]});
+mk("waf","WAF","🧱","Security","A Web Application Firewall inspects and filters HTTP traffic to block attacks like SQLi, XSS and bots before they reach the app.",
+  {why:["Block common web attacks (OWASP)","Mitigate bots & DDoS at layer 7"],sections:[{title:"Protects against",items:["SQL Injection","Cross-Site Scripting (XSS)","Bad bots / scrapers","L7 DDoS"]}],interview:["WAF vs firewall vs rate limiter?"],companies:["Cloudflare","AWS WAF","Imperva"],related:["security","rate-limiting","api-gateway","cdn"]});
+mk("object-storage","Object Storage","🪣","Data","Durable, virtually unlimited storage for unstructured blobs (images, video, backups, logs) accessed via HTTP APIs.",
+  {why:["Cheap, durable blob storage at scale","Serve static assets (often via CDN)","Decouple storage from compute"],advantages:["11 9s durability","Virtually unlimited scale","Cheap per GB"],disadvantages:["Higher latency than block/DB","Eventual consistency (historically)","Not for transactional data"],sections:[{title:"Concepts",items:["Bucket → objects (key/value + metadata)","Storage classes (hot/cold/archive)","Versioning & lifecycle rules","Pre-signed URLs"]}],interview:["Object vs block vs file storage?","How do you serve private files securely?"],companies:["AWS S3","GCS","Azure Blob"],best:["Front with a CDN","Lifecycle old data to cold tiers","Use pre-signed URLs for uploads"],related:["cdn","database","caching"]});
+mk("monitoring-stack","Prometheus & Grafana","📊","Observability","Prometheus scrapes and stores time-series metrics; Grafana visualizes them on dashboards with alerting.",
+  {why:["Real-time metrics & dashboards","Alert on SLO breaches"],related:["monitoring","logging","tracing"]});
+
+/* =====================================================================
+   ENRICHMENT — fills any missing explanation fields per topic.
+   Only fills fields a topic does NOT already have (never overwrites).
+   ===================================================================== */
+const ENRICH = {
+  networking:{
+    problem:"Machines on different networks cannot talk without agreed rules for addressing, routing, reliability and encryption. The networking stack (DNS, IP, TCP/UDP, TLS, HTTP) provides all of that.",
+    advantages:["Ubiquitous, standardized protocols","Reliable delivery (TCP) or low overhead (UDP)","Encryption + identity via TLS","Multiplexing & server push (HTTP/2, HTTP/3)"],
+    disadvantages:["Latency is bounded by physics/geography","Head-of-line blocking (TCP, HTTP/1.1)","Complex failure modes (timeouts, retries, partitions)"],
+    mistakes:["Ignoring inter-region round-trip latency","No connection pooling / keep-alive","Chatty request patterns instead of batching"],
+    code:{lang:"Bash",text:"# Trace resolution + connection path\ndig app.com +short          # DNS A record\ncurl -w \"dns:%{time_namelookup} tcp:%{time_connect} tls:%{time_appconnect}\\n\" \\\n     -o /dev/null -s https://app.com"},
+    refs:[["MDN: HTTP overview","https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview"],["High Performance Browser Networking","https://hpbn.co/"]]},
+
+  cdn:{
+    problem:"Serving every asset from one origin means distant users suffer high latency and the origin saturates during spikes. A CDN caches content at edge PoPs close to users.",
+    mistakes:["Caching personalized/private responses at the edge","No cache-busting on deploy → users get stale JS/CSS","Blindly caching dynamic API responses"],
+    code:{lang:"HTTP",text:"# Immutable, versioned asset → cache hard\nCache-Control: public, max-age=31536000, immutable   # app.9f2a1c.js\n\n# HTML shell → revalidate, allow brief staleness\nCache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=30"},
+    refs:[["Cloudflare: What is a CDN?","https://www.cloudflare.com/learning/cdn/what-is-a-cdn/"]]},
+
+  authorization:{
+    problem:"Knowing who a user is (authentication) is not enough — you must decide what they may do. Without centralized authorization, permission checks get duplicated across services, drift out of sync, and create security holes.",
+    advantages:["Enforces least privilege","Centralized, auditable policy","Fine-grained control (RBAC/ABAC)","Decouples permissions from business code"],
+    disadvantages:["Policy sprawl if ungoverned","ABAC rules can get hard to reason about","Remote checks add per-request latency"],
+    mistakes:["Client-side-only permission checks","Overly broad 'god-mode' roles","Hardcoding permissions inside services"],
+    code:{lang:"Rego · OPA",text:"package authz\ndefault allow = false\nallow {                      # RBAC: editors can write their org's docs\n  input.action == \"write\"\n  input.user.role == \"editor\"\n  input.resource.org == input.user.org\n}"},
+    refs:[["OWASP: Access Control","https://owasp.org/www-community/Access_Control"],["Google Zanzibar paper","https://research.google/pubs/pub48190/"]]},
+
+  microservices:{
+    problem:"A large monolith becomes hard to scale, deploy and evolve as teams grow — any change risks the whole app and one hot path forces you to scale everything. Microservices let teams own, scale and ship pieces independently.",
+    code:{lang:"HTTP · gRPC",text:"// Sync call (REST/gRPC) — order service asks payments\nPOST /payments {orderId, amount}     // keep timeouts + retries + breaker\n\n// Async (preferred for decoupling) — emit an event instead\nkafka.publish(\"orders.created\", {orderId, amount})"},
+    refs:[["microservices.io patterns","https://microservices.io/patterns/"],["Fowler: Microservices","https://martinfowler.com/articles/microservices.html"]]},
+
+  "service-discovery":{
+    problem:"In an autoscaling cluster, instances constantly appear and disappear with dynamic IPs. Hardcoded addresses break instantly; discovery lets callers resolve a healthy instance at runtime.",
+    advantages:["Works with elastic, self-healing fleets","Removes unhealthy instances automatically","No hardcoded endpoints"],
+    disadvantages:["The registry becomes critical infrastructure","Stale entries if health checks lag","Extra lookup hop / caching complexity"],
+    mistakes:["No health checks → routing to dead nodes","Caching lookups too long","Treating the registry as non-critical"],
+    code:{lang:"YAML · Kubernetes",text:"# K8s gives DNS-based server-side discovery for free\napiVersion: v1\nkind: Service\nmetadata: { name: orders }\nspec:\n  selector: { app: orders }   # resolves to healthy pods\n  ports: [{ port: 80, targetPort: 8080 }]\n# other pods just call: http://orders/"},
+    refs:[["microservices.io: Service Discovery","https://microservices.io/patterns/server-side-discovery.html"]]},
+
+  "reverse-proxy":{
+    problem:"Exposing application servers directly leaks internal topology and forces each server to handle TLS, compression, caching and routing itself. A reverse proxy centralizes these concerns in front of the fleet.",
+    advantages:["Hides & protects backends","Centralizes TLS, caching, compression","Path/host based routing","Single place for security headers"],
+    disadvantages:["Another hop / potential bottleneck","Must be made highly available","Misconfig can cache wrong content"],
+    mistakes:["Single proxy instance (SPOF)","Forwarding without timeouts","Caching authenticated responses"],
+    code:{lang:"NGINX",text:"server {\n  listen 443 ssl;\n  location / {\n    proxy_pass http://app_upstream;\n    proxy_set_header X-Forwarded-For $remote_addr;\n    proxy_read_timeout 5s;          # fail fast\n  }\n  gzip on;                          # compression\n}"},
+    refs:[["NGINX reverse proxy guide","https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/"]]},
+
+  sharding:{
+    problem:"A single database node eventually hits limits on storage, write throughput and index size. Sharding splits data across many nodes so each holds only a slice, scaling writes horizontally.",
+    mistakes:["Choosing a low-cardinality / hot shard key","Relying on cross-shard JOINs & transactions","No plan for resharding as data grows"],
+    code:{lang:"Concept",text:"// hash-based routing keeps shards even\nshard = hash(user_id) % NUM_SHARDS;\nconn  = pool[shard];\nconn.query(\"SELECT * FROM orders WHERE user_id=$1\", [user_id]);\n// range-based (userId 0-1M -> s0) enables range scans but risks hotspots"},
+    refs:[["Vitess: Sharding","https://vitess.io/docs/concepts/shard/"]]},
+
+  replication:{
+    problem:"If data lives on one node, that node's failure means downtime and data loss, and all reads compete for one machine. Replication keeps synchronized copies for availability, durability and read scaling.",
+    mistakes:["Reading from async replicas expecting fresh data","No monitoring of replication lag","Multi-leader writes without conflict resolution"],
+    code:{lang:"SQL · Postgres",text:"-- Primary streams WAL to replicas\n-- Route reads to a replica, writes to primary\nSET default_transaction_read_only = on;   -- on replica\n-- read-your-writes: pin the user to primary briefly after a write"},
+    refs:[["Designing Data-Intensive Applications (Ch.5)","https://dataintensive.net/"]]},
+
+  indexing:{
+    problem:"Without an index, finding rows means a full table scan — O(n) that gets catastrophic as tables grow. Indexes give O(log n) lookups for the queries you actually run.",
+    mistakes:["Indexing every column → slow writes & bloat","Wrong column order in composite indexes","Functions on indexed columns disabling the index"],
+    refs:[["Use The Index, Luke","https://use-the-index-luke.com/"]]},
+
+  sql:{
+    problem:"Applications with strong invariants (money, inventory, bookings) need guaranteed consistency and the ability to query complex relationships — exactly what relational databases with ACID transactions provide.",
+    mistakes:["Scaling writes only by buying bigger hardware","N+1 query patterns from ORMs","Missing indexes on join/filter columns"],
+    code:{lang:"SQL",text:"BEGIN;                                   -- all-or-nothing\nUPDATE accounts SET bal = bal - 100 WHERE id = 1;\nUPDATE accounts SET bal = bal + 100 WHERE id = 2;\nCOMMIT;                                  -- ACID guarantees"},
+    refs:[["PostgreSQL: Transactions","https://www.postgresql.org/docs/current/tutorial-transactions.html"]]},
+
+  nosql:{
+    problem:"Some workloads need massive write throughput, flexible/evolving schemas, or global availability more than they need JOINs and strict consistency. NoSQL stores optimize for scale and specific access patterns.",
+    mistakes:["Modeling relationally then bolting on a document store","Expecting strong consistency from an AP store","Unbounded document/partition growth (hot partitions)"],
+    code:{lang:"JSON · MongoDB",text:"// Denormalize around the read pattern (embed, don't join)\ndb.orders.insertOne({\n  _id: \"o42\", userId: \"u7\",\n  items: [{ sku: \"A1\", qty: 2 }],      // embedded\n  shipTo: { city: \"Pune\", zip: \"411001\" }\n});\ndb.orders.find({ userId: \"u7\" });     // single-doc read, no join"},
+    refs:[["MongoDB data modeling","https://www.mongodb.com/docs/manual/core/data-modeling-introduction/"]]},
+
+  "event-driven":{
+    problem:"Synchronous request chains couple services tightly: if one downstream is slow or down, the whole call fails and back-pressure cascades. Emitting events lets producers move on and consumers react independently.",
+    mistakes:["Non-idempotent consumers → duplicate side effects","Publishing inside a DB transaction without an outbox","No event schema versioning → breaking consumers"],
+    code:{lang:"SQL · Outbox",text:"BEGIN;\n  INSERT INTO orders(...) VALUES(...);\n  INSERT INTO outbox(topic, payload) VALUES('orders.created', :json);\nCOMMIT;                       -- a relay publishes the outbox to Kafka reliably"},
+    refs:[["microservices.io: Transactional Outbox","https://microservices.io/patterns/data/transactional-outbox.html"]]},
+
+  "circuit-breaker":{
+    problem:"When a dependency is failing or slow, naive callers keep sending requests and blocking threads, exhausting resources and turning one failure into a system-wide outage. A breaker trips and fails fast.",
+    refs:[["Resilience4j: CircuitBreaker","https://resilience4j.readme.io/docs/circuitbreaker"],["Fowler: CircuitBreaker","https://martinfowler.com/bliki/CircuitBreaker.html"]]},
+
+  retry:{
+    problem:"Networks and services fail transiently (a dropped packet, a brief GC pause). Giving up immediately wastes those recoverable failures; retrying with backoff turns blips into successes — if done carefully.",
+    code:{lang:"JavaScript",text:"async function withRetry(fn, tries = 4) {\n  for (let i = 0; i < tries; i++) {\n    try { return await fn(); }\n    catch (e) {\n      if (i === tries - 1 || !isTransient(e)) throw e;\n      const backoff = 2 ** i * 100;\n      await sleep(backoff + Math.random() * backoff); // jitter\n    }\n  }\n}"},
+    refs:[["AWS: Exponential backoff and jitter","https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/"]]},
+
+  saga:{
+    problem:"A business flow that spans services (order → payment → inventory → shipping) can't use one ACID transaction across databases, and 2PC locks don't scale. A saga chains local transactions with compensations to undo on failure.",
+    mistakes:["Compensations that aren't truly reversible","Non-idempotent steps replayed on retry","No persisted saga state → stuck workflows"],
+    code:{lang:"Concept",text:"// Orchestrated saga\ntry {\n  await payment.charge(order);\n  await inventory.reserve(order);\n  await shipping.schedule(order);\n} catch (e) {\n  await inventory.release(order);   // compensations run in reverse\n  await payment.refund(order);\n}"},
+    refs:[["microservices.io: Saga","https://microservices.io/patterns/data/saga.html"]]},
+
+  cqrs:{
+    problem:"When a single model serves both complex writes and high-volume varied reads, it satisfies neither well. CQRS splits them so each side scales and is shaped for its job.",
+    mistakes:["Adding CQRS where plain CRUD would do","Forgetting reads are eventually consistent","Non-idempotent projections corrupting read models"],
+    code:{lang:"Concept",text:"// Write side\nhandle(PlaceOrder cmd) -> store event OrderPlaced\n// Projection builds the read side\non(OrderPlaced e) -> upsert into orders_read_view (denormalized)\n// Query side just reads the view (fast, no joins)"},
+    refs:[["Fowler: CQRS","https://martinfowler.com/bliki/CQRS.html"]]},
+
+  "event-sourcing":{
+    problem:"Storing only current state loses history and makes auditing, debugging and rebuilding views hard. Event sourcing keeps the full log of what happened, so state is a replayable projection.",
+    mistakes:["Mutating or deleting past events","No snapshots → slow replays for big aggregates","Leaking storage/tech concerns into event schemas"],
+    code:{lang:"Concept",text:"// State is derived by folding events\nevents = [AccountOpened, Deposited(100), Withdrew(30)]\nbalance = events.reduce(apply, 0)   // => 70\n// snapshot every N events to avoid replaying from zero"},
+    refs:[["Fowler: Event Sourcing","https://martinfowler.com/eaaDev/EventSourcing.html"]]},
+
+  docker:{
+    problem:"Apps behave differently across dev, CI and prod because of mismatched OS libraries, runtimes and config ('works on my machine'). Containers ship the app with its exact dependencies so it runs identically anywhere.",
+    mistakes:["Huge images from fat base + no multi-stage build","Running as root inside the container","Baking secrets into image layers"],
+    code:{lang:"Dockerfile",text:"# multi-stage → tiny final image\nFROM node:20 AS build\nWORKDIR /app\nCOPY package*.json ./ && RUN npm ci\nCOPY . . && RUN npm run build\n\nFROM node:20-slim\nWORKDIR /app\nCOPY --from=build /app/dist ./dist\nUSER node\nCMD [\"node\",\"dist/server.js\"]"},
+    refs:[["Docker: best practices","https://docs.docker.com/build/building/best-practices/"]]},
+
+  monitoring:{
+    problem:"Without metrics you find out about outages from angry users, not systems. Monitoring surfaces failures, saturation and SLO breaches early so you can react before customers are hurt.",
+    mistakes:["Alerting on causes (CPU) not symptoms (latency/SLO)","Runaway metric cardinality blowing up cost","So many alerts that real ones get ignored"],
+    code:{lang:"PromQL",text:"# p99 latency alert (symptom-based)\nhistogram_quantile(0.99,\n  sum(rate(http_request_duration_seconds_bucket[5m])) by (le)\n) > 0.5\n\n# error rate SLO burn\nsum(rate(http_requests_total{code=~\"5..\"}[5m]))\n  / sum(rate(http_requests_total[5m])) > 0.01"},
+    refs:[["Google SRE: Monitoring","https://sre.google/sre-book/monitoring-distributed-systems/"]]},
+
+  logging:{
+    problem:"When something breaks in a distributed system, you need to reconstruct exactly what happened across many services. Structured, centralized logs with correlation IDs make that possible.",
+    mistakes:["Unstructured free-text logs that can't be queried","Logging secrets / PII","No correlation ID to stitch a request together"],
+    code:{lang:"JSON log",text:"{\"ts\":\"2026-07-22T13:10:02Z\",\"level\":\"error\",\n \"traceId\":\"a1b2c3\",\"service\":\"orders\",\n \"msg\":\"payment failed\",\"orderId\":\"o42\",\"code\":\"CARD_DECLINED\"}"},
+    refs:[["12-Factor App: Logs","https://12factor.net/logs"]]},
+
+  tracing:{
+    problem:"A single user request may touch a dozen services; when it's slow, logs and metrics alone can't tell you which hop caused it. Tracing stitches the whole journey into one timeline of spans.",
+    mistakes:["Not propagating trace context across calls","Sampling so aggressively you miss rare errors","Reinventing formats instead of OpenTelemetry"],
+    code:{lang:"JavaScript · OTel",text:"const span = tracer.startSpan(\"charge-card\");\ntry { await payments.charge(order); }\ncatch (e) { span.recordException(e); throw e; }\nfinally { span.end(); }   // context auto-propagates to downstream calls"},
+    refs:[["OpenTelemetry docs","https://opentelemetry.io/docs/"]]},
+
+  security:{
+    problem:"Systems are constantly probed for weak auth, injection, exposed secrets and misconfig. A single gap can leak data or take you down. Defense-in-depth layers controls so one failure isn't catastrophic.",
+    mistakes:["Storing secrets in code / env files in git","Trusting client-side validation","Rolling your own crypto / auth"],
+    code:{lang:"Concept",text:"// Parameterized query prevents SQL injection\ndb.query(\"SELECT * FROM users WHERE email = $1\", [email]);  // safe\n// NEVER: \"SELECT * FROM users WHERE email = '\" + email + \"'\"\n// Secrets from a vault, never source control\nconst key = await vault.read(\"secret/stripe\");"},
+    refs:[["OWASP Top 10","https://owasp.org/www-project-top-ten/"]]},
+
+  rabbitmq:{
+    problem:"Services need reliable, decoupled task distribution with flexible routing and per-message acknowledgement — work queues where a message is handed to exactly one worker and retried on failure.",
+    mistakes:["Auto-ack before the work is done → lost messages","No dead-letter queue for poison messages","Unbounded queues masking a slow consumer"],
+    code:{lang:"Concept · AMQP",text:"ch.assertExchange(\"orders\", \"topic\");\nch.assertQueue(\"email\", { deadLetterExchange: \"dlx\" });\nch.bindQueue(\"email\", \"orders\", \"order.created\");\nch.consume(\"email\", msg => {\n  handle(msg); ch.ack(msg);          // manual ack after processing\n}, { noAck: false });"},
+    refs:[["RabbitMQ tutorials","https://www.rabbitmq.com/tutorials"]]},
+
+  users:{
+    problem:"Every capacity, latency and availability decision traces back to real user behavior — traffic shape, geography, peak load and tolerance for staleness. Modeling the client is where system design starts.",
+    advantages:["Defines the real load & SLAs to design for","Geography drives edge/CDN strategy","Access patterns shape caching & data models"],
+    disadvantages:["Traffic is spiky and hard to predict","Diverse clients (web/mobile/IoT) to support","Malicious users require abuse protection"],
+    sections:[{title:"Client types",items:["Browsers (web apps)","Mobile apps (intermittent connectivity)","Third-party API consumers","Other internal services"]}],
+    interview:["How do you estimate QPS and storage from user counts?","How do read-heavy vs write-heavy patterns change the design?"],
+    companies:["Any consumer-facing product"],
+    best:["Do back-of-envelope capacity math early","Design for peak, not average, traffic","Assume some clients are hostile"],
+    mistakes:["Designing for average load and melting at peak","Ignoring mobile latency/offline cases"]},
+
+  dns:{
+    problem:"Humans can't remember server IPs, and IPs change as infrastructure moves. DNS provides a stable naming layer and enables failover and geo/latency-based routing.",
+    advantages:["Human-friendly, stable naming","Enables failover & geo routing","Cached globally for speed"],
+    disadvantages:["Propagation/TTL delays on changes","Cache poisoning risk (use DNSSEC)","An extra resolution round-trip"],
+    best:["Use low TTLs for records you may fail over","Use health-checked, latency/geo routing","Enable DNSSEC"],
+    mistakes:["Very high TTLs blocking fast failover","No secondary DNS provider (SPOF)"],
+    code:{lang:"Bash",text:"dig +trace app.com        # full delegation path\ndig app.com A +short      # resolved IPs\n# Route 53 weighted / latency / failover routing policies do the rest"},
+    refs:[["Cloudflare: What is DNS?","https://www.cloudflare.com/learning/dns/what-is-dns/"]]},
+
+  waf:{
+    problem:"Public HTTP endpoints are constantly attacked with injection, XSS, scraping and layer-7 floods. A WAF inspects and filters this traffic at the edge before it ever reaches your application.",
+    advantages:["Blocks common web attacks (OWASP)","Managed rulesets updated for you","Bot & L7 DDoS mitigation at the edge"],
+    disadvantages:["False positives can block real users","Rule tuning is ongoing work","Not a substitute for secure code"],
+    best:["Start in 'count/monitor' mode, then enforce","Combine with rate limiting & bot management","Keep app-level input validation too"],
+    mistakes:["Treating WAF as your only defense","Enabling aggressive rules without testing"],
+    code:{lang:"Concept",text:"# WAF rule intent (managed rules express these)\nBLOCK if body matches /(union|select).*from/i     # SQLi\nBLOCK if query matches /<script>/i                 # XSS\nRATE-LIMIT /login to 10/min per IP                 # brute force"},
+    refs:[["Cloudflare: What is a WAF?","https://www.cloudflare.com/learning/ddos/glossary/web-application-firewall-waf/"]]},
+
+  "object-storage":{
+    problem:"Storing large binary files (images, video, backups, logs) in a relational database is expensive and doesn't scale. Object storage offers cheap, virtually unlimited, highly durable blob storage over HTTP.",
+    mistakes:["Serving large files directly instead of via a CDN","Public buckets leaking sensitive data","Uploading through your app server instead of pre-signed URLs"],
+    code:{lang:"Concept · S3",text:"// Let the client upload straight to storage\nconst url = s3.getSignedUrl(\"putObject\", {\n  Bucket: \"uploads\", Key: `u/${id}.jpg`, Expires: 300\n});\n// browser PUTs to url; app never proxies the bytes"},
+    refs:[["AWS S3 best practices","https://docs.aws.amazon.com/AmazonS3/latest/userguide/best-practices.html"]]},
+
+  "monitoring-stack":{
+    problem:"Metrics are only useful if collected, stored and made visible with alerting. Prometheus (scrape + store time-series) plus Grafana (dashboards + alerts) is the de-facto open-source stack for exactly that.",
+    advantages:["Open-source, cloud-native standard","Powerful PromQL querying","Rich Grafana dashboards & alerting"],
+    disadvantages:["Prometheus is not long-term storage by default","High-cardinality labels hurt performance","Pull model needs service discovery"],
+    sections:[{title:"How it fits",items:["Exporters/apps expose /metrics","Prometheus scrapes & stores time-series","Grafana queries Prometheus for dashboards","Alertmanager routes alerts (Slack/Pager)"]}],
+    interview:["Push vs pull metrics — why does Prometheus pull?","How do you handle long-term metric storage?","What causes a cardinality explosion?"],
+    companies:["SoundCloud (origin)","CNCF ecosystem","most Kubernetes shops"],
+    best:["Use recording rules for expensive queries","Keep label cardinality bounded","Use Thanos/Mimir/Cortex for long-term storage"],
+    mistakes:["Unbounded labels (user IDs as labels)","No alerting, just pretty dashboards"],
+    refs:[["Prometheus docs","https://prometheus.io/docs/introduction/overview/"],["Grafana docs","https://grafana.com/docs/"]]},
+};
+Object.entries(ENRICH).forEach(([id,ex])=>{ if(T[id]) for(const k in ex){ if(T[id][k]==null) T[id][k]=ex[k]; } });
+
+/* =====================================================================
+   CANVAS ARCHITECTURE NODES
+   ===================================================================== */
+const NODES = [
+  {id:"users",x:40,y:340},{id:"dns",x:250,y:340},
+  {id:"cdn",x:250,y:180},{id:"waf",x:470,y:180},
+  {id:"rate-limiting",x:470,y:460},{id:"load-balancer",x:690,y:340},
+  {id:"api-gateway",x:910,y:340},{id:"authentication",x:1140,y:180},
+  {id:"microservices",x:1140,y:400},
+  {id:"redis",x:1390,y:120},{id:"kafka",x:1390,y:260},{id:"rabbitmq",x:1390,y:400},
+  {id:"database",x:1390,y:540},{id:"object-storage",x:1620,y:540},
+  {id:"monitoring",x:1650,y:200},{id:"monitoring-stack",x:1880,y:120},
+  {id:"logging",x:1880,y:280},{id:"tracing",x:1880,y:420},
+];
+const NEDGES = [
+  ["users","dns"],["users","cdn"],["cdn","waf"],["dns","load-balancer"],["waf","rate-limiting"],
+  ["rate-limiting","load-balancer"],["waf","load-balancer"],["load-balancer","api-gateway"],
+  ["api-gateway","authentication"],["api-gateway","microservices"],["authentication","microservices"],
+  ["microservices","redis"],["microservices","kafka"],["microservices","rabbitmq"],["microservices","database"],
+  ["database","object-storage"],["kafka","object-storage"],
+  ["microservices","monitoring"],["kafka","monitoring"],["database","monitoring"],
+  ["monitoring","monitoring-stack"],["monitoring","logging"],["monitoring","tracing"],
+];
+const SECTIONS = [
+  {t:"Client",x:40,y:290},{t:"Edge",x:250,y:120},{t:"Traffic",x:690,y:290},
+  {t:"Gateway",x:910,y:290},{t:"Services",x:1140,y:120},{t:"Data & Messaging",x:1390,y:60},
+  {t:"Observability",x:1650,y:60},
+];
+
+/* =====================================================================
+   SVGRenderer — tiny helpers
+   ===================================================================== */
+class SVGRenderer {
+  static line(a){ return svg("path",a); }
+  static circle(a){ return svg("circle",a); }
+  static text(x,y,str,a={}){ const t=svg("text",Object.assign({x,y},a)); t.textContent=str; return t; }
+}
+
+/* =====================================================================
+   DiagramRenderer — canvas nodes + edges
+   ===================================================================== */
+class DiagramRenderer {
+  constructor(world,edges){ this.world=world; this.edges=edges; this.nodeEls={}; }
+  render(){
+    SECTIONS.forEach(s=>{ const d=el("div","section-tag",s.t); d.style.left=s.x+"px"; d.style.top=s.y+"px"; this.world.appendChild(d); });
+    NODES.forEach(n=>{
+      const t=T[n.id]; const d=el("div","node pulse");
+      d.id="cn-"+n.id; d.style.left=n.x+"px"; d.style.top=n.y+"px"; d.dataset.id=n.id;
+      d.innerHTML=`<div class="n-head"><div class="n-ico">${t.icon}</div>
+        <div><div class="n-title">${t.title}</div><div class="n-sub">${t.cat}</div></div></div>`;
+      this.world.appendChild(d); this.nodeEls[n.id]=d; n.el=d;
+    });
+    this.measure(); this.drawEdges();
+  }
+  measure(){ NODES.forEach(n=>{ n.w=n.el.offsetWidth; n.h=n.el.offsetHeight; }); }
+  anchors(a,b){ const aC=a.x+a.w/2,bC=b.x+b.w/2;
+    return bC>=aC?[a.x+a.w,a.y+a.h/2,b.x,b.y+b.h/2]:[a.x,a.y+a.h/2,b.x+b.w,b.y+b.h/2]; }
+  nodeById(id){ return NODES.find(n=>n.id===id); }
+  drawEdges(){
+    this.edges.innerHTML=`<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgba(244,244,245,.4)"/></marker></defs>`;
+    this.edgePaths=[];
+    NEDGES.forEach(([a,b])=>{
+      const na=this.nodeById(a),nb=this.nodeById(b); if(!na||!nb)return;
+      const [x1,y1,x2,y2]=this.anchors(na,nb),dx=Math.max(50,Math.abs(x2-x1)*0.45);
+      const p=svg("path",{d:`M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`,class:"edge","marker-end":"url(#arr)"});
+      p.dataset.from=a; p.dataset.to=b; this.edges.appendChild(p); this.edgePaths.push({from:a,to:b,path:p});
+    });
+  }
+}
+
+/* =====================================================================
+   AnimationEngine — moving packets on canvas edges
+   ===================================================================== */
+class AnimationEngine {
+  constructor(edges,paths){ this.edges=edges; this.packets=[]; this.last=performance.now(); this.paths=paths; }
+  start(){
+    this.paths.forEach((e,i)=>{ const len=e.path.getTotalLength();
+      const dot=svg("circle",{r:3.4,class:"packet",fill:"#fff"}); this.edges.appendChild(dot);
+      this.packets.push({dot,path:e.path,len,off:(i*0.12)%1,speed:0.16+Math.random()*0.05,from:e.from,to:e.to}); });
+    requestAnimationFrame(t=>this.loop(t));
+  }
+  loop(now){ const dt=Math.min(0.05,(now-this.last)/1000); this.last=now;
+    this.packets.forEach(p=>{ p.off=(p.off+p.speed*dt)%1; const pt=p.path.getPointAtLength(p.off*p.len);
+      p.dot.setAttribute("cx",pt.x); p.dot.setAttribute("cy",pt.y); });
+    requestAnimationFrame(t=>this.loop(t)); }
+}
+
+/* =====================================================================
+   Canvas — pan / zoom / minimap
+   ===================================================================== */
+class Canvas {
+  constructor(app){ this.app=app; this.vp=$("viewport"); this.world=$("world"); this.view={x:20,y:10,scale:0.62}; }
+  apply(){ this.world.style.transform=`translate(${this.view.x}px,${this.view.y}px) scale(${this.view.scale})`;
+    $("zoomLbl").textContent=Math.round(this.view.scale*100)+"%"; this.updateMinimap(); }
+  bind(){
+    let pan=false,sx=0,sy=0,ox=0,oy=0;
+    this.vp.addEventListener("mousedown",e=>{ if(e.target.closest(".node"))return; pan=true; sx=e.clientX;sy=e.clientY;ox=this.view.x;oy=this.view.y; this.vp.classList.add("grabbing"); });
+    window.addEventListener("mousemove",e=>{ if(!pan)return; this.view.x=ox+(e.clientX-sx); this.view.y=oy+(e.clientY-sy); this.apply(); });
+    window.addEventListener("mouseup",()=>{ pan=false; this.vp.classList.remove("grabbing"); });
+    this.vp.addEventListener("wheel",e=>{ e.preventDefault(); const r=this.vp.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+      const ns=Math.min(2.4,Math.max(0.3,this.view.scale*(1-e.deltaY*0.0015))); const wx=(mx-this.view.x)/this.view.scale,wy=(my-this.view.y)/this.view.scale;
+      this.view.scale=ns; this.view.x=mx-wx*ns; this.view.y=my-wy*ns; this.apply(); },{passive:false});
+  }
+  zoomBy(f){ const r=this.vp.getBoundingClientRect(),mx=r.width/2,my=r.height/2; const wx=(mx-this.view.x)/this.view.scale,wy=(my-this.view.y)/this.view.scale;
+    this.view.scale=Math.min(2.4,Math.max(0.3,this.view.scale*f)); this.view.x=mx-wx*this.view.scale; this.view.y=my-wy*this.view.scale; this.apply(); }
+  bounds(){ let a=1e9,b=1e9,c=-1e9,d=-1e9; NODES.forEach(n=>{a=Math.min(a,n.x);b=Math.min(b,n.y-50);c=Math.max(c,n.x+n.w);d=Math.max(d,n.y+n.h);}); return {minX:a,minY:b,maxX:c,maxY:d,w:c-a,h:d-b}; }
+  fit(){ const bb=this.bounds(),vw=this.vp.clientWidth,vh=this.vp.clientHeight,s=Math.min(vw/(bb.w+80),vh/(bb.h+80),1.2);
+    this.view.scale=s; this.view.x=(vw-bb.w*s)/2-bb.minX*s; this.view.y=(vh-bb.h*s)/2-bb.minY*s; this.apply(); }
+  focus(id,scale=0.9){ const n=NODES.find(x=>x.id===id); if(!n)return; const s=Math.max(0.7,Math.min(1.1,scale)); this.view.scale=s;
+    this.view.x=this.vp.clientWidth/2-(n.x+n.w/2)*s; this.view.y=this.vp.clientHeight/2-(n.y+n.h/2)*s; this.apply(); }
+  buildMinimap(){ const mm=$("mmSvg"),bb=this.bounds(),W=190,H=120,pad=6; this.mmS=Math.min((W-pad*2)/bb.w,(H-pad*2)/bb.h);
+    this.mmOx=pad-bb.minX*this.mmS; this.mmOy=pad-bb.minY*this.mmS; mm.setAttribute("viewBox",`0 0 ${W} ${H}`);
+    let s=""; NODES.forEach(n=>{ s+=`<rect x="${n.x*this.mmS+this.mmOx}" y="${n.y*this.mmS+this.mmOy}" width="${Math.max(2,n.w*this.mmS)}" height="${Math.max(2,n.h*this.mmS)}" rx="1" fill="rgba(255,255,255,.35)"/>`; });
+    s+=`<rect id="mm-view" x="0" y="0" width="10" height="10"/>`; mm.innerHTML=s;
+    mm.addEventListener("click",e=>{ const r=mm.getBoundingClientRect(),mx=(e.clientX-r.left)*(W/r.width),my=(e.clientY-r.top)*(H/r.height);
+      const wx=(mx-this.mmOx)/this.mmS,wy=(my-this.mmOy)/this.mmS; this.view.x=this.vp.clientWidth/2-wx*this.view.scale; this.view.y=this.vp.clientHeight/2-wy*this.view.scale; this.apply(); }); }
+  updateMinimap(){ const v=$("mm-view"); if(!v)return; const wx=-this.view.x/this.view.scale,wy=-this.view.y/this.view.scale;
+    v.setAttribute("x",wx*this.mmS+this.mmOx); v.setAttribute("y",wy*this.mmS+this.mmOy);
+    v.setAttribute("width",this.vp.clientWidth/this.view.scale*this.mmS); v.setAttribute("height",this.vp.clientHeight/this.view.scale*this.mmS); }
+}
+
+/* =====================================================================
+   VisualLab — interactive animated diagrams inside the panel
+   ===================================================================== */
+class VisualLab {
+  constructor(){ this.raf=null; this.timers=[]; }
+  stop(){ if(this.raf)cancelAnimationFrame(this.raf); this.raf=null; this.timers.forEach(clearInterval); this.timers=[]; }
+  loop(fn){ const step=()=>{ fn(); this.raf=requestAnimationFrame(step); }; this.raf=requestAnimationFrame(step); }
+  every(ms,fn){ this.timers.push(setInterval(fn,ms)); }
+  cap(txt){ const c=$("vizCap"); if(c)c.textContent=txt; }
+
+  mount(key,host){
+    this.stop(); host.innerHTML="";
+    const fn=this["v_"+key]; if(!fn){ this.generic(host); return; }
+    fn.call(this,host);
+  }
+
+  generic(host){
+    const s=svg("svg",{viewBox:"0 0 400 120"}); host.appendChild(s);
+    const boxes=["Input","Process","Output"]; const bx=[];
+    boxes.forEach((b,i)=>{ const x=40+i*130; const g=svg("rect",{x,y:44,width:90,height:34,rx:8,fill:"#1d1e23",stroke:"#32333c"}); s.appendChild(g);
+      s.appendChild(SVGRenderer.text(x+45,65,b,{fill:"#d4d4d8","font-size":11,"text-anchor":"middle"})); bx.push(x+90); });
+    [0,1].forEach(i=>{ s.appendChild(svg("path",{d:`M ${40+i*130+90} 61 L ${40+(i+1)*130} 61`,stroke:"#7C3AED","stroke-width":1.6,fill:"none"})); });
+    const dot=svg("circle",{r:4,fill:"#fff",class:"packet"}); s.appendChild(dot); let t=0;
+    this.loop(()=>{ t=(t+0.008)%1; const seg=Math.min(1.999,t*2); const i=Math.floor(seg),f=seg-i;
+      const x=(40+i*130+90)+f*40; dot.setAttribute("cx",x); dot.setAttribute("cy",61); });
+    this.cap("Requests flow through the pipeline.");
+  }
+
+  /* -------- Rate Limiter: token bucket -------- */
+  v_rate(host){
+    const s=svg("svg",{viewBox:"0 0 400 200"}); host.appendChild(s);
+    s.appendChild(SVGRenderer.text(200,16,"Token Bucket",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    // bucket
+    s.appendChild(svg("path",{d:"M250 60 L340 60 L330 150 L260 150 Z",fill:"none",stroke:"#00C853","stroke-width":2}));
+    const cap=6; let tokens=cap; const tokenEls=[];
+    const drawTokens=()=>{ tokenEls.forEach(e=>e.remove()); tokenEls.length=0;
+      for(let i=0;i<tokens;i++){ const c=svg("circle",{cx:270+ (i%3)*22, cy:138-Math.floor(i/3)*22, r:8, fill:"#00C853"}); s.appendChild(c); tokenEls.push(c);} };
+    drawTokens();
+    const counter=SVGRenderer.text(295,175,`${tokens}/${cap}`,{fill:"#00C853","font-size":12,"text-anchor":"middle"}); s.appendChild(counter);
+    // request marker
+    const req=svg("rect",{x:20,y:96,width:28,height:20,rx:4,fill:"#7C3AED"}); s.appendChild(req);
+    s.appendChild(SVGRenderer.text(34,110,"REQ",{fill:"#fff","font-size":8,"text-anchor":"middle"}));
+    let rx=20, moving=true;
+    this.every(900,()=>{ if(tokens<cap){ tokens++; drawTokens(); counter.textContent=`${tokens}/${cap}`; } }); // refill
+    this.every(1100,()=>{ rx=20; moving=true; }); // new request
+    this.loop(()=>{ if(moving){ rx+=2.2; req.setAttribute("x",rx);
+        if(rx>=222){ moving=false; if(tokens>0){ tokens--; drawTokens(); counter.textContent=`${tokens}/${cap}`; counter.setAttribute("fill","#00C853"); this.cap("✓ Token available → request ALLOWED. Bucket refills 1 token/s."); req.setAttribute("fill","#00C853"); }
+          else { counter.setAttribute("fill","#f8524b"); this.cap("✕ Bucket empty → request REJECTED (HTTP 429)."); req.setAttribute("fill","#f8524b"); }
+          setTimeout(()=>req.setAttribute("fill","#7C3AED"),400);
+        } } });
+    this.cap("Tokens refill every second; each request consumes one.");
+  }
+
+  /* -------- CAP triangle -------- */
+  v_cap(host){
+    const s=svg("svg",{viewBox:"0 0 400 210"}); host.appendChild(s);
+    const P={C:[200,30],A:[60,180],P:[340,180]};
+    const edge=(a,b,id)=>{const p=svg("path",{d:`M ${P[a][0]} ${P[a][1]} L ${P[b][0]} ${P[b][1]}`,stroke:"#32333c","stroke-width":3,id}); s.appendChild(p); return p;};
+    const eCA=edge("C","A","eCA"),eCP=edge("C","P","eCP"),eAP=edge("A","P","eAP");
+    const vert=(k,label)=>{ const [x,y]=P[k]; s.appendChild(svg("circle",{cx:x,cy:y,r:26,fill:"#1d1e23",stroke:"#7C3AED","stroke-width":2,id:"v"+k}));
+      s.appendChild(SVGRenderer.text(x,y+5,label,{fill:"#fff","font-size":16,"font-weight":700,"text-anchor":"middle"})); };
+    vert("C","C"); vert("A","A"); vert("P","P");
+    s.appendChild(SVGRenderer.text(200,60,"Consistency",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    s.appendChild(SVGRenderer.text(60,205,"Availability",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    s.appendChild(SVGRenderer.text(340,205,"Partition Tol.",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    const combos=[
+      {e:[eCP],c:"#00C853",t:"CP — sacrifice Availability: reject requests to stay consistent (MongoDB, HBase, etcd)."},
+      {e:[eAP],c:"#00C853",t:"AP — sacrifice Consistency: stay available, serve possibly-stale data (Cassandra, DynamoDB)."},
+      {e:[eCA],c:"#fbbf24",t:"CA — only possible with NO partition (single node). Not realistic for distributed systems."},
+    ];
+    let i=0; const cycle=()=>{ [eCA,eCP,eAP].forEach(e=>{e.setAttribute("stroke","#32333c");e.setAttribute("stroke-width",3);});
+      combos[i].e.forEach(e=>{e.setAttribute("stroke",combos[i].c);e.setAttribute("stroke-width",5);}); this.cap(combos[i].t); i=(i+1)%combos.length; };
+    cycle(); this.every(2600,cycle);
+  }
+
+  /* -------- Consistent hashing ring -------- */
+  v_chash(host){
+    const s=svg("svg",{viewBox:"0 0 400 230"}); host.appendChild(s);
+    const cx=200,cy=115,R=85; s.appendChild(svg("circle",{cx,cy,r:R,fill:"none",stroke:"#32333c","stroke-width":2}));
+    let nodes=[30,150,270]; const keys=[10,80,120,200,300,340];
+    const pos=(deg,r=R)=>[cx+r*Math.cos((deg-90)*Math.PI/180), cy+r*Math.sin((deg-90)*Math.PI/180)];
+    const layer=svg("g"); s.appendChild(layer);
+    const owner=(kdeg)=>{ const sorted=[...nodes].sort((a,b)=>a-b); for(const n of sorted) if(n>=kdeg) return n; return sorted[0]; };
+    const colors=["#00C853","#7C3AED","#3b82f6","#fbbf24","#f8524b"];
+    const draw=()=>{ layer.innerHTML="";
+      nodes.forEach((d,idx)=>{ const[x,y]=pos(d); const c=svg("circle",{cx:x,cy:y,r:11,fill:colors[idx%colors.length],stroke:"#0b0b0d","stroke-width":2}); layer.appendChild(c);
+        const t=SVGRenderer.text(x,y+4,"N"+(idx+1),{fill:"#04210f","font-size":9,"font-weight":700,"text-anchor":"middle"}); layer.appendChild(t); });
+      keys.forEach(k=>{ const[x,y]=pos(k,R-24); const o=owner(k); const ci=nodes.indexOf(o);
+        layer.appendChild(svg("circle",{cx:x,cy:y,r:5,fill:colors[ci%colors.length]})); });
+    };
+    draw(); this.cap("Keys (small dots) map to the first node clockwise. Nodes use virtual points for balance.");
+    host.parentElement.querySelector(".viz-ctrl")?.remove();
+    const ctrl=el("div","viz-ctrl"); ctrl.innerHTML=`<button id="chAdd">+ Add Node</button><button id="chRem">– Remove Node</button>`;
+    host.after(ctrl);
+    ctrl.querySelector("#chAdd").onclick=()=>{ if(nodes.length<5){ nodes.push(randi(0,359)); draw(); this.cap("Node added → only keys between it and its clockwise neighbor move. ≈K/N keys remap."); } };
+    ctrl.querySelector("#chRem").onclick=()=>{ if(nodes.length>2){ nodes.pop(); draw(); this.cap("Node removed → its keys pass to the next node clockwise. Other keys are untouched."); } };
+  }
+
+  /* -------- Kafka flow -------- */
+  v_kafka(host){
+    const s=svg("svg",{viewBox:"0 0 400 190"}); host.appendChild(s);
+    s.appendChild(svg("rect",{x:14,y:78,width:70,height:34,rx:8,fill:"#1d1e23",stroke:"#7C3AED"}));
+    s.appendChild(SVGRenderer.text(49,99,"Producer",{fill:"#fff","font-size":10,"text-anchor":"middle"}));
+    const parts=[40,90,140]; parts.forEach((y,i)=>{ s.appendChild(svg("rect",{x:150,y,width:120,height:34,rx:6,fill:"#0b0b0d",stroke:"#00C853"}));
+      s.appendChild(SVGRenderer.text(160,y+21,"P"+i,{fill:"#00C853","font-size":9})); });
+    s.appendChild(SVGRenderer.text(210,26,"Broker · partitions",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    s.appendChild(svg("rect",{x:316,y:78,width:70,height:34,rx:8,fill:"#1d1e23",stroke:"#3b82f6"}));
+    s.appendChild(SVGRenderer.text(351,93,"Consumer",{fill:"#fff","font-size":10,"text-anchor":"middle"}));
+    s.appendChild(SVGRenderer.text(351,106,"Group",{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+    const msgs=[]; parts.forEach((y,i)=>{ for(let j=0;j<3;j++){ const m=svg("rect",{x:150,y:y+11,width:11,height:11,rx:2,fill:"#00C853"}); s.appendChild(m); msgs.push({m,x:150+j*40,y:y+11}); } });
+    this.loop(()=>{ msgs.forEach(o=>{ o.x+=1.1; if(o.x>262)o.x=152; o.m.setAttribute("x",o.x); o.m.setAttribute("y",o.y); }); });
+    this.cap("Producer appends records to partitions; the consumer group reads each partition in order.");
+  }
+
+  /* -------- Load balancer round robin -------- */
+  v_lb(host){
+    const s=svg("svg",{viewBox:"0 0 400 190"}); host.appendChild(s);
+    s.appendChild(svg("rect",{x:150,y:78,width:70,height:34,rx:8,fill:"#1d1e23",stroke:"#7C3AED"}));
+    s.appendChild(SVGRenderer.text(185,99,"LB",{fill:"#fff","font-size":12,"text-anchor":"middle"}));
+    const servers=[40,90,140]; servers.forEach((y,i)=>{ s.appendChild(svg("rect",{x:300,y,width:80,height:34,rx:6,fill:"#0b0b0d",stroke:"#00C853"}));
+      s.appendChild(SVGRenderer.text(340,y+21,"Server "+(i+1),{fill:"#d4d4d8","font-size":9,"text-anchor":"middle"}));
+      s.appendChild(svg("path",{d:`M 220 95 C 260 95, 260 ${y+17}, 300 ${y+17}`,stroke:"#32333c","stroke-width":1.4,fill:"none"})); });
+    const dot=svg("circle",{r:4,fill:"#fff",class:"packet"}); s.appendChild(dot);
+    let target=0,t=0,phase=0;
+    this.loop(()=>{ t+=0.02; if(phase===0){ // to LB
+        const x=40+t*145; dot.setAttribute("cx",Math.min(185,x)); dot.setAttribute("cy",95); if(x>=185){phase=1;t=0;} }
+      else { const y=servers[target]+17; const px=185+t*115; const cy=95+(y-95)*Math.min(1,t); dot.setAttribute("cx",Math.min(340,px)); dot.setAttribute("cy",cy);
+        if(px>=340){ this.cap("Round Robin → dispatched to Server "+(target+1)+". Next request goes to the next server."); target=(target+1)%3; phase=0; t=0; dot.setAttribute("cx",40); } } });
+    this.cap("Round Robin rotates each incoming request across the server pool.");
+  }
+
+  /* -------- Cache aside -------- */
+  v_cache(host){
+    const s=svg("svg",{viewBox:"0 0 400 170"}); host.appendChild(s);
+    const box=(x,y,w,label,color)=>{ s.appendChild(svg("rect",{x,y,width:w,height:36,rx:8,fill:"#1d1e23",stroke:color})); s.appendChild(SVGRenderer.text(x+w/2,y+23,label,{fill:"#fff","font-size":10,"text-anchor":"middle"})); };
+    box(20,66,70,"App","#7C3AED"); box(160,20,80,"Cache","#00C853"); box(160,110,80,"Database","#3b82f6");
+    const dot=svg("circle",{r:5,fill:"#fff",class:"packet"}); s.appendChild(dot);
+    const steps=[
+      {a:[90,84],b:[160,38],t:"1 ▸ App checks the cache first…"},
+      {a:[160,38],b:[90,84],t:"2 ▸ MISS — key not in cache."},
+      {a:[90,84],b:[160,128],t:"3 ▸ Load from the database."},
+      {a:[160,128],b:[160,38],t:"4 ▸ Populate cache with TTL."},
+      {a:[160,38],b:[90,84],t:"5 ▸ Next read is a HIT (fast) ✓"},
+    ];
+    let i=0,t=0; this.cap(steps[0].t);
+    this.loop(()=>{ t+=0.02; const st=steps[i]; const x=st.a[0]+(st.b[0]-st.a[0])*t, y=st.a[1]+(st.b[1]-st.a[1])*t;
+      dot.setAttribute("cx",x); dot.setAttribute("cy",y);
+      if(t>=1){ t=0; i=(i+1)%steps.length; this.cap(steps[i].t); dot.setAttribute("fill", i===4?"#00C853":"#fff"); } });
+  }
+
+  /* -------- API gateway fan -------- */
+  v_gateway(host){
+    const s=svg("svg",{viewBox:"0 0 400 200"}); host.appendChild(s);
+    s.appendChild(svg("rect",{x:150,y:84,width:76,height:36,rx:9,fill:"#1d1e23",stroke:"#7C3AED"}));
+    s.appendChild(SVGRenderer.text(188,106,"Gateway",{fill:"#fff","font-size":10,"text-anchor":"middle"}));
+    const routes=["/auth","/orders","/pay","/profile"]; const ys=[20,70,120,170];
+    routes.forEach((r,i)=>{ s.appendChild(svg("rect",{x:300,y:ys[i]-16,width:80,height:32,rx:6,fill:"#0b0b0d",stroke:"#00C853"}));
+      s.appendChild(SVGRenderer.text(340,ys[i]+4,r,{fill:"#d4d4d8","font-size":10,"text-anchor":"middle"}));
+      s.appendChild(svg("path",{d:`M 226 102 C 265 102, 265 ${ys[i]}, 300 ${ys[i]}`,stroke:"#32333c","stroke-width":1.3,fill:"none"})); });
+    const dot=svg("circle",{r:4,fill:"#fff",class:"packet"}); s.appendChild(dot); let i=0,t=0,phase=0;
+    this.loop(()=>{ t+=0.025; if(phase===0){ const x=30+t*158; dot.setAttribute("cx",Math.min(188,x)); dot.setAttribute("cy",102); if(x>=188){phase=1;t=0;} }
+      else { const y=ys[i]; const x=188+t*112; dot.setAttribute("cx",Math.min(340,x)); dot.setAttribute("cy",102+(y-102)*Math.min(1,t));
+        if(x>=340){ this.cap("Routed "+routes[i]+" → matching service. Gateway also does auth, rate limiting, caching."); i=(i+1)%routes.length; phase=0; t=0; dot.setAttribute("cx",30); } } });
+    this.cap("One entry point routes each path to its service.");
+  }
+
+  /* -------- JWT auth sequence -------- */
+  v_auth(host){
+    const s=svg("svg",{viewBox:"0 0 400 190"}); host.appendChild(s);
+    const lanes={Client:60,"Auth Server":200,API:340}; Object.entries(lanes).forEach(([k,x])=>{ s.appendChild(svg("line",{x1:x,y1:30,x2:x,y2:180,stroke:"#32333c","stroke-width":1.5}));
+      s.appendChild(SVGRenderer.text(x,20,k,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"})); });
+    const dot=svg("circle",{r:5,fill:"#7C3AED",class:"packet"}); s.appendChild(dot);
+    const steps=[
+      {a:[60,50],b:[200,50],t:"1 ▸ Login (username + password) → Auth Server",c:"#7C3AED"},
+      {a:[200,80],b:[60,80],t:"2 ▸ Returns signed JWT access + refresh token",c:"#00C853"},
+      {a:[60,110],b:[340,110],t:"3 ▸ Call API with Authorization: Bearer <JWT>",c:"#3b82f6"},
+      {a:[340,140],b:[340,140],t:"4 ▸ API verifies signature/exp locally → grants access ✓",c:"#00C853"},
+    ];
+    let i=0,t=0; this.cap(steps[0].t);
+    this.loop(()=>{ t+=0.02; const st=steps[i]; const x=st.a[0]+(st.b[0]-st.a[0])*t,y=st.a[1]+(st.b[1]-st.a[1])*t;
+      dot.setAttribute("cx",x); dot.setAttribute("cy",y); dot.setAttribute("fill",st.c);
+      if(t>=1){ t=0; i=(i+1)%steps.length; this.cap(steps[i].t); } });
+  }
+
+  /* -------- Kubernetes scaling -------- */
+  v_k8s(host){
+    const s=svg("svg",{viewBox:"0 0 400 200"}); host.appendChild(s);
+    s.appendChild(svg("rect",{x:20,y:80,width:90,height:40,rx:9,fill:"#1d1e23",stroke:"#7C3AED"}));
+    s.appendChild(SVGRenderer.text(65,96,"Deployment",{fill:"#fff","font-size":9,"text-anchor":"middle"}));
+    s.appendChild(SVGRenderer.text(65,110,"replicas: N",{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+    s.appendChild(svg("rect",{x:150,y:80,width:70,height:40,rx:9,fill:"#1d1e23",stroke:"#3b82f6"}));
+    s.appendChild(SVGRenderer.text(185,104,"ReplicaSet",{fill:"#fff","font-size":9,"text-anchor":"middle"}));
+    s.appendChild(svg("path",{d:"M110 100 L150 100",stroke:"#32333c","stroke-width":1.5,"marker-end":"url(#arr)"}));
+    const podG=svg("g"); s.appendChild(podG); let pods=3;
+    const draw=()=>{ podG.innerHTML=""; for(let i=0;i<pods;i++){ const col=i%3, row=Math.floor(i/3); const x=270+col*42, y=50+row*46;
+      podG.appendChild(svg("rect",{x,y,width:34,height:34,rx:7,fill:"#12301d",stroke:"#00C853"}));
+      podG.appendChild(SVGRenderer.text(x+17,y+21,"🟢",{"font-size":12,"text-anchor":"middle"}));
+      podG.appendChild(svg("path",{d:`M220 100 C 245 100, 245 ${y+17}, 270 ${y+17}`,stroke:"#32333c","stroke-width":1,fill:"none"})); } };
+    draw(); this.cap("Deployment → ReplicaSet keeps "+pods+" Pods alive. HPA scales on CPU load.");
+    let up=true; this.every(1800,()=>{ if(up){ pods++; if(pods>=6)up=false; } else { pods--; if(pods<=3)up=true; } draw();
+      this.cap(up?"⬆ Autoscaler adding Pods as load rises ("+pods+" pods).":"⬇ Load dropped → scaling Pods back down ("+pods+" pods)."); });
+  }
+}
+
+/* =====================================================================
+   PopupPanel — renders the right info panel
+   ===================================================================== */
+class PopupPanel {
+  constructor(app){ this.app=app; this.lab=new VisualLab(); this.panel=$("panel"); this.body=$("pbody"); }
+  close(){ this.panel.classList.remove("open"); $("minimap").classList.remove("shift"); $("zoomctl").classList.remove("shift"); this.lab.stop(); this.app.clearHighlight(); }
+  sec(title,inner){ return `<div class="sec"><h4>${title}</h4>${inner}</div>`; }
+  ul(arr,cls=""){ return `<ul class="${cls}">`+arr.map(x=>`<li>${x}</li>`).join("")+`</ul>`; }
+  chips(arr,link=false){ return `<div class="chips">`+arr.map(a=>`<span class="chip ${link?'link':''}" ${link?`data-goto="${a}"`:''}>${link?(T[a]?T[a].title:a):a}</span>`).join("")+`</div>`; }
+
+  open(id){
+    const t=T[id]; if(!t)return;
+    this.app.highlight(id);
+    $("phIco").textContent=t.icon; $("phTitle").textContent=t.title; $("phCat").textContent=t.cat;
+    let h="";
+    if(t.definition) h+=this.sec("Definition",`<p>${t.definition}</p>`);
+    if(t.why) h+=this.sec("Why it is used",this.ul(t.why));
+    if(t.problem) h+=this.sec("Problem it solves",`<div class="callout">${t.problem}</div>`);
+    // visual
+    h+=this.sec("Visual Diagram",`<div class="viz"><div id="vizHost"></div><div class="viz-cap" id="vizCap"></div></div>`);
+    if(t.sections) t.sections.forEach(sec=> h+=this.sec(sec.title,this.ul(sec.items)));
+    if(t.advantages) h+=this.sec("Advantages",this.ul(t.advantages,"good"));
+    if(t.disadvantages) h+=this.sec("Disadvantages",this.ul(t.disadvantages,"bad"));
+    if(t.best) h+=this.sec("Best Practices",this.ul(t.best,"good"));
+    if(t.mistakes) h+=this.sec("Common Mistakes",this.ul(t.mistakes,"bad"));
+    if(t.code) h+=this.sec("Code Example",`<div class="pre-lang">${t.code.lang}</div><pre></pre>`);
+    if(t.interview) h+=this.sec("Interview Questions",this.ul(t.interview,"q"));
+    if(t.companies) h+=this.sec("Real-World Companies",this.chips(t.companies));
+    if(t.related) h+=this.sec("Related Concepts",this.chips(t.related,true));
+    if(t.refs) h+=this.sec("References",`<div class="chips">`+t.refs.map(r=>`<a class="chip link" href="${r[1]}" target="_blank" rel="noopener">${r[0]} ↗</a>`).join("")+`</div>`);
+    this.body.innerHTML=h; this.body.scrollTop=0;
+    // set code text safely (avoids HTML escaping issues)
+    if(t.code){ const pre=this.body.querySelector("pre"); if(pre)pre.textContent=t.code.text; }
+    // related chip navigation
+    this.body.querySelectorAll("[data-goto]").forEach(c=>c.onclick=()=>this.open(c.dataset.goto));
+    // mount visual
+    this.lab.mount(t.visual||"generic", $("vizHost"));
+    // open panel
+    this.panel.classList.add("open"); $("minimap").classList.add("shift"); $("zoomctl").classList.add("shift");
+    this.app.setActiveCat(id);
+  }
+}
+
+/* =====================================================================
+   SearchEngine
+   ===================================================================== */
+class SearchEngine {
+  constructor(app){ this.app=app; }
+  run(q){
+    q=q.trim().toLowerCase();
+    document.querySelectorAll(".cat").forEach(c=>{ const id=c.dataset.id,t=T[id];
+      const match=!q||t.title.toLowerCase().includes(q)||t.cat.toLowerCase().includes(q)||id.includes(q);
+      c.classList.toggle("hidden",!match); c.classList.toggle("match",!!q&&match); });
+    NODES.forEach(n=>{ const t=T[n.id],match=q&&(t.title.toLowerCase().includes(q)||n.id.includes(q));
+      n.el.classList.toggle("match",!!match); if(match){ n.el.classList.remove("dim"); } });
+    if(q){ const first=NODES.find(n=>{const t=T[n.id];return t.title.toLowerCase().includes(q)||n.id.includes(q);});
+      if(first) this.app.canvas.focus(first.id,0.85); }
+    else { NODES.forEach(n=>n.el.classList.remove("match")); }
+  }
+}
+
+/* =====================================================================
+   LearningEngine — guided left→right walkthrough
+   ===================================================================== */
+class LearningEngine {
+  constructor(app){ this.app=app; this.on=false;
+    this.steps=[
+      ["users","Every request starts with a <b>user</b> — a browser, mobile app or another service. Traffic volume drives every design decision downstream."],
+      ["dns","<b>DNS</b> resolves the domain (e.g. app.com) into an IP address, and can route users to the nearest / healthiest region."],
+      ["cdn","The <b>CDN</b> serves cached static assets from an edge location near the user, cutting latency and offloading the origin."],
+      ["load-balancer","The <b>Load Balancer</b> spreads incoming traffic across many servers, health-checks them, and removes failed nodes."],
+      ["api-gateway","The <b>API Gateway</b> is the single entry point — handling routing, authentication, rate limiting and request aggregation."],
+      ["authentication","<b>Authentication</b> verifies identity using JWT / OAuth2 so downstream services can trust the caller statelessly."],
+      ["microservices","<b>Microservices</b> own their domain and data, deploy independently, and communicate via REST/gRPC or events."],
+      ["kafka","<b>Kafka</b> decouples services with a durable event log — buffering spikes and enabling async, replayable processing."],
+      ["redis","<b>Redis</b> caches hot data in memory for sub-millisecond reads, protecting the database from heavy read load."],
+      ["database","The <b>Database</b> is the durable source of truth — scaled with replication (reads) and sharding (writes)."],
+      ["monitoring","<b>Monitoring & Observability</b> (metrics, logs, traces) close the loop — detecting incidents and guiding scaling."],
+    ]; this.i=0; }
+  start(){ this.on=true; this.i=0; $("learn").style.display="block"; this.render(); }
+  exit(){ this.on=false; $("learn").style.display="none"; this.app.clearHighlight(); }
+  go(i){ this.i=Math.max(0,Math.min(this.steps.length-1,i)); this.render(); }
+  render(){ const [id,txt]=this.steps[this.i];
+    $("lStep").textContent=this.i+1; $("lTitle").textContent=T[id].title; $("lCount").textContent=`${this.i+1} / ${this.steps.length}`;
+    $("lBody").innerHTML=txt; $("lProg").style.width=((this.i+1)/this.steps.length*100)+"%";
+    $("lPrev").disabled=this.i===0; $("lNext").textContent=this.i===this.steps.length-1?"Finish ✓":"Next ▶";
+    this.app.clearHighlight(); NODES.forEach(n=>n.el.classList.add("dim"));
+    const n=NODES.find(x=>x.id===id); if(n){ n.el.classList.remove("dim"); n.el.classList.add("learn"); }
+    this.app.canvas.focus(id,0.85);
+    this.app.diag.edgePaths.forEach(e=>e.path.classList.toggle("hot",e.to===id||e.from===id));
+  }
+}
+
+/* =====================================================================
+   InterviewEngine — random questions
+   ===================================================================== */
+class InterviewEngine {
+  constructor(app){ this.app=app; this.pool=[];
+    Object.values(T).forEach(t=>{ if(t.interview) t.interview.forEach(q=>this.pool.push({q,id:t.id,title:t.title})); });
+    this.cur=null; }
+  open(){ $("quiz").style.display="flex"; this.next(); }
+  close(){ $("quiz").style.display="none"; }
+  next(){ this.cur=this.pool[randi(0,this.pool.length-1)]; const t=T[this.cur.id];
+    $("qQ").textContent=this.cur.q; $("qTopic").textContent="· "+this.cur.title;
+    const a=$("qA"); a.classList.remove("show");
+    let ans=`<b>${t.title}</b> — ${t.definition||""}`;
+    if(t.sections&&t.sections[0]) ans+="<br><br><b>"+t.sections[0].title+":</b> "+t.sections[0].items.map(x=>x.split("—")[0].trim()).join(", ")+".";
+    if(t.best) ans+="<br><br><b>Best practice:</b> "+t.best[0]+".";
+    a.innerHTML=ans;
+  }
+  reveal(){ $("qA").classList.add("show"); }
+}
+
+/* =====================================================================
+   APP
+   ===================================================================== */
+class App {
+  constructor(){
+    this.canvas=new Canvas(this);
+    this.diag=new DiagramRenderer($("world"),$("edges"));
+    this.panel=new PopupPanel(this);
+    this.search=new SearchEngine(this);
+    this.learn=new LearningEngine(this);
+    this.quiz=new InterviewEngine(this);
+  }
+  boot(){
+    this.buildSidebar();
+    this.diag.render();
+    this.anim=new AnimationEngine($("edges"),this.diag.edgePaths); this.anim.start();
+    this.canvas.bind(); this.canvas.buildMinimap(); this.canvas.apply(); this.canvas.fit();
+    this.bindNodes(); this.bindUI(); this.bindKeys();
+  }
+  buildSidebar(){
+    const list=$("catList");
+    const order=["networking","api-gateway","load-balancer","caching","database","kafka","rabbitmq","redis","cdn",
+      "authentication","authorization","rate-limiting","microservices","service-discovery","reverse-proxy",
+      "consistent-hashing","cap-theorem","sharding","replication","indexing","sql","nosql","event-driven",
+      "circuit-breaker","retry","saga","cqrs","event-sourcing","kubernetes","docker","monitoring","logging","tracing","security"];
+    order.forEach(id=>{ const t=T[id]; if(!t)return; const c=el("div","cat");
+      c.dataset.id=id; c.innerHTML=`<span class="c-ico">${t.icon}</span>${t.title}`;
+      c.onclick=()=>{ this.panel.open(id); if(NODES.find(n=>n.id===id)) this.canvas.focus(id,0.85); };
+      list.appendChild(c); });
+  }
+  setActiveCat(id){ document.querySelectorAll(".cat").forEach(c=>c.classList.toggle("active",c.dataset.id===id)); }
+  bindNodes(){
+    NODES.forEach(n=>{ n.el.addEventListener("click",e=>{ e.stopPropagation(); this.panel.open(n.id); });
+      n.el.addEventListener("mouseenter",()=>{ if(!this.panel.panel.classList.contains("open")&&!this.learn.on) this.highlight(n.id); });
+      n.el.addEventListener("mouseleave",()=>{ if(!this.panel.panel.classList.contains("open")&&!this.learn.on) this.clearHighlight(); });
+    });
+    $("viewport").addEventListener("mousedown",e=>{ if(!e.target.closest(".node")&&!this.panel.panel.classList.contains("open")) this.clearHighlight(); });
+  }
+  highlight(id){
+    const rel=new Set([id]); const out={},inm={};
+    NODES.forEach(n=>{out[n.id]=[];inm[n.id]=[];}); NEDGES.forEach(([a,b])=>{out[a]&&out[a].push(b);inm[b]&&inm[b].push(a);});
+    const walk=(x,adj)=>adj[x].forEach(y=>{if(!rel.has(y)){rel.add(y);walk(y,adj);}});
+    walk(id,out); walk(id,inm);
+    NODES.forEach(n=>{ n.el.classList.remove("glow","dim","learn"); n.el.classList.add(rel.has(n.id)?"glow":"dim"); });
+    this.diag.edgePaths.forEach(e=>e.path.classList.toggle("hot",rel.has(e.from)&&rel.has(e.to)));
+  }
+  clearHighlight(){ NODES.forEach(n=>n.el.classList.remove("glow","dim","learn")); this.diag.edgePaths.forEach(e=>e.path.classList.remove("hot")); }
+  bindUI(){
+    $("btnZin").onclick=$("zin2").onclick=()=>this.canvas.zoomBy(1.15);
+    $("btnZout").onclick=$("zout2").onclick=()=>this.canvas.zoomBy(1/1.15);
+    $("btnFit").onclick=$("zfit2").onclick=$("toolFit").onclick=()=>this.canvas.fit();
+    $("phClose").onclick=()=>{ this.panel.close(); this.setActiveCat(null); };
+    $("search").addEventListener("input",e=>this.search.run(e.target.value));
+    document.querySelectorAll(".tool").forEach(t=>t.onclick=()=>{ document.querySelectorAll(".tool").forEach(x=>x.classList.remove("active")); t.classList.add("active"); });
+    // learning
+    $("btnLearn").onclick=()=>this.learn.start();
+    $("lNext").onclick=()=>{ if(this.learn.i===this.learn.steps.length-1) this.learn.exit(); else this.learn.go(this.learn.i+1); };
+    $("lPrev").onclick=()=>this.learn.go(this.learn.i-1);
+    $("lExit").onclick=()=>this.learn.exit();
+    // quiz
+    $("btnQuiz").onclick=()=>this.quiz.open();
+    $("qClose").onclick=()=>this.quiz.close();
+    $("qReveal").onclick=()=>this.quiz.reveal();
+    $("qNext").onclick=()=>this.quiz.next();
+    $("qOpen").onclick=()=>{ this.quiz.close(); this.panel.open(this.quiz.cur.id); if(NODES.find(n=>n.id===this.quiz.cur.id))this.canvas.focus(this.quiz.cur.id,0.85); };
+    $("quiz").addEventListener("click",e=>{ if(e.target.id==="quiz") this.quiz.close(); });
+  }
+  bindKeys(){
+    window.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT")return;
+      if(e.key==="l"||e.key==="L") this.learn.on?this.learn.exit():this.learn.start();
+      else if(e.key==="q"||e.key==="Q"){ $("quiz").style.display==="flex"?this.quiz.close():this.quiz.open(); }
+      else if(e.key==="+"||e.key==="=") this.canvas.zoomBy(1.15);
+      else if(e.key==="-") this.canvas.zoomBy(1/1.15);
+      else if(e.key==="Escape"){ this.panel.close(); this.setActiveCat(null); this.quiz.close(); if(this.learn.on)this.learn.exit(); }
+      else if(e.key==="ArrowRight"&&this.learn.on) this.learn.go(this.learn.i+1);
+      else if(e.key==="ArrowLeft"&&this.learn.on) this.learn.go(this.learn.i-1);
+    });
+  }
+}
+
+const app=new App(); app.boot();
+window.addEventListener("resize",()=>app.canvas.updateMinimap());
+</script>
+</body>
+</html>

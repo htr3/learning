@@ -179,6 +179,7 @@
   <!-- ============ TOP BAR ============ -->
   <div id="topbar">
     <div class="brand"><span class="logo"></span><div>System Design Lab<small>Interactive interview prep</small></div></div>
+    <a class="btn" href="../index.html" title="Back to Hub" style="text-decoration:none">← Hub</a>
     <div id="searchWrap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
       <input id="search" placeholder="Search topics… (Kafka, Redis, CAP)" />
@@ -1464,9 +1465,12 @@ class App {
     $("viewport").addEventListener("mousedown",e=>{ if(!e.target.closest(".node")&&!this.panel.panel.classList.contains("open")) this.clearHighlight(); });
   }
   highlight(id){
+    // Concepts in the sidebar that aren't nodes on the architecture canvas
+    // (e.g. Sharding, CAP Theorem, SQL) have nothing to highlight — just clear.
+    if(!NODES.find(n=>n.id===id)){ this.clearHighlight(); return; }
     const rel=new Set([id]); const out={},inm={};
     NODES.forEach(n=>{out[n.id]=[];inm[n.id]=[];}); NEDGES.forEach(([a,b])=>{out[a]&&out[a].push(b);inm[b]&&inm[b].push(a);});
-    const walk=(x,adj)=>adj[x].forEach(y=>{if(!rel.has(y)){rel.add(y);walk(y,adj);}});
+    const walk=(x,adj)=>adj[x]&&adj[x].forEach(y=>{if(!rel.has(y)){rel.add(y);walk(y,adj);}});
     walk(id,out); walk(id,inm);
     NODES.forEach(n=>{ n.el.classList.remove("glow","dim","learn"); n.el.classList.add(rel.has(n.id)?"glow":"dim"); });
     this.diag.edgePaths.forEach(e=>e.path.classList.toggle("hot",rel.has(e.from)&&rel.has(e.to)));

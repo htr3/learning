@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Disaster Recovery — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    const y=110;g.appendChild(S("line",{x1:40,y1:y,x2:580,y2:y,stroke:"#2f3742","stroke-width":2}));
+    const dz=310;g.appendChild(S("line",{x1:dz,y1:70,x2:dz,y2:150,stroke:"#f87171","stroke-width":2,"stroke-dasharray":"4 3"}));
+    g.appendChild(TX(dz,64,"💥 disaster",{fill:"#f87171","font-size":10,"text-anchor":"middle"}));
+    if(phase===0){g.appendChild(S("line",{x1:230,y1:y,x2:dz,y2:y,stroke:"#38bdf8","stroke-width":4}));
+      g.appendChild(TX(270,y-8,"RPO",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(TX(270,y+18,"data since last backup = data LOST",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+      g.appendChild(S("circle",{cx:230,cy:y,r:4,fill:"#38bdf8"}));g.appendChild(TX(230,y-16,"last backup",{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+      lbl.textContent="RPO — Recovery Point Objective";lbl.setAttribute("fill","#38bdf8");sub.textContent="how much DATA you can afford to lose (gap between last backup and the disaster)";}
+    else{g.appendChild(S("line",{x1:dz,y1:y,x2:460,y2:y,stroke:"#34d399","stroke-width":4}));
+      g.appendChild(TX(390,y-8,"RTO",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(TX(390,y+18,"time until service restored = DOWNTIME",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+      g.appendChild(S("circle",{cx:460,cy:y,r:4,fill:"#34d399"}));g.appendChild(TX(460,y-16,"recovered",{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+      lbl.textContent="RTO — Recovery Time Objective";lbl.setAttribute("fill","#34d399");sub.textContent="how much TIME you can afford to be down (from disaster to full recovery)";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Pick a disaster-recovery strategy and trigger a region failure. Each strategy trades <b>cost</b> against <b>RTO</b> (how fast you recover) and <b>RPO</b> (how much data you lose). From cheap-but-slow backup/restore to expensive-but-instant multi-site active-active — see the recovery play out.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>DR strategy</label><select id="pgStrat">
+        <option value="backup">Backup &amp; Restore</option>
+        <option value="pilot">Pilot Light</option>
+        <option value="warm">Warm Standby</option>
+        <option value="multi">Multi-Site Active-Active</option></select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgGo" class="go">💥 Trigger disaster</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">RTO = target downtime; RPO = target data loss. Lower both = higher cost. Choose based on how critical the workload is, not on ambition.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">RTO (downtime)</div><div class="v wa" id="pgRTO">—</div></div>
+        <div class="pg-stat"><div class="k">RPO (data loss)</div><div class="v ac" id="pgRPO">—</div></div>
+        <div class="pg-stat"><div class="k">Monthly cost</div><div class="v bad" id="pgCost">—</div></div>
+        <div class="pg-stat"><div class="k">Status</div><div class="v ok" id="pgStatus">healthy</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=150;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const STRAT={
+    backup:{name:"Backup & Restore",rto:"hours–days",rpo:"hours",cost:"$",costN:1,warm:0,recover:3000,desc:"data backed up to another region; on disaster you provision infra and restore from backups"},
+    pilot:{name:"Pilot Light",rto:"~10s of min",rpo:"minutes",cost:"$$",costN:2,warm:0.3,recover:2000,desc:"core (DB) always replicating in DR region; scale up the rest of the stack on disaster"},
+    warm:{name:"Warm Standby",rto:"minutes",rpo:"seconds",cost:"$$$",costN:3,warm:0.6,recover:1200,desc:"a scaled-down full copy runs in DR; on disaster scale it up and cut traffic over"},
+    multi:{name:"Multi-Site Active-Active",rto:"~0 (seconds)",rpo:"~0",cost:"$$$$",costN:4,warm:1,recover:400,desc:"both regions serve live traffic; a region loss is absorbed almost instantly"}};
+  let phase,raf2=null;
+  function reset(){phase="healthy";if(raf2)cancelAnimationFrame(raf2);raf2=null;update();$("pgStatus").textContent="healthy";$("pgStatus").className="v ok";$("pgLog").innerHTML="";log("choose a strategy and trigger a disaster","ac");}
+  function strat(){return STRAT[$("pgStrat").value||"backup"];}
+  function update(){const s=strat();$("pgRTO").textContent=s.rto;$("pgRPO").textContent=s.rpo;$("pgCost").textContent=s.cost;draw(1);}
+  function go(){const s=strat();log("💥 primary region DOWN — initiating "+s.name,"bad");$("pgStatus").textContent="RECOVERING";$("pgStatus").className="v wa";
+    if(s.warm<1)log("DR region warmth: "+Math.round(s.warm*100)+"% — must provision/scale up before serving","wa");
+    else log("DR region already serving live traffic — near-instant absorption","ok");
+    let start=performance.now();
+    function fr(now){const p=Math.min(1,(now-start)/s.recover);draw(1,p);
+      if(p<1)raf2=requestAnimationFrame(fr);else{$("pgStatus").textContent="RECOVERED";$("pgStatus").className="v ok";
+        log("✓ recovered in DR region (RTO≈"+s.rto+", lost up to "+s.rpo+" of data)","ok");raf2=null;}}
+    raf2=requestAnimationFrame(fr);}
+  function draw(alive,recover){svg.innerHTML="";const s=strat();
+    // primary region
+    const down=$("pgStatus")&&$("pgStatus").textContent!=="healthy";
+    box(140,"Primary region",down?"down":"active",down?"#f87171":"#34d399");
+    box(420,"DR region ("+s.name+")",(recover!=null?(recover>=1?"active":"warming"):(s.warm>0?"standby":"cold")),recover>=1?"#34d399":s.warm>0?"#fbbf24":"#5b5b63");
+    // replication arrow
+    svg.appendChild(S("line",{x1:200,y1:70,x2:360,y2:70,stroke:"#38bdf8","stroke-width":s.warm>0.5?2.4:1.4,"stroke-dasharray":s.warm>=1?"none":"5 4","marker-end":"url(#a)"}));
+    svg.appendChild(TX(280,62,s.warm>=1?"live sync":s.warm>0?"async replicate":"periodic backup",{fill:"#38bdf8","font-size":9,"text-anchor":"middle"}));
+    if(recover!=null&&recover<1){svg.appendChild(S("rect",{x:372,y:100,width:96,height:10,rx:5,fill:"#242a33"}));svg.appendChild(S("rect",{x:372,y:100,width:96*recover,height:10,rx:5,fill:"#fbbf24"}));svg.appendChild(TX(420,124,"provisioning "+Math.round(recover*100)+"%",{fill:"#fbbf24","font-size":9,"text-anchor":"middle"}));}
+    else if(recover>=1)svg.appendChild(TX(420,124,"serving traffic ✓",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+    function box(cx,label,state,col){svg.appendChild(S("rect",{x:cx-70,y:40,width:140,height:44,rx:9,fill:state==="down"?"rgba(248,113,113,.12)":state==="active"?"rgba(52,211,153,.12)":"rgba(91,91,99,.1)",stroke:col,"stroke-width":2}));
+      svg.appendChild(TX(cx,60,label,{fill:"#e4e4e7","font-size":9.5,"text-anchor":"middle"}));svg.appendChild(TX(cx,76,state,{fill:col,"font-size":9,"text-anchor":"middle"}));}}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgStrat").onchange=()=>{reset();log("strategy: "+strat().name+" — "+strat().desc,"ac");};
+  $("pgGo").onclick=go;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🌐",title:"Disaster Recovery",category:"Resilience",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Surviving Region-Level Catastrophes",
+  tagline:"DR is the plan for recovering from large-scale disasters — a data-center fire, region outage, or catastrophic data loss. It's defined by two targets: <b>RTO</b> (how fast you must recover) and <b>RPO</b> (how much data you can lose), traded against cost.",
+  pills:["<b>RTO</b> = downtime","<b>RPO</b> = data loss","<b>4 strategies</b>","<b>Cost</b> vs speed"],
+  overview:"High availability handles component failures within a site; <b>disaster recovery (DR)</b> handles catastrophic events that take out a whole data center or region. A DR plan is anchored by two objectives: <b>RTO (Recovery Time Objective)</b> — the maximum acceptable downtime before service is restored; and <b>RPO (Recovery Point Objective)</b> — the maximum acceptable amount of data loss, measured as time since the last durable copy. Lower RTO/RPO cost exponentially more. There are four canonical strategies along the cost/speed curve: <b>Backup & Restore</b> (cheap; back up to another region, provision and restore on disaster — RTO hours-days, RPO hours); <b>Pilot Light</b> (keep the core, e.g. the database, always replicating in the DR region and spin up the rest on demand — RTO tens of minutes); <b>Warm Standby</b> (a scaled-down but running copy you scale up and cut over to — RTO minutes, RPO seconds); and <b>Multi-Site Active-Active</b> (both regions serve live traffic, so a region loss is absorbed almost instantly — RTO/RPO near zero, highest cost). You pick per workload based on how much downtime/data loss the business can tolerate.",
+  problem:"Entire regions do fail — power, networking, natural disaster, or a bad global change. Single-region HA can't help when the whole region is gone. Organizations need a tested plan to restore service and data elsewhere within business-defined limits, or risk catastrophic, sometimes company-ending, outages and data loss.",
+  diagram,diagramCaption:"RPO measures data lost since the last recovery point; RTO measures time to restore service.",
+  how:[
+    "Define RTO and RPO per workload from business impact (downtime cost, data-loss tolerance).",
+    "Replicate data and (optionally) infrastructure to a geographically separate region.",
+    "Choose a strategy on the cost/speed spectrum: backup&restore, pilot light, warm standby, or active-active.",
+    "Automate failover: DNS/global load balancer cutover, infra provisioning (IaC), and data promotion.",
+    "Test regularly with DR drills / game days and measure actual RTO/RPO against targets."
+  ],
+  complexity:[["Backup & Restore","RTO hrs–days · $"],["Pilot Light","RTO ~10s min · $$"],["Warm Standby","RTO min · $$$"],["Active-Active","RTO ~0 · $$$$"]],
+  advantages:["Survives region/data-center-level disasters","Explicit, business-aligned RTO/RPO targets","Flexible cost/speed spectrum of strategies","Protects against catastrophic data loss","Active-active also boosts everyday availability & latency"],
+  disadvantages:["Cross-region redundancy is expensive","Data replication adds latency/consistency challenges","Complex to automate and keep in sync","Untested DR plans often fail when needed","Active-active demands conflict resolution & global data design"],
+  tradeoffs:"DR is a direct cost-vs-resilience dial. Tighter RTO/RPO means more standing infrastructure and more continuous replication, which costs more and adds engineering complexity (cross-region data consistency, conflict handling for active-active, higher write latency for synchronous replication). Looser targets are cheap but mean longer outages and more lost data. The key discipline is matching the strategy to the workload's business criticality rather than defaulting to the most (or least) expensive option — a payments ledger may warrant active-active with near-zero RPO, while an internal analytics store may be fine with nightly cross-region backups. And any DR plan is worthless untested: real recoveries routinely uncover missing dependencies, stale runbooks, and permissions gaps.",
+  whenNot:"Don't build expensive multi-region active-active DR for non-critical or easily-reconstructable workloads — the cost dwarfs the benefit. Conversely, don't rely on backup-and-restore for systems where hours of downtime or data loss are unacceptable. If your data has strong consistency needs, active-active DR may be infeasible without significant redesign. Right-size DR per workload; not everything needs the same tier.",
+  sim,
+  code:{
+"RTO / RPO":`# The two numbers that define a DR plan:\nRPO (Recovery Point Objective) = max acceptable DATA LOSS\n  -> drives replication frequency (backup interval / sync vs async)\n  -> RPO of 0 requires synchronous replication (safe, higher latency)\n\nRTO (Recovery Time Objective) = max acceptable DOWNTIME\n  -> drives how 'ready' the standby is (cold backup ... hot active-active)\n\n# Example targets:\npayments ledger:  RPO ~0,   RTO minutes    -> warm standby / active-active\nanalytics store:  RPO 24h,  RTO 1 day      -> cross-region nightly backups`,
+"Strategies":`# Cost / speed spectrum (AWS's four DR strategies):\nBackup & Restore   : back up to region B; provision + restore on disaster\n                     RTO hours-days, RPO hours          $\nPilot Light        : keep DB replicating in B; start the rest on demand\n                     RTO ~10s of min, RPO minutes       $$\nWarm Standby       : scaled-down full stack runs in B; scale up + cut over\n                     RTO minutes, RPO seconds           $$$\nMulti-Site A/A     : both regions serve live traffic; absorb region loss\n                     RTO ~0, RPO ~0                      $$$$`,
+"Automated cutover":`# Failover is more than data — automate the whole switch:\n1. Detect region failure (health checks / global monitoring)\n2. Promote the DR-region database replica to primary\n3. Provision/scale app tier via Infrastructure-as-Code (Terraform)\n4. Repoint traffic: update global load balancer / DNS (low TTL) to region B\n5. Verify, then communicate. Later: fail back and re-sync region A.\n# TEST this end-to-end on a schedule (game days) — untested DR = no DR.`
+  },
+  realWorld:[
+    ["AWS DR strategies","The 4 strategies (backup/restore → active-active) are AWS's standard DR guidance."],
+    ["Multi-region databases","Spanner, DynamoDB Global Tables, Cosmos DB replicate across regions."],
+    ["Netflix regional evacuation","Can shift all traffic out of a failing AWS region within minutes."],
+    ["Global load balancers / DNS","Route 53, Cloudflare health-checked failover between regions."],
+    ["Financial / healthcare systems","Regulated RTO/RPO with tested DR and off-site backups."]
+  ],
+  interview:[
+    ["basic","What's the difference between RTO and RPO?","RTO (Recovery Time Objective) is the maximum acceptable downtime — how quickly you must restore service after a disaster. RPO (Recovery Point Objective) is the maximum acceptable data loss — how much recent data you can afford to lose, measured as the time gap back to the last durable copy. RTO is about time-to-recover; RPO is about data currency."],
+    ["basic","How does disaster recovery differ from high availability?","HA keeps a service running through component failures within a site/region (redundancy + failover). DR handles catastrophic events that take out an entire data center or region — restoring service and data in a geographically separate location. HA is intra-region and usually automatic/continuous; DR is cross-region and invoked for large-scale disasters, defined by RTO/RPO."],
+    ["inter","Describe the main DR strategies and their trade-offs.","Backup & Restore: cheapest, back up to another region and rebuild on disaster (RTO hours-days). Pilot Light: keep the core (DB) replicating and start the rest on demand (RTO tens of minutes). Warm Standby: a running scaled-down copy you scale up and cut over to (RTO minutes, RPO seconds). Multi-Site Active-Active: both regions serve live traffic, absorbing a region loss near-instantly (RTO/RPO ~0) but most expensive. Cost rises as RTO/RPO fall."],
+    ["inter","How does replication mode affect RPO?","Synchronous replication commits writes to the DR region before acknowledging, so no data is lost on failover (RPO ~0) but write latency increases with distance. Asynchronous replication acknowledges locally and ships changes after, giving low latency but a non-zero RPO (you can lose the un-replicated tail on a sudden disaster). The choice directly sets your achievable RPO versus performance."],
+    ["adv","Why do DR plans commonly fail, and how do you prevent it?","Because they're rarely tested end-to-end, so recoveries hit surprises: missing dependencies, stale runbooks, permission/IAM gaps, DNS TTLs too high, backups that don't actually restore, or capacity unavailable in the DR region. Prevention: automate cutover with Infrastructure-as-Code, run regular DR drills/game days that actually fail over, verify restores (not just backups), and track measured RTO/RPO against targets."],
+    ["adv","What makes multi-site active-active DR hard?","Both regions serve writes concurrently, so you must handle cross-region data consistency and conflicts — either strong global consistency (e.g., Spanner, higher latency) or eventual consistency with conflict resolution (CRDTs, last-write-wins, app-level merges). You also need global traffic routing, idempotent operations, and careful handling of split-brain during partitions. It's the most resilient but most complex and costly option, essentially a distributed-systems design problem."],
+    ["sd","How would you design DR for a critical payments system?","Set aggressive targets (RPO ~0, RTO minutes). Use a multi-region database with synchronous or near-sync replication for the ledger to avoid data loss, and warm standby or active-active app tiers. Automate failover: promote the DR replica, provision/scale via IaC, and cut traffic over with a health-checked global load balancer (low DNS TTL). Ensure idempotency so in-flight transactions don't double-apply. Test with regular game-day failovers and reconcile after failback."]
+  ],
+  mistakes:["Confusing DR with HA (single-region redundancy won't survive a region loss).","Never testing the DR plan — untested recovery usually fails.","Backing up but never verifying restores work.","Using async replication where the RPO requires synchronous.","One-size-fits-all DR instead of per-workload RTO/RPO."],
+  best:["Set RTO/RPO per workload from business impact; pick the matching strategy.","Replicate to a geographically independent region.","Automate failover and provisioning with Infrastructure-as-Code.","Run regular DR drills/game days and verify restores, not just backups.","Use low DNS TTLs / global LB for fast, health-checked cutover."],
+  related:[["High Availability","🟢","Intra-region resilience","high-availability.html"],["Backup Strategies","💾","Data protection","backup.html"],["Failover","🔀","Cutover mechanics","failover.html"],["Checkpointing","📌","State snapshots","checkpointing.html"],["Replication","🔁","Cross-region data","system-designed.html"],["PACELC Theorem","🔀","Consistency vs latency","pacelc.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

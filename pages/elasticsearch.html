@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Elasticsearch — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function shard(x,y,label,col){g.appendChild(S("rect",{x:x-32,y:y-16,width:64,height:32,rx:6,fill:col+"22",stroke:col,"stroke-width":1.8}));g.appendChild(TX(x,y+4,label,{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:255,y:36,width:110,height:26,rx:7,fill:"#161619",stroke:"#7C3AED"}));g.appendChild(TX(310,53,"coordinating node",{fill:"#c4a2ff","font-size":9.5,"text-anchor":"middle"}));
+    const xs=[130,310,490];
+    if(phase===0){xs.forEach((x,i)=>{shard(x,110,"shard "+i,"#38bdf8");g.appendChild(S("line",{x1:310,y1:62,x2:x,y2:94,stroke:"#38bdf8","stroke-width":1.6,"marker-end":"url(#a)"}));});
+      g.appendChild(TX(310,80,"scatter query to all shards",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="scatter — query every shard in parallel";lbl.setAttribute("fill","#38bdf8");sub.textContent="each shard is a full Lucene inverted index; the query runs on all of them at once";}
+    else{xs.forEach((x,i)=>{shard(x,110,"top-k",  "#34d399");g.appendChild(S("line",{x1:x,y1:94,x2:310,y2:62,stroke:"#34d399","stroke-width":1.6,"marker-end":"url(#a)"}));});
+      g.appendChild(TX(310,80,"gather + merge top-k",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(TX(310,150,"merged, globally-ranked results",{fill:"#c4a2ff","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="gather — merge each shard's top-k";lbl.setAttribute("fill","#34d399");sub.textContent="the coordinator merges per-shard results into one globally ranked page (scatter-gather)";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Index documents across a sharded cluster and run queries. A document is routed to a <b>primary shard</b> by <code>hash(id) % shards</code> and copied to a <b>replica</b>. Queries <b>scatter</b> to all shards in parallel and <b>gather</b> their top results. Kill a node and watch replicas keep the cluster available.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Primary shards: <b id="pgSV">3</b></label><input id="pgShards" type="range" min="2" max="5" value="3"></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgIndex" class="go">＋ Index a doc</button><button id="pgQuery">🔎 Query</button></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgKill">✗ Kill a node</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Each shard is an independent inverted index. Replicas serve reads and take over if a primary's node dies — giving horizontal scale + high availability.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Docs indexed</div><div class="v ac" id="pgDocs">0</div></div>
+        <div class="pg-stat"><div class="k">Shards queried</div><div class="v" id="pgQ">0</div></div>
+        <div class="pg-stat"><div class="k">Nodes up</div><div class="v ok" id="pgNodes">3/3</div></div>
+        <div class="pg-stat"><div class="k">Status</div><div class="v wa" id="pgStatus">green</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=180,NODES=3;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let nShards,docs,shardDocs,nodesUp,docSeq;
+  function reset(){nShards=+$("pgShards").value||3;docs=0;docSeq=0;shardDocs=new Array(nShards).fill(0);nodesUp=[true,true,true];
+    draw();stats();$("pgLog").innerHTML="";log("index docs, run queries, kill nodes","ac");}
+  // primary shard s lives on node s%NODES; replica on (s+1)%NODES
+  function primaryNode(s){return s%NODES;}
+  function replicaNode(s){return (s+1)%NODES;}
+  function shardAvailable(s){return nodesUp[primaryNode(s)]||nodesUp[replicaNode(s)];}
+  function index(){const id=docSeq++;const s=hash(id)%nShards;
+    if(!shardAvailable(s)){log("index doc "+id+" → shard "+s+" UNAVAILABLE (both primary & replica nodes down)","bad");return;}
+    shardDocs[s]++;docs++;log("index doc "+id+" → routed to shard "+s+" (primary node "+primaryNode(s)+", replica node "+replicaNode(s)+")","ac");stats();draw();}
+  function hash(x){return (x*2654435761>>>0)% 997;}
+  function query(){let queried=0,avail=0,tot=0;
+    for(let s=0;s<nShards;s++){queried++;if(shardAvailable(s)){avail++;tot+=shardDocs[s];}}
+    $("pgQ").textContent=queried;
+    if(avail<nShards)log("⚠ scatter to "+nShards+" shards but "+(nShards-avail)+" unavailable → PARTIAL results","bad");
+    else log("scatter to "+nShards+" shards in parallel → gather top-k → merged "+tot+" candidate docs","ok");
+    draw(true);stats();}
+  function kill(){const up=nodesUp.map((u,i)=>u?i:-1).filter(i=>i>=0);if(!up.length){log("all nodes already down","wa");return;}
+    const victim=up[Math.floor(Math.random()*up.length)];nodesUp[victim]=false;
+    log("✗ node "+victim+" killed — shards there fail over to replicas on other nodes","bad");
+    // check status
+    stats();draw();}
+  function stats(){$("pgDocs").textContent=docs;$("pgNodes").textContent=nodesUp.filter(Boolean).length+"/"+NODES;
+    let allAvail=true,anyReplicaLost=nodesUp.includes(false);
+    for(let s=0;s<nShards;s++)if(!shardAvailable(s))allAvail=false;
+    const st=!allAvail?"red":anyReplicaLost?"yellow":"green";
+    $("pgStatus").textContent=st;$("pgStatus").className="v "+(st==="green"?"ok":st==="yellow"?"wa":"bad");}
+  function draw(querying){svg.innerHTML="";
+    // nodes as columns
+    const colW=W/NODES;
+    for(let n=0;n<NODES;n++){const cx=colW*n+colW/2;
+      svg.appendChild(S("rect",{x:colW*n+8,y:8,width:colW-16,height:H-30,rx:8,fill:nodesUp[n]?"rgba(52,211,153,.05)":"rgba(248,113,113,.08)",stroke:nodesUp[n]?"#2f3742":"#f87171","stroke-width":1.5,"stroke-dasharray":nodesUp[n]?"none":"5 4"}));
+      svg.appendChild(TX(cx,24,"Node "+n+(nodesUp[n]?"":" ✗"),{fill:nodesUp[n]?"#8b8b93":"#f87171","font-size":10,"text-anchor":"middle"}));}
+    // place shards: primary + replica
+    let placed={};for(let n=0;n<NODES;n++)placed[n]=0;
+    function box(node,label,isPrimary,active){const cx=colW*node+colW/2;const y=40+placed[node]*30;placed[node]++;
+      const col=isPrimary?"#7C3AED":"#38bdf8";const dead=!nodesUp[node];
+      svg.appendChild(S("rect",{x:cx-42,y:y,width:84,height:24,rx:5,fill:dead?"rgba(120,120,130,.08)":(active?"rgba(52,211,153,.2)":col+"22"),stroke:dead?"#3a3a42":(active?"#34d399":col),"stroke-width":active?2:1.4}));
+      svg.appendChild(TX(cx,y+15,label,{fill:dead?"#5b5b63":"#e4e4e7","font-size":9,"text-anchor":"middle"}));}
+    for(let s=0;s<nShards;s++){box(primaryNode(s),"S"+s+" P·"+shardDocs[s]+"d",true,querying&&nodesUp[primaryNode(s)]);
+      box(replicaNode(s),"S"+s+" R",false,querying&&!nodesUp[primaryNode(s)]&&nodesUp[replicaNode(s)]);}
+    svg.appendChild(TX(W/2,H-6,"P = primary shard · R = replica · green = serving this query",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgShards").oninput=()=>{$("pgSV").textContent=$("pgShards").value;reset();};
+  $("pgIndex").onclick=index;$("pgQuery").onclick=query;$("pgKill").onclick=kill;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔍",title:"Elasticsearch",category:"Search",difficulty:"Hard",readingTime:"10 min",
+  eyebrow:"Distributed Search & Analytics Engine",
+  tagline:"A distributed layer over Lucene: it shards an inverted index across nodes, replicates each shard for availability, and runs queries with <b>scatter-gather</b> — giving horizontally-scalable, near-real-time full-text search, aggregations, and log analytics.",
+  pills:["<b>Shards</b> + <b>replicas</b>","<b>Lucene</b> per shard","<b>Scatter-gather</b>","<b>Near-real-time</b>"],
+  overview:"Elasticsearch (and OpenSearch) is a distributed search engine built on <b>Apache Lucene</b>. An <b>index</b> is split into <b>shards</b>, each of which is a self-contained Lucene inverted index; shards are distributed across <b>nodes</b> so the index can grow beyond one machine and queries run in parallel. Each shard has a <b>primary</b> plus one or more <b>replicas</b> on other nodes for high availability and read scaling. When you index a document, it's routed to a shard by <code>hash(routing) % number_of_primary_shards</code>, written to the primary, then copied to replicas. When you search, a <b>coordinating node</b> uses <b>scatter-gather</b>: it scatters the query to a copy of every shard in parallel, each shard returns its local top-k (scored with <b>BM25</b>), and the coordinator gathers and merges them into one globally ranked result page. Elasticsearch is <b>near-real-time</b>: new docs become searchable after a periodic <b>refresh</b> (default ~1s) that opens a new Lucene segment. On top of search it offers rich <b>aggregations</b> (analytics), making it the backbone of the ELK/observability stack.",
+  problem:"A single-machine inverted index can't hold or query web-/log-scale data, and a single copy isn't fault-tolerant. Teams need full-text search plus analytics that scales horizontally, stays available through node failures, and returns results in near real time. Elasticsearch provides the distribution, replication, and query coordination on top of Lucene's proven index.",
+  diagram,diagramCaption:"A query scatters to all shards in parallel; the coordinator gathers and merges each shard's top-k.",
+  how:[
+    "An index is divided into a fixed number of primary shards, each a full Lucene inverted index.",
+    "Documents route to a shard via hash(routing/_id) % primary_shards; the primary indexes then replicates to replica shards.",
+    "Replicas live on different nodes for HA and to serve reads; the cluster tracks primary/replica placement.",
+    "Search: a coordinating node scatters the query to one copy of every shard; each returns its local top-k (BM25).",
+    "The coordinator gathers, merges, and globally ranks results; refresh makes new docs visible ~every second."
+  ],
+  complexity:[["Shards","fixed per index at creation"],["Routing","hash(id) % shards"],["Query","scatter-gather, parallel"],["Visibility","near-real-time (refresh)"]],
+  advantages:["Horizontal scale via sharding","High availability & read scaling via replicas","Fast full-text search + powerful aggregations","Near-real-time indexing","Rich ecosystem (Kibana, ELK, ingest pipelines)"],
+  disadvantages:["Primary shard count fixed at index creation (reindex to change)","Not a system of record (eventual consistency, no ACID txns)","Deep pagination & huge aggregations are costly","Cluster/JVM tuning & memory management are complex","Over-sharding hurts performance"],
+  tradeoffs:"Elasticsearch optimizes for scalable, fast search/analytics over read-heavy, append-mostly data — deliberately trading away strong transactional guarantees. It's <b>not a primary datastore</b>: writes are eventually consistent, there are no multi-document ACID transactions, and near-real-time visibility means a small indexing delay. Sharding is a balancing act: too few shards limit parallelism/scale, too many (over-sharding) waste memory and slow queries because each shard has fixed overhead — and the primary shard count is fixed at index creation (changing it requires a reindex). Replicas add availability and read throughput at the cost of storage and indexing work. Scatter-gather scales queries but makes deep pagination and very large aggregations expensive (each shard must return enough to merge). Typical designs keep Elasticsearch as a search/analytics index fed from a source-of-truth database.",
+  whenNot:"Don't use Elasticsearch as your primary/transactional database — it lacks ACID transactions and strong consistency; keep authoritative data in an RDBMS/NoSQL store and index into ES. Avoid it for small datasets where a DB's built-in full-text (Postgres GIN) suffices, for strict real-time consistency needs, or as a simple key-value/cache. Be cautious using it for heavy relational joins or as a queue.",
+  sim,
+  code:{
+"Index & shards":`PUT /products\n{\n  "settings": {\n    "number_of_shards": 3,     // FIXED at creation (reindex to change)\n    "number_of_replicas": 1    // 1 replica per primary -> HA + read scaling\n  },\n  "mappings": { "properties": {\n    "title": { "type": "text",    "analyzer": "english" },  // full-text\n    "price": { "type": "double" },                          // structured\n    "tags":  { "type": "keyword" }                          // exact/agg\n  }}\n}\n# doc routing: shard = hash(_routing | _id) % number_of_shards`,
+"Search (scatter-gather)":`GET /products/_search\n{\n  "query": {\n    "bool": {\n      "must":   [{ "match": { "title": "wireless headphones" }}],  // BM25\n      "filter": [{ "range": { "price": { "lte": 200 }}}]           // no scoring\n    }\n  },\n  "size": 10, "from": 0\n}\n# A coordinating node scatters to all shards, each returns local top-10,\n# then it merges into the global top-10. 'filter' clauses are cacheable.`,
+"Aggregations":`GET /logs/_search\n{\n  "size": 0,\n  "aggs": {\n    "by_status": { "terms": { "field": "status" },      // bucket per status\n      "aggs": { "avg_latency": { "avg": { "field": "ms" }}}}\n  }\n}\n# Aggregations run per-shard then merge -> real-time analytics (Kibana).\n# Beware very-high-cardinality terms aggs and deep 'from' pagination\n# (use search_after / PIT for deep scrolling).`
+  },
+  realWorld:[
+    ["ELK / observability","Elasticsearch + Logstash + Kibana for logs, metrics, and traces."],
+    ["Site/app search","Product, docs, and content search for countless websites."],
+    ["GitHub / Stack Overflow","Code/content search backed by Elasticsearch."],
+    ["Security (SIEM)","Elastic Security / SIEM over huge event volumes."],
+    ["Wikimedia, Uber, Netflix","Search and analytics at very large scale."]
+  ],
+  interview:[
+    ["basic","What is Elasticsearch and what is it built on?","A distributed search and analytics engine built on Apache Lucene. It distributes a Lucene inverted index across nodes as shards, replicates shards for availability, and coordinates queries — providing scalable near-real-time full-text search plus aggregations, commonly used in the ELK/observability stack."],
+    ["basic","What are shards and replicas?","A shard is a self-contained Lucene inverted index; an Elasticsearch index is split into a fixed number of primary shards so it can scale across machines and query in parallel. Replicas are copies of primary shards placed on other nodes, providing high availability (they take over if a primary's node fails) and extra read throughput."],
+    ["inter","How does a search query execute across shards?","Via scatter-gather. A coordinating node receives the query, scatters it to one copy (primary or replica) of every shard in parallel. Each shard runs the query on its local inverted index and returns its top-k scored (BM25) results. The coordinator gathers all the per-shard top-k lists and merges them into a single globally ranked result page."],
+    ["inter","Why is the primary shard count fixed at index creation?","Because documents are routed to shards by hash(routing/_id) % number_of_primary_shards. Changing the shard count would change where every document hashes to, invalidating routing. So to change primary shards you must reindex into a new index with the desired count. This makes capacity planning (sizing shards up front) important; replicas, however, can be changed dynamically."],
+    ["inter","Why isn't Elasticsearch a primary database?","It's eventually consistent with near-real-time (not immediate) visibility, has no multi-document ACID transactions, and its durability/consistency model is weaker than an RDBMS. It's optimized for search/analytics on read-heavy, append-mostly data. Best practice is to keep the source of truth in a transactional store and index data into Elasticsearch for search."],
+    ["adv","What is over-sharding and how do you size shards?","Over-sharding is creating too many small shards. Each shard carries fixed overhead (memory, file handles, per-query cost), so too many shards waste resources and slow queries (the coordinator must merge many results). Size shards to a target size (commonly tens of GB) based on total data and growth, keep shard counts proportional to data/nodes, and use time-based indices with rollover for logs rather than one giant index."],
+    ["sd","Design a scalable product search with Elasticsearch.","Keep the catalog in a source-of-truth DB and stream changes into an Elasticsearch index sized with an appropriate number of primary shards (for data volume) and 1+ replicas for HA/read scale. Map fields as text (analyzed, for full-text BM25), keyword (exact/aggregations), and numeric (filters/ranges). Serve queries as bool queries combining must (scored match) and filter (cached, unscored) clauses, using scatter-gather; add aggregations for facets. Use search_after for deep pagination, alias + reindex for schema changes, and monitor shard sizes."]
+  ],
+  mistakes:["Using Elasticsearch as the system of record (no ACID, eventual consistency).","Over-sharding: too many tiny shards degrade performance.","Deep pagination with large from/size instead of search_after/PIT.","Not planning primary shard count (requires reindex to change).","High-cardinality terms aggregations blowing up memory."],
+  best:["Keep a source-of-truth DB; index into ES for search/analytics.","Size shards (~tens of GB) and use time-based indices + rollover for logs.","Use filter clauses for non-scoring conditions (cacheable).","Use aliases + reindex for schema/shard changes; search_after for deep paging.","Add replicas for HA/read scale; monitor JVM heap and shard counts."],
+  related:[["Inverted Index","🔎","What each shard is","inverted-index.html"],["Ranking (BM25)","🏆","Per-shard scoring","ranking.html"],["Full-Text Search","📄","Analysis pipeline","full-text-search.html"],["Consistent Hashing","🔗","Shard routing idea","system-designed.html"],["Sharding / Partitioning","🧩","Horizontal scale","system-designed.html"],["Quorum","🗳️","Replica consistency","quorum.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

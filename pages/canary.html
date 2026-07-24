@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Canary Deployment — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const stages=[[5,"5%"],[25,"25%"],[50,"50%"],[100,"100%"]];
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";const[pct,label]=stages[phase];
+    g.appendChild(S("rect",{x:270,y:36,width:100,height:26,rx:7,fill:"rgba(124,58,237,.2)",stroke:"#a78bfa"}));g.appendChild(TX(320,53,"🔀 router",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+    // stable
+    g.appendChild(S("rect",{x:70,y:110,width:170,height:52,rx:10,fill:"rgba(56,189,248,.2)",stroke:"#38bdf8","stroke-width":2}));
+    g.appendChild(TX(155,134,"STABLE v1.2",{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));g.appendChild(TX(155,152,(100-pct)+"% of traffic",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));
+    // canary
+    g.appendChild(S("rect",{x:400,y:110,width:170,height:52,rx:10,fill:"rgba(52,211,153,.2)",stroke:"#34d399","stroke-width":2}));
+    g.appendChild(TX(485,134,"🐤 CANARY v1.3",{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));g.appendChild(TX(485,152,pct+"% of traffic",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+    arrow(g,300,62,155,106,"#38bdf8");arrow(g,340,62,485,106,"#34d399");
+    lbl.textContent=phase<3?("send "+label+" of traffic to the canary, then watch metrics"):"canary healthy at 100% → promote; retire the old version";
+    lbl.setAttribute("fill",phase<3?"#34d399":"#a78bfa");
+    sub.textContent=phase<3?"if error-rate/latency stays healthy, increase the percentage":"a bad canary is auto-rolled back — only a small % was ever exposed";}
+  function step(){phase=(phase+1)%4;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Roll out a new version gradually. You shift a small <b>percentage</b> of traffic to the canary, watch its <b>error rate</b>, and only increase if it stays healthy. If the canary's errors exceed the threshold, the system <b>auto-rolls back</b> — so a bad release only ever touched a tiny slice of users.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Canary error rate: <b id="pgErrV">1</b>%</label><input id="pgErr" type="range" min="0" max="20" value="1" step="1"></div>
+      <div class="pg-field"><label>Rollback threshold: <b id="pgThV">5</b>%</label><input id="pgTh" type="range" min="1" max="15" value="5" step="1"></div>
+      <button class="pg-btn" id="pgAuto">▶ auto-progress rollout</button>
+      <button class="pg-btn secondary" id="pgStep">step +1 stage</button>
+      <button class="pg-btn secondary" id="pgReset">reset</button>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">Stages: 5% → 25% → 50% → 100%. Raise the canary error rate above the threshold to trigger an automatic rollback.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Canary traffic</div><div class="v ac" id="pgPct">0%</div></div>
+        <div class="pg-stat"><div class="k">Status</div><div class="v wa" id="pgStat">stable only</div></div>
+        <div class="pg-stat"><div class="k">Users affected by bug</div><div class="v" id="pgHit">0</div></div>
+        <div class="pg-stat"><div class="k">Total requests</div><div class="v" id="pgReq">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=100;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const STAGES=[0,5,25,50,100];let stage=0,hit=0,req=0,running=false,raf,last,t=0,done=false;
+  function pct(){return STAGES[stage];}
+  function draw(){svg.innerHTML="";const p=pct();
+    svg.appendChild(TX(20,18,"traffic split:",{fill:"#8b8b93","font-size":10}));
+    const bw=W-40;
+    svg.appendChild(S("rect",{x:20,y:26,width:bw*(100-p)/100,height:30,rx:4,fill:"rgba(56,189,248,.35)",stroke:"#38bdf8"}));
+    if(p>0)svg.appendChild(S("rect",{x:20+bw*(100-p)/100,y:26,width:bw*p/100,height:30,rx:4,fill:"rgba(52,211,153,.4)",stroke:"#34d399"}));
+    svg.appendChild(TX(24,46,"stable "+(100-p)+"%",{fill:"#38bdf8","font-size":10}));
+    if(p>=15)svg.appendChild(TX(W-24,46,"canary "+p+"%",{fill:"#34d399","font-size":10,"text-anchor":"end"}));
+    svg.appendChild(TX(20,78,"stage "+stage+" / 4",{fill:"#5b5b63","font-size":10}));}
+  function stats(){$("pgPct").textContent=pct()+"%";$("pgHit").textContent=hit;$("pgReq").textContent=req;draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function analyze(){const err=+$("pgErr").value||0,th=+$("pgTh").value||5;const p=pct();
+    const batch=200;req+=batch;const canaryReq=Math.round(batch*p/100);const errs=Math.round(canaryReq*err/100);hit+=errs;
+    if(p>0&&err>th){$("pgStat").textContent="ROLLED BACK";$("pgStat").className="v bad";
+      log("✗ canary error "+err+"% > threshold "+th+"% at "+p+"% traffic → AUTO-ROLLBACK to stable","bad");
+      log("   only ~"+hit+" users ever saw the bug — blast radius contained","ok");stage=0;done=true;stopAuto();stats();return false;}
+    if(p>0)log("✓ canary healthy at "+p+"% ("+err+"% err ≤ "+th+"%) — "+errs+" errors this window","ok");
+    $("pgStat").textContent=p===100?"promoted ✓":"canary healthy";$("pgStat").className="v ok";stats();return true;}
+  function step(){if(done){log("rollout ended — reset to run again","ac");return;}
+    if(stage<4){stage++;const ok=analyze();if(ok&&stage===4){log("🎉 canary reached 100% and is healthy → promote to stable, retire old version","ac");done=true;stopAuto();}}
+    else log("already at 100%","ac");}
+  function tick(now){if(!running)return;const dt=(now-last)/1000;last=now;t+=dt;if(t>=1.4){t=0;step();}raf=requestAnimationFrame(tick);}
+  function stopAuto(){running=false;cancelAnimationFrame(raf);$("pgAuto").textContent="▶ auto-progress rollout";}
+  function auto(){if(running){stopAuto();return;}if(done){log("reset first","wa");return;}running=true;$("pgAuto").textContent="⏸ pause";last=performance.now();raf=requestAnimationFrame(tick);}
+  $("pgAuto").onclick=auto;$("pgStep").onclick=step;
+  $("pgReset").onclick=()=>{stopAuto();stage=0;hit=0;req=0;done=false;$("pgStat").textContent="stable only";$("pgStat").className="v wa";log("reset — stable serves 100%; begin rollout","ac");stats();};
+  $("pgErr").oninput=()=>{$("pgErrV").textContent=$("pgErr").value;};
+  $("pgTh").oninput=()=>{$("pgThV").textContent=$("pgTh").value;};
+  stats();log("progress the rollout; raise canary errors above threshold to see auto-rollback","ac");
+}
+
+const DATA={
+  badge:"🐤",title:"Canary Deployment",category:"Traffic Management",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Gradual, Metric-Gated Rollout",
+  tagline:"A canary release exposes a new version to a <b>small percentage</b> of real traffic first, watches its <b>error rate and latency</b>, and only increases exposure if the metrics stay healthy — automatically <b>rolling back</b> if they don't. A bad release harms only a tiny slice of users.",
+  pills:["Shift <b>traffic %</b> gradually","<b>Metric-gated</b> promotion","<b>Auto-rollback</b> on regression","Small <b>blast radius</b>"],
+  overview:"<b>Canary deployment</b> (named after the 'canary in a coal mine') reduces release risk by rolling out a new version <b>incrementally</b> to a small subset of production traffic before a full rollout. You deploy the new version alongside the stable one, route a small fraction of requests — say <b>5%</b> — to the <b>canary</b>, and closely monitor its <b>health signals</b>: error rate, latency (p50/p99), saturation, and business KPIs, compared against the stable baseline. If the canary looks healthy, you progressively increase the percentage (5% → 25% → 50% → 100%) with a soak period at each step; if it regresses, you <b>roll back</b> immediately by routing all traffic back to stable. The defining benefit is a <b>small blast radius</b>: because only a fraction of users ever touch a bad build, and rollback is fast, the impact of a defect is contained. Mature setups use <b>automated analysis</b> (e.g. comparing canary vs baseline metrics statistically) to promote or abort without human intervention, and tools like Argo Rollouts, Flagger, or Spinnaker orchestrate the traffic shifting and gating. Canary is often combined with <b>feature flags</b> (to decouple deploy from release and target cohorts) and can route by percentage, by user attributes, or by region. It contrasts with <b>blue-green</b> (atomic all-or-nothing switch with instant rollback) and <b>rolling</b> (replace instances in place without explicit traffic gating).",
+  problem:"Even with good testing, some defects and performance regressions only appear under real production traffic, data, and scale. Releasing to 100% of users at once means a latent bug hits everyone before you can react. Canary deployments let you validate a new version against real traffic on a small, controllable slice — catching problems with minimal user impact and enabling fast, automated rollback.",
+  diagram,diagramCaption:"Traffic to the canary rises 5%→25%→50%→100% only while metrics stay healthy; a regression aborts.",
+  how:[
+    "Deploy the new version (canary) alongside the stable version.",
+    "Route a small percentage of traffic to the canary (e.g. 5%).",
+    "Monitor canary health vs the stable baseline: error rate, latency, saturation, KPIs.",
+    "If healthy after a soak, increase the percentage in steps; if not, roll back to stable.",
+    "At 100% healthy, promote the canary to stable and retire the old version."
+  ],
+  complexity:[["Exposure","starts tiny (%)"],["Gate","metrics vs baseline"],["Rollback","route back to stable"],["Blast radius","≈ canary %"]],
+  advantages:["Small blast radius — few users hit a bad build","Validates against real production traffic & data","Automated metric analysis + auto-rollback","Fine-grained, progressive risk control","Can target by cohort/region with feature flags"],
+  disadvantages:["More complex routing & observability than blue-green","Needs good metrics/SLOs to gate reliably","Mixed versions run simultaneously (compat required)","Small canary sample may not reveal rare bugs","Longer overall rollout time (soak periods)"],
+  tradeoffs:"Canary trades <b>operational complexity for the finest-grained risk control</b>. Versus <b>blue-green</b>'s single atomic flip, canary gives you a dial — expose 1%, 5%, 25% — so a defect's impact is proportional to the current canary percentage rather than all-or-nothing, and automated gating can abort before most users are affected. The price is significant machinery: weighted/percentage traffic routing, and — critically — <b>high-quality metrics and SLOs</b> to make promote/rollback decisions, because a canary is only as good as your ability to detect that it's unhealthy (bad or noisy metrics either miss regressions or cause false rollbacks). Like rolling deployments, canary means <b>multiple versions run at once</b>, so the new and old versions must be <b>compatible</b> with each other and with shared state/schema. There's also a <b>statistical</b> trade-off: a tiny canary limits blast radius but may not receive enough traffic to surface rare bugs or reach significance quickly, so you balance canary size and soak time against rollout speed. Finally, canary <b>lengthens</b> the total release time (soak at each stage) in exchange for safety — appropriate for high-risk or high-traffic changes, overkill for trivial ones.",
+  whenNot:"Canary is overkill for low-risk changes, internal tools, or low-traffic services where there isn't enough traffic to evaluate a small slice meaningfully (blue-green or rolling is simpler). It's a poor fit when you lack the observability to gate decisions — without reliable error/latency metrics, a canary gives false confidence. Changes that can't run alongside the old version (incompatible protocol/schema without expand-contract) don't suit canary's mixed-version window. And when instant, whole-fleet rollback matters more than gradual exposure, blue-green may be preferable.",
+  sim,
+  code:{
+"Weighted traffic split":`# Route a small % to the canary; increase only if healthy.\n# (e.g. Istio VirtualService / any weighted LB)\nroute:\n  - destination: stable   weight: 95\n  - destination: canary   weight: 5      # start small\n\n# Promotion ladder with soak + metric gate at each step:\nfor pct in [5, 25, 50, 100]:\n    shift_traffic(canary=pct)\n    soak(minutes=10)\n    if canary.error_rate > baseline.error_rate + threshold \\\n       or canary.p99 > baseline.p99 * 1.2:\n        shift_traffic(canary=0)          # AUTO-ROLLBACK\n        abort("canary unhealthy")\npromote(canary)                          # 100% healthy -> becomes stable`,
+"Argo Rollouts canary":`apiVersion: argoproj.io/v1alpha1\nkind: Rollout\nspec:\n  strategy:\n    canary:\n      steps:\n        - setWeight: 5\n        - pause: { duration: 10m }        # soak\n        - analysis: { templates: [{ templateName: success-rate }] }  # gate\n        - setWeight: 25\n        - pause: { duration: 10m }\n        - setWeight: 50\n        - pause: { duration: 10m }\n        - setWeight: 100\n# The AnalysisTemplate queries Prometheus; a failing metric aborts + rolls back.`,
+"Automated analysis (gate)":`// Compare canary vs baseline; decide promote / rollback.\nfunction evaluate(canary, baseline, cfg) {\n  const errBad  = canary.errorRate > baseline.errorRate + cfg.errDelta;\n  const slowBad = canary.p99 > baseline.p99 * cfg.latencyFactor;\n  if (errBad || slowBad) return "ROLLBACK";   // route 0% to canary\n  return "PROMOTE";                            // advance to next weight\n}\n// Key: gate on metrics RELATIVE to the live baseline, not absolute values,\n// so normal traffic variation doesn't trigger false rollbacks.`
+  },
+  realWorld:[
+    ["Google / Netflix / Facebook","Pioneered large-scale canarying with automated analysis."],
+    ["Argo Rollouts / Flagger","Kubernetes progressive-delivery controllers."],
+    ["Istio / Linkerd / Envoy","Service meshes providing weighted traffic routing."],
+    ["Spinnaker","Multi-cloud CD with automated canary analysis."],
+    ["Feature flag platforms","LaunchDarkly etc. for cohort-based progressive rollout."]
+  ],
+  interview:[
+    ["basic","What is a canary deployment?","A release strategy that rolls out a new version to a small percentage of real traffic first, monitors its health (error rate, latency), and only increases exposure if metrics stay healthy — rolling back if they don't. Named after the coal-mine canary, it limits the blast radius so a defective release affects only a small slice of users before it's caught."],
+    ["basic","How does canary differ from blue-green?","Blue-green switches 100% of traffic atomically between two environments — simple and instant rollback, but all-or-nothing. Canary shifts traffic gradually (e.g. 5% → 25% → 100%) while evaluating metrics at each step, so exposure to a bad build is proportional and can be aborted early. Canary offers finer-grained risk control at the cost of more complex routing and a longer rollout; blue-green is simpler with a cleaner rollback."],
+    ["inter","How do you decide whether to promote or roll back a canary?","By comparing the canary's health signals against the stable baseline over a soak period: error rate, latency percentiles (p99), saturation, and key business metrics. Crucially, gate on metrics relative to the live baseline (not absolute thresholds) so normal variation doesn't cause false rollbacks. If the canary regresses beyond a threshold, auto-rollback (route traffic back to stable); if it stays healthy, advance to the next traffic weight. Mature setups automate this analysis."],
+    ["inter","What's the role of the canary percentage and soak time?","The percentage sets the blast radius — at 5%, only ~5% of users can be affected by a defect — so you start small and increase as confidence grows. Soak time is how long you observe each stage; it must be long enough to gather statistically meaningful data and to surface issues that appear under sustained load. There's a trade-off: smaller canaries and longer soaks are safer but slow the rollout and may not generate enough traffic to detect rare bugs."],
+    ["adv","What are the requirements and risks of running a canary?","You need weighted traffic routing (LB or service mesh), strong observability with reliable metrics/SLOs to gate decisions, and version compatibility because canary and stable run simultaneously against shared state/schema (use expand-contract migrations). Risks: poor or noisy metrics cause missed regressions or false rollbacks; a too-small canary may not exercise rare paths; and stateful or non-backward-compatible changes can break when both versions coexist. Sticky routing may also skew which users are sampled."],
+    ["adv","How do canary deployments relate to feature flags?","They're complementary. Canary controls infrastructure-level exposure (what percentage of traffic hits the new binary), while feature flags control application-level exposure (which users/cohorts see a feature), decoupling deploy from release. You can deploy code dark behind a flag, canary the binary safely, then progressively enable the feature via flags — targeting by user attributes, region, or percentage — and kill-switch it instantly without a redeploy if problems arise."],
+    ["sd","Design a progressive delivery pipeline with canary for a high-traffic API.","Deploy the canary alongside stable behind a mesh/LB supporting weighted routing. CI gates on tests; then a rollout controller (Argo Rollouts/Flagger) shifts traffic 5%→25%→50%→100% with soak periods, running automated analysis against Prometheus metrics (error rate, p99 latency, saturation) compared to the baseline. Auto-rollback on regression. Ensure backward-compatible schema (expand-contract) since versions coexist, externalize state, and pair with feature flags for cohort control and instant kill-switch. Emit clear SLO-based alerts and dashboards, and require the canary to receive enough traffic for significance before promotion."]
+  ],
+  mistakes:["Gating on absolute thresholds instead of comparing to the live baseline.","Canary too small/short to gather significant signal.","No automated rollback — relying on humans to notice.","Ignoring version/schema compatibility while both versions run.","Weak observability, so regressions go undetected until full rollout."],
+  best:["Start small (1–5%) and increase in metric-gated steps with soak.","Compare canary vs baseline metrics; automate promote/rollback.","Ensure backward-compatible changes (versions coexist).","Instrument error rate, latency, saturation, and KPIs with SLOs.","Combine with feature flags for cohort targeting and kill-switches."],
+  related:[["Blue-Green Deployment","🔵","Atomic switch alternative","blue-green.html"],["Health Checks","❤️","Signals that gate rollout","health-checks.html"],["Auto-Scaling","📈","Capacity during rollout","auto-scaling.html"],["High Availability","🟢","Uptime & SLOs","high-availability.html"],["Failover","🔀","Traffic redirection","failover.html"],["Backoff & Retry","🔁","Client resilience during rollout","backoff.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

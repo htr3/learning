@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HTTP/2 & HTTP/3 — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  const data=[
+    ["HTTP/1.1","one request per connection → requests queue (head-of-line blocking)","#f87171",[[40,1],[40,1],[40,1]],true],
+    ["HTTP/2","many streams multiplexed over ONE TCP connection","#fbbf24",[[0,3]],false],
+    ["HTTP/3 (QUIC)","streams over UDP — a lost packet blocks only its own stream","#34d399",[[0,3]],false]
+  ];
+  function render(){g.innerHTML="";const d=data[phase];
+    g.appendChild(S("rect",{x:40,y:80,width:90,height:40,rx:8,fill:"#161619",stroke:"#3a3a42"}));g.appendChild(TX(85,104,"Client",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:490,y:80,width:90,height:40,rx:8,fill:"rgba(124,58,237,.18)",stroke:"#7C3AED"}));g.appendChild(TX(535,104,"Server",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    if(phase===0){[70,100,130].forEach((y,i)=>{g.appendChild(S("line",{x1:130,y1:y,x2:490,y2:y,stroke:"#f87171","stroke-width":1.6,"stroke-dasharray":i?"3 6":"none","marker-end":"url(#a)"}));});}
+    else{g.appendChild(S("line",{x1:130,y1:100,x2:490,y2:100,stroke:d[2],"stroke-width":6}));
+      [72,88,112,128].forEach(y=>g.appendChild(S("circle",{cx:200+Math.random()*220,cy:y,r:5,fill:d[2]})));}
+    lbl.textContent=d[0];lbl.setAttribute("fill",d[2]);sub.textContent=d[1];}
+  function step(){phase=(phase+1)%3;timer=2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Load a page's 8 resources over each HTTP version and compare the timelines. <b>HTTP/1.1</b> queues requests (head-of-line blocking); <b>HTTP/2</b> multiplexes them over one connection but stalls all streams if a TCP packet is lost; <b>HTTP/3</b> (QUIC over UDP) isolates loss to a single stream. Toggle packet loss to see the difference.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Protocol</label>
+        <select id="pgVer"><option value="1">HTTP/1.1</option><option value="2">HTTP/2</option><option value="3">HTTP/3 (QUIC)</option></select></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgLoss">simulate a lost packet</label></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRun" class="go">▶ Load 8 resources</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">HTTP/1.1 browsers open ~6 parallel TCP connections to hide queuing; HTTP/2 needs just one. HTTP/3's QUIC also cuts connection setup to 0–1 RTT with built-in TLS 1.3.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Connections</div><div class="v ac" id="pgConn">—</div></div>
+        <div class="pg-stat"><div class="k">Multiplexed</div><div class="v" id="pgMux">—</div></div>
+        <div class="pg-stat"><div class="k">HOL blocking</div><div class="v wa" id="pgHOL">—</div></div>
+        <div class="pg-stat"><div class="k">Load time</div><div class="v ok" id="pgTime">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=8,W=560,H=210;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let bars,raf=null,totalTime;
+  function reset(){bars=[];totalTime=0;if(raf)cancelAnimationFrame(raf);raf=null;draw();info();$("pgTime").textContent="—";$("pgLog").innerHTML="";log("pick a protocol and load resources","ac");}
+  function info(){const v=$("pgVer").value||"1";
+    $("pgConn").textContent=v==="1"?"6 (parallel TCP)":"1";
+    $("pgMux").textContent=v==="1"?"no":"yes";$("pgMux").className="v "+(v==="1"?"bad":"ok");
+    $("pgHOL").textContent=v==="1"?"per-connection":v==="2"?"TCP-level":"none";
+    $("pgHOL").className="v "+(v==="3"?"ok":"wa");}
+  function run(){const v=$("pgVer").value||"1";const loss=$("pgLoss").checked;info();
+    // compute finish time (arbitrary units) per resource
+    bars=[];const base=1;
+    if(v==="1"){ // 6 connections: 8 requests => ceil in 2 waves
+      for(let i=0;i<N;i++){const wave=Math.floor(i/6);bars.push({t:base*(wave+1)+ (loss&&i===3?0.8:0),lossHit:loss&&i===3});}
+      log("HTTP/1.1: 8 requests across 6 connections → a 2nd wave queues (HOL blocking)","wa");}
+    else if(v==="2"){const finish=base+(loss?1.2:0);for(let i=0;i<N;i++)bars.push({t:finish,lossHit:loss});
+      log(loss?"HTTP/2: one lost TCP packet stalls the whole connection → ALL streams wait (TCP HOL blocking)":"HTTP/2: all 8 streams multiplexed over 1 connection → finish together","wa");}
+    else{for(let i=0;i<N;i++){const hit=loss&&i===3;bars.push({t:base+(hit?1.2:0),lossHit:hit});}
+      log(loss?"HTTP/3 (QUIC): lost packet affects ONLY stream 4; the other 7 finish on time (no HOL blocking)":"HTTP/3 (QUIC): independent streams over UDP, 0–1 RTT setup","ok");}
+    totalTime=Math.max(...bars.map(b=>b.t));animate();}
+  function animate(){if(raf)cancelAnimationFrame(raf);let start=performance.now();const dur=1400*totalTime;
+    function fr(now){const e=(now-start)/dur*totalTime;bars.forEach(b=>b.p=Math.min(1,e/b.t));draw(e);
+      if(e<totalTime){raf=requestAnimationFrame(fr);}else{bars.forEach(b=>b.p=1);draw(totalTime);$("pgTime").textContent=totalTime.toFixed(1)+" units";raf=null;}}
+    raf=requestAnimationFrame(fr);}
+  function draw(e){svg.innerHTML="";
+    const x0=90,x1=W-20,rowH=20,top=14;
+    svg.appendChild(TX(10,top-2,"streams",{fill:"#5b5b63","font-size":9}));
+    for(let i=0;i<N;i++){const y=top+i*rowH+4;
+      svg.appendChild(TX(60,y+9,"res "+(i+1),{fill:"#8b8b93","font-size":9,"text-anchor":"end"}));
+      svg.appendChild(S("rect",{x:x0,y:y,width:x1-x0,height:13,rx:3,fill:"#141416",stroke:"#242a33"}));
+      const b=bars[i];if(b){const w=(x1-x0)*(b.p||0)*(b.t/Math.max(totalTime,0.001));
+        svg.appendChild(S("rect",{x:x0,y:y,width:Math.max(2,(x1-x0)*(b.p||0)*(b.t/ (totalTime||1)) /1),height:13,rx:3,fill:b.lossHit?"#f87171":"#34d399"}));
+        if(b.lossHit)svg.appendChild(TX(x0+ (x1-x0)*0.35,y+10,"⚠ packet loss",{fill:"#fff","font-size":8}));}}
+    svg.appendChild(TX(W/2,H-4,"bars = time to complete each resource (shorter = faster)",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgVer").onchange=()=>{info();reset2();};
+  function reset2(){bars=[];draw();$("pgLog").innerHTML="";log("protocol set to HTTP/"+($("pgVer").value),"ac");}
+  $("pgRun").onclick=run;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🚀",title:"HTTP/2 & HTTP/3",category:"Networking",difficulty:"Medium",readingTime:"10 min",
+  eyebrow:"Modern Web Transport Protocols",
+  tagline:"HTTP/2 multiplexes many requests over a single connection to kill HTTP/1.1's head-of-line blocking; HTTP/3 goes further, running over <b>QUIC (UDP)</b> to remove <b>TCP-level</b> blocking and slash connection setup time.",
+  pills:["<b>H2</b>: multiplexing","<b>H2</b>: HPACK + push","<b>H3</b>: QUIC/UDP","<b>H3</b>: 0–1 RTT setup"],
+  overview:"<b>HTTP/1.1</b> allows one outstanding request per TCP connection, so browsers open ~6 parallel connections and requests still queue — <b>head-of-line (HOL) blocking</b> at the application layer. <b>HTTP/2</b> (2015) introduced <b>multiplexing</b>: many independent <b>streams</b> share one TCP connection, with binary framing, <b>HPACK</b> header compression, stream prioritization, and (now-deprecated) server push. This removes application-layer HOL blocking — but because everything rides one TCP connection, a single lost packet stalls <b>all</b> streams until it's retransmitted (<b>TCP-level</b> HOL blocking). <b>HTTP/3</b> (2022) fixes this by replacing TCP with <b>QUIC</b>, a transport built on <b>UDP</b> that implements its own streams, loss recovery, and congestion control. In QUIC, streams are independent, so a lost packet only blocks its own stream. QUIC also integrates TLS 1.3, enabling <b>0-RTT/1-RTT</b> connection setup and seamless connection migration across networks (e.g., Wi-Fi ↔ cellular).",
+  problem:"Web pages need dozens of resources. HTTP/1.1's one-request-per-connection model forces workarounds (domain sharding, sprite sheets, concatenation) and still suffers queuing latency. HTTP/2 solved app-layer HOL blocking but exposed TCP's own HOL blocking under packet loss, which hurts on lossy mobile networks. HTTP/3/QUIC addresses both blocking layers and reduces handshake latency.",
+  diagram,diagramCaption:"H1.1 queues requests; H2 multiplexes over one TCP conn; H3 uses QUIC/UDP so loss blocks only one stream.",
+  how:[
+    "HTTP/2: split messages into binary frames; interleave frames from many streams over one TCP connection (multiplexing).",
+    "Compress repetitive headers with HPACK; assign stream priorities; reuse one connection instead of six.",
+    "TCP HOL blocking remains: a dropped segment halts delivery of all streams until retransmission.",
+    "HTTP/3: run over QUIC (UDP), which provides independent streams with per-stream loss recovery.",
+    "QUIC folds in TLS 1.3 for 1-RTT (or 0-RTT resumed) setup and supports connection migration via connection IDs."
+  ],
+  complexity:[["H1.1","1 req/conn, ~6 conns"],["H2","multiplex / 1 TCP conn"],["H3","QUIC over UDP"],["H3 setup","0–1 RTT (TLS 1.3)"]],
+  advantages:["H2/H3 multiplex many requests over one connection","Header compression (HPACK/QPACK) cuts overhead","H3 removes TCP head-of-line blocking (per-stream loss)","H3 faster setup (0–1 RTT) + connection migration","Fewer connections → less server/network overhead"],
+  disadvantages:["H2 still suffers TCP-level HOL blocking under loss","QUIC/UDP can be blocked by some middleboxes/firewalls","H3 uses more CPU (userspace crypto/transport)","Server push (H2) largely deprecated/ineffective","Operational complexity of newer stacks"],
+  tradeoffs:"Each version trades complexity for latency wins. HTTP/2's single connection is efficient but couples all streams to one TCP flow, so on lossy links it can underperform even HTTP/1.1's parallel connections. HTTP/3 solves that by reimplementing transport in userspace over UDP — gaining independent streams, faster handshakes, and network migration, but paying in CPU (encryption per packet, no kernel offload) and deployability (UDP is sometimes throttled/blocked, requiring fallback to H2/H1.1). Most CDNs negotiate the best available version and fall back automatically, so you get H3's benefits where possible without losing reach.",
+  whenNot:"You rarely choose 'not' to use these — clients/servers negotiate the highest supported version. But note: HTTP/3 needs UDP reachability; where UDP is blocked, fall back to HTTP/2. On low-loss, high-bandwidth internal networks the difference between H2 and H3 may be marginal, and H3's CPU cost can matter for very high-throughput servers. Keep H2/H1.1 fallbacks for compatibility.",
+  sim,
+  code:{
+"Negotiation":`# Version is negotiated, not hardcoded.\n# HTTP/2 over TLS uses ALPN to agree on "h2":\nopenssl s_client -alpn h2 -connect example.com:443 </dev/null | grep ALPN\n#   ALPN protocol: h2\n\n# HTTP/3 advertises itself via the Alt-Svc header, then clients try QUIC/UDP:\nHTTP/2 200\nalt-svc: h3=":443"; ma=86400        # "you can reach me over HTTP/3 too"\ncurl --http3 https://example.com     # force H3 (curl built with QUIC)`,
+"Nginx H2/H3":`server {\n  listen 443 ssl;          # HTTP/1.1 + HTTP/2 (TCP)\n  listen 443 quic reuseport;   # HTTP/3 (QUIC/UDP)\n  http2 on;\n  ssl_protocols TLSv1.3;\n  add_header Alt-Svc 'h3=":443"; ma=86400';   # advertise H3\n}`,
+"Why H3 wins on loss":`// One lost packet, 8 parallel downloads:\n// HTTP/2 (one TCP connection):\n//   TCP must deliver bytes IN ORDER -> the whole connection waits for the\n//   retransmit -> all 8 streams stall (TCP head-of-line blocking).\n//\n// HTTP/3 (QUIC over UDP):\n//   each stream has independent delivery -> only the stream that lost a\n//   packet waits; the other 7 keep flowing. => better on lossy/mobile nets.`
+  },
+  realWorld:[
+    ["Google / YouTube","Pioneered QUIC; HTTP/3 serves huge portions of Google traffic."],
+    ["Cloudflare / Fastly / Akamai","CDNs serve HTTP/3 broadly with automatic H2/H1.1 fallback."],
+    ["Facebook / Meta","Runs QUIC/HTTP/3 at scale for app and web traffic."],
+    ["Modern browsers","Chrome, Firefox, Safari, Edge all support HTTP/3."],
+    ["gRPC","Rides HTTP/2 for multiplexed, streaming RPC between services."]
+  ],
+  interview:[
+    ["basic","What was the main improvement of HTTP/2 over HTTP/1.1?","Multiplexing: many requests/responses share a single TCP connection as independent streams via binary framing, eliminating HTTP/1.1's application-layer head-of-line blocking (one request per connection). It also added HPACK header compression and stream prioritization, removing the need for hacks like domain sharding and concatenation."],
+    ["basic","What is head-of-line (HOL) blocking?","When one item at the front of a queue blocks all items behind it. In HTTP/1.1 it's at the request level (a slow response blocks the connection). HTTP/2 fixes the application layer but reintroduces it at the TCP layer: because all streams share one ordered TCP byte-stream, a single lost packet blocks delivery of every stream until it's retransmitted."],
+    ["inter","How does HTTP/3 eliminate TCP head-of-line blocking?","HTTP/3 runs on QUIC, a transport over UDP that implements its own independent streams with per-stream loss recovery. Since streams aren't tied to a single ordered byte-stream, a lost packet only delays the specific stream it belonged to; the other streams continue unaffected — a big win on lossy or mobile networks."],
+    ["inter","Why is QUIC built on UDP instead of a new protocol or TCP?","TCP is implemented in OS kernels and ossified by middleboxes, making it nearly impossible to evolve. UDP is a thin, widely-supported datagram protocol, so QUIC can implement modern transport features (streams, congestion control, integrated TLS 1.3, connection migration) in userspace, deploy via app updates, and iterate quickly — while still traversing most networks."],
+    ["adv","What connection-setup and migration benefits does QUIC provide?","QUIC integrates TLS 1.3 into the transport handshake, so a new connection is established in 1 RTT (or 0 RTT for resumed sessions), versus TCP+TLS's multiple round trips. It also identifies connections by a connection ID rather than the 4-tuple, so a client can switch networks (Wi-Fi ↔ cellular) without dropping the connection — enabling seamless migration."],
+    ["adv","What happened to HTTP/2 server push?","Server push let servers proactively send resources the client hadn't requested. In practice it was hard to use well (pushing already-cached resources wasted bandwidth, and prioritization was tricky), so browsers deprecated/removed support. The preferred alternatives are resource hints like preload/103 Early Hints, which let the client decide what to fetch."],
+    ["sd","How do you deploy modern HTTP versions safely?","Terminate HTTP/2 and HTTP/3 at your CDN/reverse proxy, which negotiates the best version via ALPN (h2) and advertises HTTP/3 via the Alt-Svc header, automatically falling back to H2/H1.1 where UDP/QUIC is blocked. Keep TLS 1.3 enabled, monitor the mix of protocol versions, and don't rely on deprecated server push — use preload/Early Hints instead."]
+  ],
+  mistakes:["Assuming HTTP/2 removes all HOL blocking (TCP-level remains under loss).","Continuing HTTP/1.1 hacks (domain sharding) on H2, which hurt performance.","Relying on HTTP/2 server push (deprecated in browsers).","Forgetting HTTP/3 needs UDP reachability and an H2/H1.1 fallback.","Ignoring the CPU cost of QUIC on very high-throughput servers."],
+  best:["Enable H2 and H3 at the edge; let ALPN/Alt-Svc negotiate with fallback.","Drop HTTP/1.1 workarounds (sharding, sprites) once on H2/H3.","Use TLS 1.3 to get QUIC's fast handshakes.","Use preload/Early Hints instead of server push.","Monitor protocol version distribution and QUIC block/fallback rates."],
+  related:[["gRPC","🔗","Runs on HTTP/2","grpc.html"],["TLS Handshake","🔐","QUIC folds in TLS 1.3","tls-handshake.html"],["TCP & UDP","📶","H3 rides UDP","tcp-udp.html"],["REST API","🌐","Rides these transports","rest.html"],["CDN","🌍","Where H2/H3 terminate","system-designed.html"],["WebSockets","🔌","Other transport option","websockets.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

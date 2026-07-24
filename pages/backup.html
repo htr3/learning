@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Backup Strategies — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function bar(x,w,label,fill,stroke){g.appendChild(S("rect",{x,y:95,width:w,height:34,rx:6,fill:fill,stroke:stroke,"stroke-width":1.6}));
+    g.appendChild(TX(x+w/2,116,label,{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    if(phase===0){bar(60,90,"FULL",{},"#7C3AED");g.attributes;bar(60,90,"FULL","rgba(124,58,237,.25)","#7C3AED");
+      [170,240,310,380].forEach((x,i)=>bar(x,60,"incr "+(i+1),"rgba(52,211,153,.18)","#34d399"));
+      g.appendChild(TX(310,72,"each incremental = only what changed since the PREVIOUS backup",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="incremental — small backups, longer restore";lbl.setAttribute("fill","#34d399");sub.textContent="restore needs the full + EVERY incremental in the chain (one missing link breaks it)";}
+    else{bar(60,90,"FULL","rgba(124,58,237,.25)","#7C3AED");
+      [170,250,330,410].forEach((x,i)=>bar(x,55+i*8,"diff "+(i+1),"rgba(56,189,248,.18)","#38bdf8"));
+      g.appendChild(TX(310,72,"each differential = everything changed since the last FULL",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="differential — grows over time, fast restore";lbl.setAttribute("fill","#38bdf8");sub.textContent="restore needs only the full + the LATEST differential (two files)";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Run a backup schedule and then restore to a point in time. Compare <b>full</b>, <b>incremental</b>, and <b>differential</b> strategies: watch how much storage each consumes and how many backup files a restore has to chain together. Storage vs restore-speed is the fundamental trade-off.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Strategy</label><select id="pgStrat">
+        <option value="full">Full every day</option>
+        <option value="incr" selected>Full weekly + Incremental daily</option>
+        <option value="diff">Full weekly + Differential daily</option></select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgDay" class="go">▶ Advance a day</button><button id="pgWeek">Advance a week</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRestore">↩ Restore latest</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5"><b>3-2-1 rule:</b> keep <b>3</b> copies, on <b>2</b> different media, with <b>1</b> off-site. A backup you've never test-restored isn't really a backup.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Day</div><div class="v ac" id="pgDayN">0</div></div>
+        <div class="pg-stat"><div class="k">Backups stored</div><div class="v" id="pgCount">0</div></div>
+        <div class="pg-stat"><div class="k">Total storage</div><div class="v wa" id="pgStore">0 GB</div></div>
+        <div class="pg-stat"><div class="k">Files to restore</div><div class="v ok" id="pgRestoreN">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const FULL=100,CHANGE=8,W=560,H=150;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let day,backups; // backups: {day, type:'full'|'incr'|'diff', size}
+  function reset(){day=0;backups=[];addBackup();draw();stats();$("pgLog").innerHTML="";log("advance days to build a backup chain, then restore","ac");}
+  function strat(){return $("pgStrat").value||"incr";}
+  function addBackup(){const s=strat();let type,size;
+    const isFullDay=(s==="full")||(day%7===0);
+    if(isFullDay){type="full";size=FULL;}
+    else if(s==="incr"){type="incr";size=CHANGE;}
+    else{const sinceFull=day%7;type="diff";size=CHANGE*sinceFull;}
+    backups.push({day,type,size});
+    log("day "+day+": "+type.toUpperCase()+" backup ("+size+" GB)",type==="full"?"ac":"ok");}
+  function nextDay(){day++;addBackup();draw();stats();}
+  function nextWeek(){for(let i=0;i<7;i++){day++;addBackup();}draw();stats();}
+  function restoreCount(){const s=strat();if(!backups.length)return 0;
+    if(s==="full")return 1;
+    // find last full at/before latest
+    let lastFullIdx=0;for(let i=backups.length-1;i>=0;i--)if(backups[i].type==="full"){lastFullIdx=i;break;}
+    if(s==="diff")return 2>backups.length?backups.length:(backups.length-1===lastFullIdx?1:2);
+    // incremental: full + all incrementals after it
+    return backups.length-lastFullIdx;}
+  function restore(){const n=restoreCount();const s=strat();
+    if(s==="full")log("↩ restore: load the single latest FULL backup → done (fastest)","ok");
+    else if(s==="diff")log("↩ restore: load latest FULL + latest DIFFERENTIAL = "+n+" file(s)","ok");
+    else log("↩ restore: load FULL + chain of "+(n-1)+" incrementals = "+n+" files (slowest; every link must exist)","wa");
+    $("pgRestoreN").textContent=n+" file"+(n>1?"s":"");draw(true);}
+  function stats(){$("pgDayN").textContent=day;$("pgCount").textContent=backups.length;
+    const total=backups.reduce((a,b)=>a+b.size,0);$("pgStore").textContent=total+" GB";
+    $("pgRestoreN").textContent=restoreCount()+" file"+(restoreCount()>1?"s":"");}
+  function draw(highlightRestore){svg.innerHTML="";
+    const show=backups.slice(-14);const bw=Math.min(38,(W-40)/Math.max(show.length,1));
+    svg.appendChild(TX(20,18,"backup timeline (height ∝ size):",{fill:"#8b8b93","font-size":10}));
+    const maxS=Math.max(...backups.map(b=>b.size),1);
+    // restore set indices
+    let restoreSet=new Set();const s=strat();
+    if(highlightRestore){if(s==="full")restoreSet.add(backups.length-1);
+      else{let lf=0;for(let i=backups.length-1;i>=0;i--)if(backups[i].type==="full"){lf=i;break;}
+        if(s==="incr")for(let i=lf;i<backups.length;i++)restoreSet.add(i);
+        else{restoreSet.add(lf);restoreSet.add(backups.length-1);}}}
+    show.forEach((b,i)=>{const globalIdx=backups.length-show.length+i;const x=20+i*bw;const h=20+60*(b.size/maxS);
+      const inSet=restoreSet.has(globalIdx);
+      const col=b.type==="full"?"#7C3AED":b.type==="incr"?"#34d399":"#38bdf8";
+      svg.appendChild(S("rect",{x:x+2,y:H-30-h,width:bw-4,height:h,rx:3,fill:inSet?col:"rgba(120,120,130,.18)",stroke:col,"stroke-width":inSet?2:1}));
+      svg.appendChild(TX(x+bw/2,H-18,"d"+b.day,{fill:"#6b6b73","font-size":7.5,"text-anchor":"middle"}));
+      svg.appendChild(TX(x+bw/2,H-33-h,b.type[0].toUpperCase(),{fill:col,"font-size":8,"text-anchor":"middle","font-weight":700}));});
+    if(highlightRestore)svg.appendChild(TX(W/2,H-4,"highlighted = files needed to restore",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    else svg.appendChild(TX(W/2,H-4,"F=full  I=incremental  D=differential",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgStrat").onchange=reset;$("pgDay").onclick=nextDay;$("pgWeek").onclick=nextWeek;$("pgRestore").onclick=restore;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"💾",title:"Backup Strategies",category:"Resilience",difficulty:"Easy",readingTime:"8 min",
+  eyebrow:"Protecting Data Against Loss",
+  tagline:"Backups are durable copies of data you can restore after loss, corruption, ransomware, or human error. The art is balancing <b>backup speed & storage</b> (full vs incremental vs differential) against <b>restore speed</b> — and following the <b>3-2-1 rule</b>.",
+  pills:["<b>Full</b>","<b>Incremental</b>","<b>Differential</b>","<b>3-2-1 rule</b>"],
+  overview:"A backup is a point-in-time copy of data kept separately so you can recover from deletion, corruption, ransomware, failed migrations, or disasters. Replication alone isn't a backup — it faithfully copies mistakes (a dropped table replicates instantly). The three core backup types trade storage/backup-time against restore-time: a <b>full backup</b> copies everything (large, slow to create, but a single-file restore); an <b>incremental backup</b> copies only what changed since the <b>previous backup</b> (tiny and fast to create, but restore must replay the full plus <b>every</b> incremental in the chain — and one missing/corrupt link breaks it); a <b>differential backup</b> copies everything changed since the last <b>full</b> (grows over time but restore needs only the full plus the <b>latest</b> differential — two files). Backups should follow the <b>3-2-1 rule</b>: at least <b>3</b> copies, on <b>2</b> different media/systems, with <b>1</b> off-site. Retention/rotation schemes (e.g., GFS — grandfather-father-son) manage how long copies are kept, and crucially, <b>restores must be tested</b> — an unverified backup may not restore at all.",
+  problem:"Data is lost in countless ways beyond hardware failure: accidental deletes, buggy migrations, corruption, malicious actors, ransomware. Redundancy/replication protects against a node dying but not against bad data propagating everywhere. Backups provide a recoverable, immutable-ish point-in-time copy so you can roll back to a known-good state.",
+  diagram,diagramCaption:"Incremental: small backups but restore the whole chain. Differential: bigger backups but restore just full + latest.",
+  how:[
+    "Take periodic full backups (baseline) plus more frequent incrementals or differentials between them.",
+    "Incremental: back up changes since the last backup (smallest, fastest to write).",
+    "Differential: back up changes since the last full (bigger over time, simplest restore).",
+    "Follow 3-2-1: 3 copies, 2 media types, 1 off-site (and ideally 1 offline/immutable vs ransomware).",
+    "Apply retention/rotation (GFS), encrypt backups, and regularly TEST restores to verify recoverability."
+  ],
+  complexity:[["Full","storage: high · restore: 1 file"],["Incremental","storage: low · restore: full + all incr"],["Differential","storage: medium · restore: full + last diff"],["Rule","3-2-1"]],
+  advantages:["Recovers from deletion, corruption, ransomware, human error","Incremental minimizes storage & backup window","Differential balances storage with fast restore","Point-in-time recovery to known-good states","Off-site/immutable copies survive site loss & attacks"],
+  disadvantages:["Backups consume storage & backup windows","Incremental restore is slow and fragile (chain dependency)","Differentials grow until the next full","Backups can drift stale if not verified","Restore is the real test — often untested until too late"],
+  tradeoffs:"The central trade-off is backup cost (storage + time to create) versus restore cost (time + complexity to recover). Full backups are simplest and fastest to restore but expensive to store and slow to take. Incrementals minimize storage and backup windows but make restores slow and brittle — you must replay a long chain and any broken link invalidates recovery. Differentials sit in between: restores are quick (full + latest differential) but each differential grows as more changes accumulate since the last full. Most real systems combine them (weekly full + daily incremental/differential) to balance both sides, plus retention policies to bound cost. Beyond type, the deeper trade-off is RPO (backup frequency) vs cost, and remembering that backups protect against logical loss in ways replication cannot — but only if restores are actually tested.",
+  whenNot:"Backups aren't a substitute for HA/replication (they don't keep you online) nor for DR alone (you also need a recovery plan). For truly ephemeral or trivially-regenerable data (caches, derived indexes), backups may be unnecessary. Continuous point-in-time recovery (log shipping/WAL) may be better than periodic backups where RPO must be tiny. And don't rely on replication as your only 'backup' — it propagates corruption and deletes.",
+  sim,
+  code:{
+"3-2-1 rule":`# The 3-2-1 backup rule (industry standard):\n3 copies of the data (1 primary + 2 backups)\n2 different media / systems (e.g., disk + object storage)\n1 copy off-site (different region) — and ideally 1 OFFLINE/immutable\n\n# Ransomware-hardened variant (3-2-1-1-0):\n... + 1 immutable/air-gapped copy + 0 errors on a tested restore`,
+"Postgres PITR":`# Full base backup + continuous WAL archiving = point-in-time recovery.\npg_basebackup -D /backup/base -Ft -z            # periodic FULL base backup\narchive_command = 'cp %p /backup/wal/%f'        # stream WAL (the "incrementals")\n\n# Restore to an EXACT moment (e.g., just before a bad DELETE):\nrestore_command = 'cp /backup/wal/%f %p'\nrecovery_target_time = '2026-07-24 14:59:30'    # RPO ~ seconds\n# WAL replay reconstructs state up to the target -> tiny RPO, precise rollback.`,
+"Verify & retention":`# A backup you haven't restored is a hope, not a backup. Automate verification:\ncron: nightly -> restore latest backup into a scratch env -> run checks -> alert\n\n# GFS retention (grandfather-father-son) bounds storage cost:\ndaily   (son)         -> keep 7\nweekly  (father)      -> keep 4\nmonthly (grandfather) -> keep 12\n# Encrypt at rest + in transit; store keys separately; make backups immutable.`
+  },
+  realWorld:[
+    ["AWS Backup / snapshots","EBS/RDS snapshots (incremental) + cross-region copies for DR."],
+    ["Database PITR","Postgres/MySQL base backup + WAL/binlog for point-in-time recovery."],
+    ["Object storage versioning","S3 versioning + Object Lock (immutable) to resist deletes/ransomware."],
+    ["Enterprise backup tools","Veeam, Commvault, Bacula manage full/incremental/differential + retention."],
+    ["GitHub/GitLab, SaaS exports","Regular exports so provider issues don't cause permanent loss."]
+  ],
+  interview:[
+    ["basic","What's the difference between full, incremental, and differential backups?","A full backup copies all data (big, slow, but restores from one file). An incremental copies only what changed since the previous backup (smallest/fastest to create, but restore needs the full plus every incremental in the chain). A differential copies everything changed since the last full (grows over time, but restore needs only the full plus the latest differential)."],
+    ["basic","What is the 3-2-1 backup rule?","Keep at least 3 copies of your data, on 2 different types of media/systems, with 1 copy stored off-site. This ensures no single failure — a bad disk, a site disaster, or a corrupted copy — destroys all your data. A modern extension adds an immutable/offline copy and a verified (zero-error) restore to defend against ransomware."],
+    ["inter","Why isn't replication a substitute for backups?","Replication copies data in near-real-time to keep the system available, but it faithfully replicates mistakes: a dropped table, a bad migration, corruption, or a malicious delete propagates instantly to all replicas. Backups are point-in-time copies you can roll back to a known-good state, protecting against logical/human errors that replication can't. You need both."],
+    ["inter","Incremental vs differential — how do they trade off?","Incremental minimizes storage and backup time (only deltas since the last backup) but makes restore slow and fragile — you must apply the full plus the entire incremental chain, and any missing/corrupt increment breaks recovery. Differential uses more storage (deltas since the last full, growing over time) but restores quickly and robustly from just the full plus the latest differential. Choose based on whether backup cost or restore speed/reliability matters more."],
+    ["adv","How do you achieve a very small RPO with backups?","Use continuous backup / log shipping instead of only periodic snapshots: take a periodic full base backup and continuously archive the transaction log (WAL/binlog). Restoring replays logs up to any chosen moment (point-in-time recovery), giving an RPO of seconds. This is effectively incremental backup at the transaction level and enables precise rollback to just before a bad event."],
+    ["adv","What makes backups resilient against ransomware?","Immutability and air-gapping: store copies that cannot be modified or deleted for a retention window (e.g., S3 Object Lock / WORM), keep at least one offline/air-gapped copy, use separate credentials so a compromised prod account can't reach backups, encrypt backups, and version data. Combined with tested restores, this ensures a clean recovery point exists even if primary systems and online backups are encrypted by an attacker."],
+    ["sd","Design a backup strategy for a production database.","Take weekly full base backups plus continuous WAL/binlog archiving for point-in-time recovery (small RPO). Store copies following 3-2-1: on-disk snapshots, object storage, and a cross-region/off-site immutable copy. Apply GFS retention to bound cost, encrypt at rest and in transit with keys stored separately, and make DR-region copies. Automate nightly restore verification into a scratch environment, and alert on failures. Never rely on replication alone."]
+  ],
+  mistakes:["Treating replication as a backup (it propagates deletes/corruption).","Never testing restores — discovering broken backups during an incident.","Only keeping backups on-site / online (site loss or ransomware wipes them).","Long incremental chains with no fulls (fragile, slow restores).","Not encrypting backups or leaving them writable by prod credentials."],
+  best:["Follow 3-2-1 (3 copies, 2 media, 1 off-site) + an immutable/offline copy.","Combine periodic fulls with incrementals/differentials or log shipping.","Automate and regularly TEST restores; verify integrity.","Encrypt backups; isolate backup credentials from production.","Apply retention (GFS) and off-site/cross-region copies for DR."],
+  related:[["Disaster Recovery","🌐","Backups enable DR","disaster-recovery.html"],["High Availability","🟢","Complementary uptime","high-availability.html"],["Checkpointing","📌","App-state snapshots","checkpointing.html"],["Replication","🔁","Not a backup","system-designed.html"],["Failover","🔀","Recover service","failover.html"],["LSM Tree","🌲","WAL & compaction","lsm-tree.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

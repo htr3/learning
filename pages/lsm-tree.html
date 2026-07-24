@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LSM Tree — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 220"});host.appendChild(svg);
+  const lbl=TX(310,22,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  function box(x,y,w,h,label,fill,stroke){const r=S("rect",{x,y,width:w,height:h,rx:8,fill:fill||"#161619",stroke:stroke||"#3a3a42"});svg.appendChild(r);
+    svg.appendChild(TX(x+w/2,y+h/2+4,label,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));return r;}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("g,rect,line").forEach(n=>{if(n!==lbl&&n!==sub)n.remove();});
+    box(220,44,180,34,"Memtable (in-RAM, sorted)",phase>=1?"rgba(251,191,36,.2)":"rgba(124,58,237,.2)",phase>=1?"#fbbf24":"#7C3AED");
+    box(60,110,150,30,"SSTable L0",phase>=2?"rgba(52,211,153,.18)":"#141416","#34d399");
+    box(60,150,150,30,"SSTable L1 (merged)","#141416","#3a3a42");
+    box(240,110,150,30,"WAL (append log)","#141416","#3a3a42");
+    if(phase===0){lbl.textContent="writes append to WAL + memtable";lbl.setAttribute("fill","#7C3AED");sub.textContent="writes are fast: sequential, in-memory";}
+    else if(phase===1){lbl.textContent="memtable full → flush";lbl.setAttribute("fill","#fbbf24");sub.textContent="memtable becomes immutable, flushed as a sorted SSTable";
+      svg.appendChild(S("line",{x1:310,y1:78,x2:135,y2:110,stroke:"#fbbf24","stroke-width":2}));}
+    else{lbl.textContent="compaction merges SSTables";lbl.setAttribute("fill","#34d399");sub.textContent="overlapping runs merged, tombstones dropped, older versions purged";
+      svg.appendChild(S("line",{x1:135,y1:140,x2:135,y2:150,stroke:"#34d399","stroke-width":2}));}}
+  function step(){phase=(phase+1)%3;timer=2.1;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Write keys into the memtable; when it fills, it flushes to an immutable L0 SSTable. Run compaction to merge runs. Then read a key and watch the engine check the memtable, then newer-to-older SSTables (with a Bloom filter skipping misses) — that's read amplification in action.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Write key</label><input id="pgVal" type="text" placeholder="e.g. user:42" spellcheck="false" /></div>
+      <div class="pg-btns"><button id="pgPut" class="go">PUT</button><button id="pgGet">GET</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgFlush">Flush</button><button id="pgCompact">Compact</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgBulk">+ 20 writes</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Memtable holds 5 keys before auto-flush. GET a key that was never written to see the Bloom filter skip SSTables.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Memtable</div><div class="v ac" id="pgMem">0/5</div></div>
+        <div class="pg-stat"><div class="k">SSTables</div><div class="v" id="pgSST">0</div></div>
+        <div class="pg-stat"><div class="k">Last read I/Os</div><div class="v wa" id="pgIO">0</div></div>
+        <div class="pg-stat"><div class="k">Compactions</div><div class="v ok" id="pgComp">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const CAP=5;let mem,ssts,compactions;
+  const svg=S("svg",{viewBox:"0 0 640 200"});$("pgViz").appendChild(svg);
+  function reset(){mem=new Map();ssts=[];compactions=0;draw();log("engine ready — memtable empty","ac");stats();}
+  function put(k){mem.set(k,(mem.get(k)||0)+1);log("PUT "+k+" → memtable","ok");if(mem.size>=CAP)flush();draw();stats();}
+  function flush(){if(mem.size===0){log("memtable empty, nothing to flush","wa");return;}
+    const keys=[...mem.keys()].sort();ssts.unshift({level:0,keys:new Set(keys),bloom:new Set(keys)});mem=new Map();
+    log("flush → new SSTable ("+keys.length+" keys) at L0","wa");draw();stats();}
+  function compact(){if(ssts.length<2){log("need ≥2 SSTables to compact","wa");return;}
+    const merged=new Set();ssts.forEach(s=>s.keys.forEach(k=>merged.add(k)));
+    ssts=[{level:1,keys:merged,bloom:new Set(merged)}];compactions++;
+    log("compaction merged all runs → 1 SSTable ("+merged.size+" keys)","ok");draw();stats();}
+  function get(k){let io=0;
+    if(mem.has(k)){$("pgIO").textContent=0;log("GET "+k+" → hit in memtable (0 I/O)","ok");highlight("mem");return;}
+    for(let i=0;i<ssts.length;i++){const s=ssts[i];
+      if(!s.bloom.has(k)){log("GET "+k+" → Bloom skips SSTable #"+i+" (no I/O)","ac");continue;}
+      io++;if(s.keys.has(k)){$("pgIO").textContent=io;log("GET "+k+" → found in SSTable #"+i+" after "+io+" read(s)","ok");highlight("sst",i);return;}
+      else log("GET "+k+" → Bloom false positive, read SSTable #"+i+" (miss)","wa");}
+    $("pgIO").textContent=io;log("GET "+k+" → NOT FOUND after "+io+" SSTable read(s)","bad");}
+  function highlight(){draw();}
+  function draw(){svg.innerHTML="";
+    // memtable
+    svg.appendChild(TX(20,24,"Memtable",{fill:"#8b8b93","font-size":11}));
+    const mk=[...mem.keys()];for(let i=0;i<CAP;i++){const x=110+i*90;const filled=i<mk.length;
+      const r=S("rect",{x,y:12,width:82,height:26,rx:6,fill:filled?"rgba(124,58,237,.22)":"#141416",stroke:filled?"#7C3AED":"#2a2a32"});svg.appendChild(r);
+      if(filled)svg.appendChild(TX(x+41,30,mk[i].slice(0,10),{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));}
+    // sstables
+    svg.appendChild(TX(20,70,"SSTables (new→old)",{fill:"#8b8b93","font-size":11}));
+    ssts.forEach((s,i)=>{const y=58+i*30;const x=140;
+      const r=S("rect",{x,y,width:360,height:24,rx:6,fill:s.level>0?"rgba(52,211,153,.14)":"#141416",stroke:s.level>0?"#34d399":"#3a3a42"});svg.appendChild(r);
+      svg.appendChild(TX(x+8,y+16,"#"+i+" · L"+s.level+" · "+s.keys.size+" keys · 🌸 Bloom",{fill:"#c9c9d1","font-size":10}));});
+  }
+  function stats(){$("pgMem").textContent=mem.size+"/"+CAP;$("pgSST").textContent=ssts.length;$("pgComp").textContent=compactions;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+
+  $("pgPut").onclick=()=>{const v=($("pgVal").value||"").trim();if(v)put(v);$("pgVal").value="";};
+  $("pgGet").onclick=()=>{const v=($("pgVal").value||"").trim();if(v)get(v);};
+  $("pgFlush").onclick=flush;$("pgCompact").onclick=compact;
+  $("pgBulk").onclick=()=>{for(let i=0;i<20;i++)put("key:"+Math.floor(Math.random()*60));};
+  $("pgReset").onclick=reset;
+  $("pgVal").addEventListener("keydown",e=>{if(e.key==="Enter")$("pgPut").click();});
+  reset();["user:1","user:2","user:3"].forEach(put);
+}
+
+const DATA={
+  badge:"🗃️",title:"LSM Tree",category:"Algorithms",difficulty:"Hard",readingTime:"10 min",
+  eyebrow:"Log-Structured Merge Tree",
+  tagline:"The write-optimized storage engine behind Cassandra, RocksDB and Bigtable: buffer writes in memory, flush them as sorted immutable files, and merge in the background — turning random writes into fast sequential ones.",
+  pills:["<b>Sequential</b> writes","<b>High</b> ingest throughput","<b>Bloom-filtered</b> reads","<b>Background</b> compaction"],
+  overview:"An LSM tree optimizes for write throughput. Incoming writes go to an in-memory <b>memtable</b> (usually a skip list) plus a write-ahead log for durability. When the memtable fills, it's flushed as an immutable, sorted <b>SSTable</b> file. Reads check the memtable first, then SSTables from newest to oldest — with a per-SSTable Bloom filter to skip files that can't contain the key. Background <b>compaction</b> periodically merges SSTables, discarding overwritten values and tombstones. By converting many random writes into a few large sequential writes, LSM trees achieve far higher write throughput than in-place B-trees.",
+  problem:"B+ trees update pages in place, so a write-heavy workload causes random I/O and write amplification that thrashes disks/SSDs. LSM trees buffer and batch writes into sequential flushes, dramatically increasing ingest rates — at the cost of read amplification and background compaction work, which Bloom filters and tiered compaction keep in check.",
+  diagram,diagramCaption:"Writes hit the memtable + WAL; full memtables flush to sorted SSTables; compaction merges runs in the background.",
+  how:[
+    "Write → append to WAL (durability) and insert into the in-memory memtable (sorted).",
+    "When the memtable exceeds its size limit, it becomes immutable and is flushed to a sorted SSTable on disk.",
+    "Reads check memtable, then SSTables newest→oldest; a Bloom filter per SSTable skips definite misses.",
+    "Deletes write a 'tombstone' marker rather than removing data in place.",
+    "Compaction merges overlapping SSTables, dropping old versions and tombstones to reclaim space and bound reads."
+  ],
+  complexity:[["Write","O(1) amortized (seq)"],["Read","O(levels·log n)"],["Space","O(n) + temp during compaction"],["Write amp","low ingest / compaction cost"]],
+  advantages:["Very high write throughput (sequential I/O)","Great for ingest / time-series / logs","Good compression (sorted, immutable files)","Tunable read/write/space amplification"],
+  disadvantages:["Read amplification (check multiple levels)","Compaction consumes CPU/I/O in background","Space amplification before compaction","Tombstones delay space reclamation"],
+  tradeoffs:"LSM tuning is a triangle of read, write, and space amplification. <b>Leveled</b> compaction keeps few overlapping files → low read/space amp but higher write amp; <b>size-tiered</b> compaction batches similar-sized files → low write amp but higher read/space amp. Bloom filters cut read amplification cheaply. Versus B+ trees: LSM wins on write throughput and compression; B+ trees win on read latency, range-scan simplicity, and predictable performance.",
+  whenNot:"Avoid LSM engines for read-latency-critical or heavy point-read workloads with few writes (a B+ tree is better), for small datasets that fit in memory, or when you can't tolerate background compaction jitter and the operational tuning it requires.",
+  sim,
+  code:{
+"Java":`// LSM read path: memtable, then SSTables newest->oldest with Bloom filter\nValue get(String key){\n  Value v = memtable.get(key);\n  if (v != null) return v.isTombstone() ? null : v;   // 0 disk I/O\n  for (SSTable sst : sstablesNewestFirst()){\n    if (!sst.bloom.mightContain(key)) continue;        // skip: no I/O\n    v = sst.read(key);                                 // 1 block read\n    if (v != null) return v.isTombstone() ? null : v;\n  }\n  return null;                                         // not found\n}\nvoid put(String key, byte[] val){\n  wal.append(key, val);            // durability first\n  memtable.put(key, val);          // in-memory sorted insert\n  if (memtable.bytes() > FLUSH_THRESHOLD) flush();\n}`,
+"Python":`# flush turns the memtable into a sorted immutable SSTable\ndef flush(self):\n    entries = sorted(self.memtable.items())        # already sorted (skip list)\n    sst = SSTable.write(entries)                    # sequential write\n    sst.bloom = BloomFilter(keys=[k for k, _ in entries])\n    self.sstables.insert(0, sst)                    # newest first\n    self.wal.truncate(); self.memtable = SkipList()\n\ndef compact(self, ssts):\n    # k-way merge; keep newest version per key, drop tombstones\n    merged = kway_merge(ssts, keep='newest', drop_tombstones=True)\n    return SSTable.write(merged)`,
+"Config":`# RocksDB / Cassandra knobs that shape the read/write/space triangle\nwrite_buffer_size          = 64MB    # memtable size before flush\nmax_write_buffer_number    = 3       # memtables kept in memory\ncompaction_style           = LEVEL   # LEVEL (low read amp) or UNIVERSAL (low write amp)\nlevel0_file_num_trigger    = 4       # SSTables at L0 before compaction\nbloom_bits_per_key         = 10      # ~1% false positive -> fewer reads`
+  },
+  realWorld:[
+    ["Cassandra / ScyllaDB","Classic LSM storage: memtable + commitlog, SSTables, size-tiered/leveled compaction."],
+    ["RocksDB / LevelDB","Embedded LSM engines used inside Kafka Streams, TiKV, CockroachDB, MyRocks, and more."],
+    ["Google Bigtable / HBase","Pioneered the memtable+SSTable design LSM engines are based on."],
+    ["Time-series & logs (InfluxDB, Prometheus TSDB)","Write-heavy, append-mostly data fits LSM ingest perfectly."],
+    ["MongoDB (WiredTiger LSM), Elasticsearch/Lucene","Segment-based writes mirror LSM's immutable-run + merge pattern."]
+  ],
+  interview:[
+    ["basic","What is an LSM tree and why does it exist?","A storage structure optimized for writes. It buffers writes in an in-memory memtable, flushes them as sorted immutable SSTables, and merges files via background compaction. It converts random writes into sequential ones, giving much higher write throughput than in-place B-trees."],
+    ["basic","What are the memtable, WAL, and SSTable?","The memtable is the in-memory sorted write buffer (often a skip list). The WAL (write-ahead log / commitlog) durably records writes before they're acknowledged so nothing is lost on crash. An SSTable (Sorted String Table) is an immutable on-disk file of sorted key-value pairs produced by flushing a memtable."],
+    ["inter","What is read amplification and how is it mitigated?","A read may have to check the memtable plus several SSTables across levels, so one logical read can cost multiple I/Os. It's mitigated with per-SSTable Bloom filters (skip files that can't contain the key), block indexes/caches, and compaction that reduces the number of overlapping files."],
+    ["inter","How are deletes handled?","With tombstones — a special marker written like any other value. A read that encounters a tombstone before an older value treats the key as deleted. The actual space is reclaimed later during compaction, once the tombstone has propagated past all older versions."],
+    ["adv","Leveled vs size-tiered compaction?","Size-tiered groups SSTables of similar size and merges them when enough accumulate: low write amplification but higher read and space amplification. Leveled keeps non-overlapping SSTables per level with a size ratio: low read/space amplification but more write amplification from frequent merges. You choose based on whether the workload is write- or read-dominated."],
+    ["adv","What is the read/write/space amplification trade-off?","Every LSM design balances three costs: write amplification (bytes rewritten by compaction per logical write), read amplification (files/blocks read per lookup), and space amplification (extra disk vs live data). You can't minimize all three at once; compaction strategy and tuning pick a point in that triangle."],
+    ["sd","When would you pick an LSM engine over a B+ tree in a design?","For write/ingest-heavy workloads: time-series, event logs, metrics, IoT, message stores, or anything with high sustained write rates and range scans. Its sequential writes and good compression shine there. For read-latency-critical OLTP with balanced writes, a B+ tree gives more predictable performance."]
+  ],
+  mistakes:["Ignoring compaction cost — it competes with foreground traffic for CPU/I/O.","Skipping or under-sizing Bloom filters, causing heavy read amplification.","Letting tombstones and old versions pile up (delayed space reclamation).","Choosing the wrong compaction strategy for the workload.","Undersized memtable/WAL causing frequent tiny flushes."],
+  best:["Enable Bloom filters (~10 bits/key) to cut read amplification.","Pick leveled compaction for read-heavy, size-tiered for write-heavy.","Rate-limit/schedule compaction to smooth latency.","Size the memtable to batch writes into larger sequential flushes.","Monitor the read/write/space amplification metrics and tune accordingly."],
+  related:[["B-Tree / B+ Tree","🌲","Read-optimized alternative","b-tree.html"],["Skip List","🪜","Memtable structure","skip-list.html"],["Bloom Filter","🌸","Skip SSTable reads","bloom-filter.html"],["Database","🗄️","Storage engines","system-designed.html"],["Cloud File Storage","☁️","Immutable data + merge","cloud-file-storage.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

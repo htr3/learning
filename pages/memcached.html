@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Memcached — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function box(x,y,w,h,t,c){g.appendChild(S("rect",{x:x-w/2,y:y-h/2,width:w,height:h,rx:8,fill:c+"22",stroke:c,"stroke-width":2}));g.appendChild(TX(x,y+4,t,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));}
+  let phase=0,timer=0,running=false,raf,last;
+  const nodes=[["mc-A",180],["mc-B",320],["mc-C",460]];
+  function render(){g.innerHTML="";box(320,50,110,30,"🖥️ app + client","#a78bfa");
+    nodes.forEach(([n,x])=>box(x,140,100,42,"🧊 "+n,"#38bdf8"));
+    if(phase===0){g.appendChild(TX(320,90,"key 'user:42' → hash → mc-B",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));arrow(g,320,66,320,118,"#38bdf8");
+      lbl.textContent="the CLIENT hashes the key to pick a server (sharding)";lbl.setAttribute("fill","#38bdf8");sub.textContent="servers don't talk to each other — no clustering; the client shards";}
+    else if(phase===1){nodes.forEach(([n,x])=>arrow(g,320,66,x,118,"#34d399"));g.appendChild(TX(320,95,"keys spread across all nodes",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="capacity scales by adding nodes — pooled RAM";lbl.setAttribute("fill","#34d399");sub.textContent="each item lives on exactly one node (no replication)";}
+    else{box(320,140,100,42,"🧊 mc-B ✗","#f87171");arrow(g,320,66,320,118,"#f87171");g.appendChild(TX(320,180,"its keys are simply lost → cache miss → reload from DB",{fill:"#f87171","font-size":9.5,"text-anchor":"middle"}));
+      lbl.textContent="a node dies → its slice of cache is gone (no persistence)";lbl.setAttribute("fill","#f87171");sub.textContent="that's fine: memcached is a pure cache — the DB is the source of truth";}}
+  function step(){phase=(phase+1)%3;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Memcached is a distributed in-memory key→value cache. The <b>client</b> hashes each key to choose a server (the servers are independent — they never talk to each other). This sim shows a <b>look-aside</b> cache: on a miss the app loads from the DB and stores it, and LRU eviction kicks in when memory fills. Send reads and toggle <b>consistent hashing</b> to see what happens when a node dies.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Cache capacity per node (items): <b id="pgCapV">6</b></label><input id="pgCap" type="range" min="3" max="12" value="6" step="1"></div>
+      <div class="pg-field"><label><input type="checkbox" id="pgCons" checked> consistent hashing (vs plain modulo)</label></div>
+      <button class="pg-btn" id="pgGet">read a random key</button>
+      <button class="pg-btn secondary" id="pgFlood">read 20 keys</button>
+      <button class="pg-btn secondary" id="pgKill">💀 kill node mc-B</button>
+      <button class="pg-btn secondary" id="pgReset">reset</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Hit rate</div><div class="v ok" id="pgHr">0%</div></div>
+        <div class="pg-stat"><div class="k">Hits / Misses</div><div class="v" id="pgHm">0 / 0</div></div>
+        <div class="pg-stat"><div class="k">Evictions (LRU)</div><div class="v wa" id="pgEv">0</div></div>
+        <div class="pg-stat"><div class="k">Nodes</div><div class="v ac" id="pgNodes">3</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=150;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let nodes,hits=0,misses=0,evs=0;
+  function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function build(){nodes=[{id:"mc-A",alive:true,lru:[]},{id:"mc-B",alive:true,lru:[]},{id:"mc-C",alive:true,lru:[]}];}
+  function pick(key){const alive=nodes.filter(n=>n.alive);if(!alive.length)return null;
+    if($("pgCons").checked){ // consistent hashing: hash key, pick nearest alive node on ring
+      const kh=hashStr(key);let best=null,bd=Infinity;alive.forEach(n=>{const nh=hashStr(n.id);const d=(nh-kh+0x100000000)%0x100000000;if(d<bd){bd=d;best=n;}});return best;}
+    return alive[hashStr(key)%alive.length];} // plain modulo over alive count
+  function get(key){const n=pick(key);if(!n)return;const cap=+$("pgCap").value||6;
+    const idx=n.lru.indexOf(key);
+    if(idx>=0){hits++;n.lru.splice(idx,1);n.lru.push(key);log("GET "+key+" → "+n.id+" · HIT (moved to MRU)","ok");}
+    else{misses++;log("GET "+key+" → "+n.id+" · MISS → load from DB, store in "+n.id,"wa");n.lru.push(key);
+      if(n.lru.length>cap){const ev=n.lru.shift();evs++;log("   "+n.id+" full → LRU evicted "+ev,"ac");}}
+    stats();}
+  function draw(){svg.innerHTML="";const cap=+$("pgCap").value||6;
+    nodes.forEach((n,i)=>{const x=20+i*185,y=20;const c=n.alive?"#38bdf8":"#f87171";
+      svg.appendChild(S("rect",{x,y,width:170,height:H-40,rx:8,fill:c+"14",stroke:c,"stroke-width":n.alive?1.8:1.4}));
+      svg.appendChild(TX(x+10,y+18,"🧊 "+n.id+(n.alive?"":" ✗"),{fill:c,"font-size":11,"font-weight":700}));
+      svg.appendChild(TX(x+160,y+18,n.lru.length+"/"+cap,{fill:"#8b8b93","font-size":9,"text-anchor":"end"}));
+      if(n.alive)n.lru.slice().reverse().forEach((k,j)=>{const yy=y+34+j*13;if(yy<y+H-46){svg.appendChild(TX(x+10,yy,(j===0?"▸ ":"  ")+k,{fill:j===0?"#34d399":"#8b8b93","font-size":8.5,"font-family":"monospace"}));}});
+      else svg.appendChild(TX(x+10,y+40,"(keys lost)",{fill:"#f87171","font-size":9}));});
+    svg.appendChild(TX(20,H-6,"▸ = most-recently-used (evicted last)",{fill:"#5b5b63","font-size":8}));}
+  function stats(){const tot=hits+misses;$("pgHr").textContent=tot?Math.round(hits/tot*100)+"%":"0%";$("pgHm").textContent=hits+" / "+misses;$("pgEv").textContent=evs;$("pgNodes").textContent=nodes.filter(n=>n.alive).length;draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  const KEYS=["user:1","user:2","user:3","post:7","post:8","cart:9","sess:a","sess:b","cfg:x","cfg:y"];
+  $("pgGet").onclick=()=>get(KEYS[Math.floor(Math.random()*KEYS.length)]);
+  $("pgFlood").onclick=()=>{for(let i=0;i<20;i++)get(KEYS[Math.floor(Math.random()*KEYS.length)]);};
+  $("pgKill").onclick=()=>{const b=nodes.find(n=>n.id==="mc-B");if(!b.alive){log("mc-B already down","ac");return;}b.alive=false;b.lru=[];
+    log("💀 mc-B killed — its cached keys are gone. "+($("pgCons").checked?"consistent hashing: only mc-B's keys remap":"plain modulo: node count changed → MOST keys remap (mass miss!)"),"bad");stats();};
+  $("pgReset").onclick=()=>{build();hits=0;misses=0;evs=0;log("reset — 3 healthy nodes","ac");stats();};
+  $("pgCap").oninput=()=>{$("pgCapV").textContent=$("pgCap").value;draw();};
+  build();stats();log("read keys to warm the cache; kill a node to see key loss & remapping","ac");
+}
+
+const DATA={
+  badge:"🧊",title:"Memcached",category:"Caching",difficulty:"Easy",readingTime:"9 min",
+  eyebrow:"Distributed In-Memory Cache",
+  tagline:"Memcached is a simple, blazing-fast, distributed <b>in-memory key→value cache</b>. It stores small blobs in RAM with <b>LRU eviction</b> and TTLs, scales by pooling the memory of many independent nodes (the <b>client</b> shards keys), and deliberately does <b>one thing well</b> — no persistence, no data structures, no replication.",
+  pills:["Pure <b>in-memory</b> cache","<b>LRU</b> eviction + TTL","<b>Client-side</b> sharding","Multithreaded, dead simple"],
+  overview:"<b>Memcached</b> is a high-performance, distributed <b>in-memory caching</b> system for storing small chunks of arbitrary data (strings/objects) keyed by a string, most often to cache database query results, API responses, or rendered fragments and thereby reduce load on slower backends. Its design philosophy is <b>radical simplicity</b>: it's a pure <b>key→value</b> store with only basic operations (<code>get</code>, <code>set</code>, <code>add</code>, <code>delete</code>, <code>incr/decr</code>, and atomic <code>cas</code>), everything lives in <b>RAM</b> (nothing is persisted to disk), each value has an optional <b>TTL</b>, and when memory fills it evicts the <b>least-recently-used</b> items. Memory is managed with a <b>slab allocator</b> — RAM is divided into slab classes of fixed chunk sizes to avoid fragmentation, which means an item is stored in the smallest chunk that fits (a little internal waste). It is <b>multithreaded</b>, so it scales well vertically across CPU cores. Crucially, memcached <b>servers are independent and know nothing about each other</b> — there's no clustering, replication, or gossip. Distribution is done entirely by the <b>client</b>: the client library hashes each key to choose which server holds it, ideally using <b>consistent hashing</b> so that adding/removing a node only remaps a small fraction of keys instead of nearly all of them. Because there's no replication and no persistence, losing a node simply loses that node's slice of the cache — the data is treated as disposable, with the database as the source of truth. This makes memcached extremely fast and easy to operate, but it's a deliberate contrast to <b>Redis</b>, which adds rich data structures, optional persistence, replication, pub/sub, transactions, Lua scripting, and clustering at the cost of more complexity.",
+  problem:"Databases are relatively slow and expensive to scale for read-heavy workloads where the same data is requested repeatedly. Applications need a way to keep frequently-accessed results in fast memory, shared across many app servers, that can scale horizontally and tolerate node loss without data corruption. Memcached provides exactly that: a simple, fast, poolable in-memory cache that offloads reads from the backing store.",
+  diagram,diagramCaption:"The client hashes each key to an independent node; pooled RAM scales out; a lost node just loses its slice.",
+  how:[
+    "The app treats memcached as a look-aside cache: check cache first; on a miss, load from the DB and store it.",
+    "The client hashes the key (ideally with consistent hashing) to select one of the independent servers.",
+    "That server stores/returns the value from RAM; items carry a TTL and use a slab allocator.",
+    "When memory is full, LRU evicts the least-recently-used items to make room.",
+    "Servers don't coordinate; losing a node loses only its keys (misses reload from the DB)."
+  ],
+  complexity:[["get/set","O(1), microseconds"],["Persistence","none (RAM only)"],["Eviction","LRU + TTL"],["Distribution","client-side sharding"]],
+  advantages:["Extremely fast and simple (pure in-memory KV)","Multithreaded — scales across CPU cores","Horizontal scale by pooling node RAM","Predictable memory use via slab allocation","Node loss is safe (disposable cache, DB is truth)"],
+  disadvantages:["No persistence — restart/crash loses all cached data","No replication or built-in HA (client must handle)","Values only (no lists/sets/hashes like Redis)","Item size limits (default ~1MB); slab internal waste","Client-side sharding logic; naive hashing remaps on scaling"],
+  tradeoffs:"Memcached embodies the trade-off of <b>simplicity and speed vs. features</b>. By doing only pure key-value caching in RAM with LRU, it is exceptionally fast, cheap to run, and easy to reason about — but it deliberately omits everything else, so the moment you need <b>persistence, replication/HA, richer data types, pub/sub, or server-side clustering</b>, you reach for <b>Redis</b> instead (at the cost of more operational surface area and, historically, single-threaded command execution). A second trade-off lives in its <b>distribution model</b>: pushing sharding to the client keeps servers dumb and fast, but makes the <b>hashing strategy</b> the app's responsibility — plain <code>hash % N</code> is trivial but catastrophic when you add/remove a node, because changing <code>N</code> remaps almost every key and causes a mass cache miss (an avalanche); <b>consistent hashing</b> fixes this so only a small slice remaps, which is why it's the standard. The <b>no-replication</b> choice trades availability for simplicity: a dead node's keys vanish, which is acceptable precisely because memcached is a cache, not a database — but it means memcached alone is not a source of truth and provides no durability. Finally, the <b>slab allocator</b> trades a little internal memory waste (items rounded up to a slab class size) for freedom from fragmentation and predictable, fast allocation. In short: memcached is the right tool when you want a fast, poolable, disposable cache and nothing more.",
+  whenNot:"Choose Redis over memcached when you need persistence, replication/failover for HA, richer data structures (sorted sets for leaderboards, lists for queues, hashes), pub/sub, transactions, or server-side clustering — memcached does none of these. Don't use memcached as a primary datastore or for anything that must survive a restart. It's also a poor fit for very large values (item size limits) or when you need per-key durability guarantees. For simple, high-throughput, read-offload caching of small values across many app servers, though, memcached is often the leaner, faster choice.",
+  sim,
+  code:{
+"Look-aside caching":`# App checks cache first; on miss, loads from DB and stores it (with TTL).\ndef get_user(uid):\n    key = f"user:{uid}"\n    val = mc.get(key)                 # 1) try cache\n    if val is not None:\n        return val                    #    HIT\n    val = db.query("SELECT ... WHERE id=%s", uid)   # 2) MISS -> load DB\n    mc.set(key, val, time=300)        # 3) store with 300s TTL (jitter it!)\n    return val\n\n# On update, invalidate (or update) the cached entry:\ndef update_user(uid, data):\n    db.update(uid, data)\n    mc.delete(f"user:{uid}")          # next read repopulates`,
+"Consistent hashing (client sharding)":`// Servers are independent; the CLIENT chooses where a key lives.\n// Plain modulo is BAD: changing node count remaps ~all keys -> mass miss.\nserver = servers[hash(key) % servers.length];        // avoid at scale\n\n// Consistent hashing: only ~1/N keys remap when a node is added/removed.\nconst ring = new HashRing(["mc-A","mc-B","mc-C"], { replicas: 160 });\nconst node = ring.get("user:42");    // walk the ring to the next node\n// add/remove a node -> only that node's arc of keys moves:\nring.remove("mc-B");                 // just mc-B's keys remap`,
+"Core ops + atomic CAS":`# Basic commands\nmc.set("k", v, time=60)     # store with 60s TTL\nmc.get("k")                 # fetch (None on miss)\nmc.add("k", v)              # set only if absent\nmc.delete("k")              # remove\nmc.incr("counter", 1)       # atomic increment (numeric)\n\n# CAS = check-and-set: optimistic concurrency (avoid lost updates)\nval, cas_id = mc.gets("k")  # read value + version token\nval = modify(val)\nif not mc.cas("k", val, cas_id):   # fails if another client changed it\n    retry()                        #   -> re-read and try again`
+  },
+  realWorld:[
+    ["Facebook","Famously operates one of the largest memcached deployments."],
+    ["AWS ElastiCache (Memcached)","Managed memcached clusters for read-offload caching."],
+    ["Wikipedia / MediaWiki","Uses memcached to cache rendered pages and query results."],
+    ["Django / Rails / PHP","First-class memcached cache backends."],
+    ["mcrouter (Meta)","Memcached protocol router for pooling, sharding, and failover."]
+  ],
+  interview:[
+    ["basic","What is memcached and what is it used for?","A distributed in-memory key-value cache for storing small chunks of data (query results, API responses, rendered fragments) to offload read-heavy backends. Apps use it as a look-aside cache: check memcached first, and on a miss load from the database and store the result with a TTL. Everything is in RAM with LRU eviction, making reads extremely fast (microseconds) and reducing database load."],
+    ["basic","How does memcached distribute data across servers?","The servers are completely independent and don't know about each other — distribution is done entirely by the client. The client library hashes each key to choose which server stores it. Ideally it uses consistent hashing so that adding or removing a node only remaps a small fraction of keys, rather than plain modulo hashing, which remaps almost all keys when the node count changes and causes a mass cache miss."],
+    ["inter","Memcached vs Redis — when would you choose each?","Choose memcached for a pure, ultra-simple, multithreaded in-memory cache of small values where you just want fast read-offload and node loss is acceptable. Choose Redis when you need richer data structures (sorted sets, lists, hashes), persistence, replication/HA and failover, pub/sub, transactions, Lua scripting, or server-side clustering. Memcached trades features for simplicity and raw speed; Redis is a more capable data store at the cost of more complexity."],
+    ["inter","What happens when a memcached node fails, and why is that acceptable?","That node's cached items are simply lost — there's no replication or persistence. Requests for those keys become cache misses and reload from the database, which repopulates the cache. It's acceptable because memcached is a cache, not a source of truth: the database holds the authoritative data. With consistent hashing, only the failed node's slice of keys is affected; the rest of the cache keeps serving hits."],
+    ["adv","Why is consistent hashing important for memcached, and what problem does naive hashing cause?","With naive hash % N sharding, the server for a key depends on the total node count N. Adding or removing even one node changes N, so almost every key now maps to a different server — effectively invalidating the entire cache at once and flooding the database with misses (a cache avalanche). Consistent hashing places nodes and keys on a ring so that adding/removing a node only remaps the keys in that node's arc (~1/N of keys), keeping the cache mostly warm during scaling or failures."],
+    ["adv","How does memcached manage memory, and what is the slab allocator?","Memcached pre-divides its memory into slab classes, each holding chunks of a fixed size (growing by a factor). When storing an item, it's placed in the smallest chunk class that fits, which prevents external fragmentation and makes allocation fast and predictable — at the cost of some internal waste (an item smaller than its chunk wastes the remainder). Each slab class has its own LRU; when memory is full, LRU eviction reclaims the least-recently-used items (and expired items are reclaimed lazily/opportunistically)."],
+    ["sd","Design a caching tier using memcached for a read-heavy web application.","Deploy a pool of memcached nodes and have app servers use a client with consistent hashing so scaling/failures only remap a small key fraction. Use look-aside caching: read-through on miss, write invalidation on update, and set TTLs with jitter to avoid synchronized expiry (avalanche). Add single-flight/coalescing for hot keys (stampede) and Bloom filters/negative caching if nonexistent keys are queried (penetration). Since memcached has no HA, treat it as disposable and ensure the DB can absorb miss spikes (with circuit breakers/throttling); consider mcrouter for pooling/failover, and monitor hit rate, evictions, and latency. Choose Redis instead if you need persistence, HA, or richer structures."]
+  ],
+  mistakes:["Using memcached as a source of truth (it's a disposable cache).","Plain modulo sharding → mass remap and cache miss when scaling.","Uniform TTLs → synchronized expiry (cache avalanche).","Storing values larger than the item limit (default ~1MB).","Assuming built-in HA/replication — there is none."],
+  best:["Use it as look-aside cache with the DB as source of truth.","Use consistent hashing in the client for stable sharding.","Set TTLs with jitter; invalidate on writes.","Keep values small; watch evictions and hit rate.","Add stampede/penetration/avalanche protections; use Redis if you need HA/structures."],
+  related:[["Cache Stampede","🐎","Hot-key protection","cache-stampede.html"],["Cache Avalanche","🏔️","Jitter TTLs to spread load","cache-avalanche.html"],["Cache Penetration","🕳️","Guard nonexistent keys","cache-penetration.html"],["Consistent Hashing","⭕","Stable client sharding","system-designed.html"],["LSM-Tree","🗂️","Persistent store alternative","lsm-tree.html"],["High Availability","🟢","Redis for HA caching","high-availability.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>High Availability — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function node(x,y,ok){g.appendChild(S("rect",{x:x-32,y:y-16,width:64,height:32,rx:7,fill:ok?"rgba(52,211,153,.14)":"rgba(248,113,113,.14)",stroke:ok?"#34d399":"#f87171","stroke-width":2}));
+    g.appendChild(TX(x,y+4,ok?"● up":"✗ down",{fill:ok?"#34d399":"#f87171","font-size":9,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    if(phase===0){node(310,100,false);
+      g.appendChild(S("line",{x1:120,y1:100,x2:278,y2:100,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));g.appendChild(TX(110,104,"users",{fill:"#8b8b93","font-size":9,"text-anchor":"end"}));
+      lbl.textContent="single instance = single point of failure";lbl.setAttribute("fill","#f87171");sub.textContent="if the one node dies, the whole service is down — availability capped by one machine";}
+    else{g.appendChild(S("rect",{x:255,y:40,width:110,height:26,rx:7,fill:"#161619",stroke:"#7C3AED"}));g.appendChild(TX(310,58,"Load Balancer",{fill:"#c4a2ff","font-size":10,"text-anchor":"middle"}));
+      node(180,120,true);node(310,120,false);node(440,120,true);
+      [180,440].forEach(x=>g.appendChild(S("line",{x1:310,y1:66,x2:x,y2:104,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"})));
+      g.appendChild(S("line",{x1:310,y1:66,x2:310,y2:104,stroke:"#f87171","stroke-width":1.4,"stroke-dasharray":"3 3"}));
+      lbl.textContent="redundancy (N+1) survives failures";lbl.setAttribute("fill","#34d399");sub.textContent="parallel replicas + LB: one node down, others keep serving → far more nines";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Build a system and watch its availability. Chaining components in <b>series</b> (all must work) <b>multiplies</b> their availabilities — so more dependencies = lower availability. Adding <b>redundant</b> copies in parallel multiplies the <i>failure</i> probabilities instead, driving availability toward more <b>nines</b>. Tune both and see the downtime budget change.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Per-component availability: <b id="pgAV">99%</b></label><input id="pgAvail" type="range" min="90" max="99.99" value="99" step="0.01"></div>
+      <div class="pg-field"><label>Components in series: <b id="pgSV">3</b></label><input id="pgSeries" type="range" min="1" max="8" value="3"></div>
+      <div class="pg-field"><label>Redundant copies each: <b id="pgRV">1</b></label><input id="pgRed" type="range" min="1" max="4" value="1"></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Series: A_total = ∏ Aᵢ. Redundancy (parallel): A = 1 − (1 − A)ⁿ. Real HA also needs no correlated failures, fast failover, and no shared single points.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">System availability</div><div class="v ok" id="pgSys">—</div></div>
+        <div class="pg-stat"><div class="k">"Nines"</div><div class="v ac" id="pgNines">—</div></div>
+        <div class="pg-stat"><div class="k">Downtime / year</div><div class="v wa" id="pgDT">—</div></div>
+        <div class="pg-stat"><div class="k">Downtime / month</div><div class="v" id="pgDTM">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=150;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function calc(){const a=(+$("pgAvail").value||99)/100;const s=+$("pgSeries").value||1;const r=+$("pgRed").value||1;
+    const compA=1-Math.pow(1-a,r);              // one component with r redundant copies
+    const sys=Math.pow(compA,s);                 // s such components in series
+    return {a,s,r,compA,sys};}
+  function fmtDown(sys){const secYear=(1-sys)*365.25*24*3600;
+    function h(sec){if(sec>=86400)return (sec/86400).toFixed(1)+" days";if(sec>=3600)return (sec/3600).toFixed(1)+" hrs";if(sec>=60)return (sec/60).toFixed(1)+" min";return sec.toFixed(1)+" s";}
+    return {year:h(secYear),month:h(secYear/12)};}
+  function nines(sys){if(sys>=1)return "∞";const n=-Math.log10(1-sys);return n.toFixed(1)+" nines";}
+  function update(){const c=calc();const d=fmtDown(c.sys);
+    $("pgSys").textContent=(c.sys*100).toFixed(4)+"%";
+    $("pgNines").textContent=nines(c.sys);
+    $("pgDT").textContent=d.year;$("pgDTM").textContent=d.month;
+    const pct=c.sys*100;$("pgSys").className="v "+(pct>=99.9?"ok":pct>=99?"wa":"bad");
+    draw(c);}
+  function draw(c){svg.innerHTML="";
+    const colW=(W-40)/c.s;
+    svg.appendChild(TX(20,18,"request path — all series stages must be up (each stage has "+c.r+" redundant copy"+(c.r>1?"ies":"")+"):",{fill:"#8b8b93","font-size":9.5}));
+    for(let i=0;i<c.s;i++){const cx=20+i*colW+colW/2;
+      for(let j=0;j<c.r;j++){const y=45+j*26;
+        svg.appendChild(S("rect",{x:cx-30,y:y,width:60,height:20,rx:5,fill:"rgba(52,211,153,.12)",stroke:"#34d399","stroke-width":1.4}));
+        svg.appendChild(TX(cx,y+14,"S"+(i+1)+(c.r>1?"."+(j+1):""),{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));}
+      if(i<c.s-1)svg.appendChild(S("line",{x1:cx+30,y1:55,x2:cx+colW-30,y2:55,stroke:"#3a3a42","stroke-width":1.6,"marker-end":"url(#a)"}));}
+    svg.appendChild(TX(W/2,H-8,"more series stages ↓ availability · more redundancy ↑ availability",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(){}
+
+  ["pgAvail","pgSeries","pgRed"].forEach(id=>$(id).oninput=()=>{
+    $("pgAV").textContent=(+$("pgAvail").value)+"%";$("pgSV").textContent=$("pgSeries").value;$("pgRV").textContent=$("pgRed").value;update();});
+  update();
+}
+
+const DATA={
+  badge:"🟢",title:"High Availability",category:"Resilience",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Designing for Uptime",
+  tagline:"High availability (HA) means keeping a service operational despite failures — measured in <b>nines</b> of uptime. It's achieved through <b>redundancy</b> (no single points of failure), fast <b>failover</b>, and eliminating correlated failures, then quantified with a downtime budget (an SLO/SLA).",
+  pills:["<b>Nines</b> (99.9…%)","<b>Redundancy</b> / N+1","<b>No SPOF</b>","<b>Fast failover</b>"],
+  overview:"Availability is the fraction of time a system is operational, usually written as a percentage or number of <b>nines</b>: 99% (\"two nines\") allows ~3.65 days of downtime a year; 99.9% (\"three nines\") ~8.8 hours; 99.99% ~52 minutes; 99.999% (\"five nines\") ~5 minutes. High availability is the discipline of hitting a target with margin. The core levers: <b>redundancy</b> — run multiple instances so no <b>single point of failure (SPOF)</b> can take you down (N+1 or 2N); <b>failover</b> — detect failures fast and reroute to healthy replicas; <b>independence</b> — spread replicas across failure domains (racks, availability zones, regions) so failures aren't correlated; and <b>graceful degradation</b> — shed non-critical features rather than fail entirely. Mathematically, components in <b>series</b> (all required) multiply availabilities (so each dependency lowers the total), while <b>redundant</b> parallel copies multiply the failure probabilities (raising availability toward more nines). HA targets are formalized as SLOs/SLAs with error budgets.",
+  problem:"Everything fails: servers crash, disks die, networks partition, deploys go wrong, whole data centers go dark. A naive single-instance service inherits the reliability of its weakest part and offers no protection. To meet business uptime commitments, systems must be engineered so that individual failures don't become user-visible outages.",
+  diagram,diagramCaption:"A single instance is a SPOF; redundant replicas behind a load balancer survive individual failures.",
+  how:[
+    "Set an availability target (SLO) and derive the allowed downtime budget.",
+    "Eliminate single points of failure: redundant instances of every tier (app, DB, LB, network).",
+    "Distribute replicas across independent failure domains (AZs/regions) to avoid correlated failures.",
+    "Add health checks + automatic failover so failures reroute quickly.",
+    "Design for graceful degradation, and validate with chaos testing and by measuring against the error budget."
+  ],
+  complexity:[["99%","~3.65 days/yr down"],["99.9%","~8.8 hrs/yr"],["99.99%","~52 min/yr"],["99.999%","~5 min/yr"]],
+  advantages:["Survives component failures without user-visible outages","Meets uptime SLAs / business commitments","Redundancy also enables scaling & rolling deploys","Reduces reliance on human intervention","Builds user and customer trust"],
+  disadvantages:["Redundancy costs money (idle/extra capacity)","Complexity: replication, failover, consistency","Diminishing returns — each extra nine is exponentially harder","Correlated failures can defeat redundancy","Requires rigorous testing (chaos, game days)"],
+  tradeoffs:"Every additional nine costs disproportionately more — going from 99.9% to 99.99% may mean multi-AZ redundancy, automated failover, and far more operational rigor, while 99.999% often requires multi-region active-active and eliminating every shared dependency. So you match the target to business need, not vanity. Redundancy trades cost for resilience, and stronger consistency (synchronous replication) trades latency for durability. Critically, redundancy only helps against <b>independent</b> failures: a shared dependency (one database, one region, one config push, one expired cert) is a hidden SPOF that can bring down all your 'redundant' copies at once — which is why real HA emphasizes failure-domain independence and blast-radius reduction, not just adding replicas.",
+  whenNot:"Don't over-engineer availability beyond what the use case needs — internal tools, batch pipelines, and dev environments rarely justify five-nines cost/complexity. Extremely tight consistency requirements may cap achievable availability (CAP/PACELC). And chasing nines is pointless if you haven't removed correlated SPOFs or don't measure real availability; fix the biggest risks first rather than blindly adding replicas.",
+  sim,
+  code:{
+"Availability math":`# Series (all must be up) -> multiply availabilities (goes DOWN):\nA_system = A1 * A2 * A3 ...\n# 3 components at 99.9% each:  0.999^3 = 99.70%  (worse than any one!)\n\n# Redundancy / parallel (any one up is enough) -> multiply FAILURE probs:\nA = 1 - (1 - A_component)^n\n# 2 copies at 99% each:  1 - (0.01)^2 = 99.99%  (two nines -> four nines)\n\n# Downtime per year = (1 - A) * 525,960 minutes\n# 99.9% -> 525.96 min (~8.77 hrs);  99.99% -> ~52.6 min`,
+"Redundant deploy":`# No single point of failure: replicas across AZs behind a LB.\nkind: Deployment\nspec:\n  replicas: 3\n  strategy: { type: RollingUpdate, maxUnavailable: 0 }   # zero-downtime deploys\n  template:\n    spec:\n      topologySpreadConstraints:            # spread across zones\n      - maxSkew: 1\n        topologyKey: topology.kubernetes.io/zone\n        whenUnsatisfiable: DoNotSchedule\n      affinity: { podAntiAffinity: {...} }   # don't co-locate replicas\n# DB: Multi-AZ primary + standby; LB and network paths also redundant.`,
+"SLO / error budget":`# Define availability as an SLO and track an error budget.\nSLO: 99.95% successful requests over 30 days\nallowed downtime = (1 - 0.9995) * 30d = ~21.6 minutes / month  (error budget)\n\n# Alert on burn rate: if you're consuming the budget too fast, page.\n# When the budget is exhausted -> freeze risky changes, focus on reliability.\n# This balances feature velocity against availability objectively.`
+  },
+  realWorld:[
+    ["AWS multi-AZ / multi-region","Redundancy across independent zones/regions underpins cloud HA."],
+    ["Google SRE / error budgets","SLOs and error budgets to manage availability vs velocity."],
+    ["Netflix Chaos Monkey","Deliberately kills instances to prove redundancy actually works."],
+    ["Load balancers + auto scaling","Replace failed instances and spread traffic automatically."],
+    ["Multi-AZ databases (RDS, Spanner)","Replicated storage with automatic failover for durability + uptime."]
+  ],
+  interview:[
+    ["basic","What does 'high availability' mean and how is it measured?","It's the ability of a system to remain operational despite failures, measured as a percentage of uptime — the 'nines'. 99.9% (three nines) is ~8.8 hours of downtime per year, 99.99% ~52 minutes, 99.999% ~5 minutes. HA is about engineering the system to meet a target with redundancy and failover so individual failures don't cause outages."],
+    ["basic","How does redundancy improve availability mathematically?","Redundant copies work in parallel, so the system is down only if all copies are down. Availability = 1 − (1 − A)ⁿ. Two components at 99% each give 1 − 0.01² = 99.99% — jumping from two nines to four. This is why N+1/2N redundancy dramatically raises availability, provided failures are independent."],
+    ["inter","Why can adding more components reduce availability?","Components in series (all required for a request) multiply their availabilities, so each added dependency lowers the total: three 99.9% services in series give 0.999³ ≈ 99.7%, worse than any single one. More moving parts on the critical path means more ways to fail. HA counters this by making each stage redundant and minimizing hard dependencies."],
+    ["inter","What is a single point of failure and how do you find them?","A SPOF is any component whose failure alone takes down the system — a lone database, load balancer, network link, or even a shared config/cert. You find them by tracing every dependency on the request path and asking 'if this dies, are we down?'. Eliminate them with redundancy across independent failure domains; watch for hidden shared dependencies that make 'redundant' copies fail together."],
+    ["adv","Why is each additional nine exponentially harder?","Because the remaining downtime budget shrinks by 10× each time (8.8h → 52m → 5m per year), leaving no room for slow detection or manual recovery. Higher nines force faster automated failover, multi-AZ then multi-region redundancy, elimination of every correlated dependency, zero-downtime deploys, and rigorous testing. The marginal cost and complexity grow far faster than the availability gain."],
+    ["adv","What are SLOs and error budgets, and how do they guide HA work?","An SLO is a target reliability (e.g., 99.95% success over 30 days); the error budget is the allowed unreliability (here ~21 min/month). Teams spend the budget on feature velocity and risk; if they burn it too fast, they freeze risky changes and invest in reliability. This makes availability a measurable, negotiable objective instead of an absolute, balancing uptime against shipping speed."],
+    ["sd","How would you design a highly available web service?","Run stateless app servers in multiple replicas across AZs behind a redundant load balancer with health checks and auto scaling. Use a multi-AZ database with a synchronous standby and automatic failover; cache and queue tiers also redundant. Do zero-downtime rolling deploys, spread replicas across failure domains, and add graceful degradation for non-critical features. Define an SLO/error budget, and validate with chaos testing and regular failover drills."]
+  ],
+  mistakes:["Assuming redundancy helps against correlated failures (shared DB/region/cert).","Long series dependency chains that multiply down the availability.","Chasing five nines without business need (huge cost, little value).","Never testing failover, so redundancy doesn't actually work in practice.","Ignoring deploys/config changes as a top cause of outages."],
+  best:["Eliminate SPOFs; run redundant instances across independent failure domains.","Add health checks + automatic, tested failover.","Set an SLO/error budget and measure real availability.","Use zero-downtime deploys and graceful degradation.","Prove resilience with chaos engineering and failover drills."],
+  related:[["Failover","🔀","Recover from failures","failover.html"],["Disaster Recovery","🌐","Region-level resilience","disaster-recovery.html"],["Load Balancer","⚖️","Spread & reroute traffic","system-designed.html"],["Bulkhead","🧱","Contain failures","bulkhead.html"],["PACELC Theorem","🔀","Availability vs consistency","pacelc.html"],["Auto-scaling","📈","Replace failed capacity","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

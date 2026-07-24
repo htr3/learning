@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>B-Tree & B+ Tree — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,22,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,180,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  function node(x,y,keys,hi){const w=keys.length*30+8;const g=S("g",{});
+    const r=S("rect",{x:x-w/2,y,width:w,height:30,rx:6,fill:hi?"rgba(124,58,237,.28)":"#161619",stroke:hi?"#7C3AED":"#3a3a42"});g.appendChild(r);
+    keys.forEach((k,i)=>{g.appendChild(TX(x-w/2+15+i*30,y+20,k,{fill:"#e4e4e7","font-size":12,"text-anchor":"middle"}));
+      if(i)g.appendChild(S("line",{x1:x-w/2+i*30+4,y1:y,x2:x-w/2+i*30+4,y2:y+30,stroke:"#3a3a42","stroke-width":1}));});
+    svg.appendChild(g);return g;}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("g").forEach(g=>g.remove());
+    if(phase<=1){node(310,80,["10","20","30"],phase===1);
+      if(phase===1)sub.textContent="node is full (3 keys) — inserting 40 overflows";else sub.textContent="a node holds up to 3 keys, sorted";lbl.textContent=phase===0?"B-tree node":"insert 40 → overflow";lbl.setAttribute("fill","#c4a2ff");}
+    else{node(310,50,["20"],true);node(180,120,["10"]);node(440,120,["30","40"]);
+      // edges
+      [[310,64,180,120],[310,64,440,120]].forEach(([x1,y1,x2,y2])=>svg.insertBefore(S("line",{x1,y1,x2,y2,stroke:"#2f2f37","stroke-width":1.5}),svg.firstChild));
+      lbl.textContent="split: median 20 rises, tree grows in height";lbl.setAttribute("fill","#34d399");sub.textContent="tree stays balanced — all leaves at the same depth";}}
+  function step(){phase=(phase+1)%3;timer=2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Insert keys into a B-tree of order 4 (max 3 keys per node). When a node overflows, it splits and pushes its median up — watch the tree stay perfectly balanced, with every leaf at the same depth, just like a database index.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Key</label><input id="pgVal" type="number" placeholder="e.g. 42" /></div>
+      <div class="pg-btns"><button id="pgIns" class="go">+ Insert</button><button id="pgRand">+ Random</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgSeq">Insert 1..15</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Order 4 = up to 3 keys / 4 children per node. Splits keep height O(log n), so a lookup touches only a few disk blocks.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Keys</div><div class="v ac" id="pgN">0</div></div>
+        <div class="pg-stat"><div class="k">Height</div><div class="v" id="pgH">0</div></div>
+        <div class="pg-stat"><div class="k">Nodes</div><div class="v" id="pgNodes">0</div></div>
+        <div class="pg-stat"><div class="k">Splits</div><div class="v wa" id="pgSplits">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const ORDER=4,MAXK=ORDER-1;let root,splits;
+  const svg=S("svg",{viewBox:"0 0 660 240"});$("pgViz").appendChild(svg);
+  const newNode=leaf=>({keys:[],children:[],leaf});
+  function reset(){root=newNode(true);splits=0;draw();log("empty B-tree (order 4)","ac");}
+  function insert(k){if(find(root,k)){log("key "+k+" already present","wa");return;}
+    let r=root;if(r.keys.length===MAXK){const s=newNode(false);s.children.push(r);splitChild(s,0);root=s;insertNonFull(s,k);}
+    else insertNonFull(r,k);
+    draw();log("insert "+k,"ok");stats();}
+  function find(n,k){let i=0;while(i<n.keys.length&&k>n.keys[i])i++;if(i<n.keys.length&&n.keys[i]===k)return true;if(n.leaf)return false;return find(n.children[i],k);}
+  function insertNonFull(n,k){let i=n.keys.length-1;
+    if(n.leaf){n.keys.push(0);while(i>=0&&k<n.keys[i]){n.keys[i+1]=n.keys[i];i--;}n.keys[i+1]=k;}
+    else{while(i>=0&&k<n.keys[i])i--;i++;if(n.children[i].keys.length===MAXK){splitChild(n,i);if(k>n.keys[i])i++;}insertNonFull(n.children[i],k);}}
+  function splitChild(parent,i){splits++;const y=parent.children[i];const z=newNode(y.leaf);const mid=Math.floor(MAXK/2);
+    const median=y.keys[mid];z.keys=y.keys.slice(mid+1);y.keys=y.keys.slice(0,mid);
+    if(!y.leaf){z.children=y.children.slice(mid+1);y.children=y.children.slice(0,mid+1);}
+    parent.children.splice(i+1,0,z);parent.keys.splice(i,0,median);}
+  function height(n){return n.leaf?1:1+height(n.children[0]);}
+  function countNodes(n){return n.leaf?1:1+n.children.reduce((a,c)=>a+countNodes(c),0);}
+  function countKeys(n){return n.keys.length+(n.leaf?0:n.children.reduce((a,c)=>a+countKeys(c),0));}
+  function stats(){$("pgN").textContent=countKeys(root);$("pgH").textContent=height(root);$("pgNodes").textContent=countNodes(root);$("pgSplits").textContent=splits;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+  function draw(){svg.innerHTML="";const H=height(root),W=660;const rowY=d=>28+d*66;
+    // assign x positions by traversal order at each depth
+    let leafX=40;const positions=new Map();
+    (function place(n,d){if(n.leaf){const w=n.keys.length*26+10;const x=leafX+w/2;positions.set(n,{x,d});leafX+=w+22;}
+      else{n.children.forEach(c=>place(c,d+1));const xs=n.children.map(c=>positions.get(c).x);positions.set(n,{x:xs.reduce((a,b)=>a+b,0)/xs.length,d});}})(root,0);
+    // scale to fit width
+    const maxX=leafX;const sx=maxX>W-40?(W-60)/maxX:1;
+    function drawNode(n){const p=positions.get(n);const x=p.x*sx+ (sx<1?20:0),y=rowY(p.d);const w=n.keys.length*26+10;
+      if(!n.leaf)n.children.forEach(c=>{const cp=positions.get(c);const cx=cp.x*sx+(sx<1?20:0);svg.appendChild(S("line",{x1:x,y1:y+28,x2:cx,y2:rowY(cp.d),stroke:"#2f2f37","stroke-width":1.4}));});
+      const r=S("rect",{x:x-w/2,y,width:w,height:28,rx:6,fill:n.leaf?"#141416":"rgba(124,58,237,.14)",stroke:n.leaf?"#3a3a42":"#7C3AED"});svg.appendChild(r);
+      n.keys.forEach((k,i)=>{svg.appendChild(TX(x-w/2+18+i*26,y+19,k,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+        if(i)svg.appendChild(S("line",{x1:x-w/2+i*26+5,y1:y,x2:x-w/2+i*26+5,y2:y+28,stroke:"#2a2a32","stroke-width":1}));});
+      if(!n.leaf)n.children.forEach(drawNode);}
+    drawNode(root);}
+
+  $("pgIns").onclick=()=>{const v=parseInt($("pgVal").value);if(!isNaN(v))insert(v);$("pgVal").value="";};
+  $("pgRand").onclick=()=>insert(Math.floor(Math.random()*99)+1);
+  $("pgSeq").onclick=()=>{reset();for(let i=1;i<=15;i++)insert(i);};
+  $("pgReset").onclick=reset;
+  $("pgVal").addEventListener("keydown",e=>{if(e.key==="Enter")$("pgIns").click();});
+  reset();for(const v of [10,20,5,6,12,30,7,17]) insert(v);
+}
+
+const DATA={
+  badge:"🌲",title:"B-Tree & B+ Tree",category:"Algorithms",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Self-Balancing Disk-Friendly Index",
+  tagline:"The workhorse index of relational databases and filesystems: a shallow, self-balancing tree where each node holds many keys and maps to a disk block — so lookups touch only a handful of pages.",
+  pills:["<b>O(log n)</b> ops","<b>Always balanced</b>","<b>Block-optimized</b>","<b>Powers SQL indexes</b>"],
+  overview:"A B-tree is a self-balancing search tree generalized so each node can hold many keys and have many children (its 'order'). Keys in a node are sorted and separate the ranges of its children. Because each node is sized to a disk/page block and holds hundreds of keys, the tree is extremely shallow — a billion keys fit in ~3–4 levels — so a lookup reads only 3–4 blocks. A <b>B+ tree</b> is the common database variant: it stores all values in the leaves and links leaves together, making range scans and full-index sweeps very fast while internal nodes hold only routing keys.",
+  problem:"Binary trees have O(log₂n) height but each step is a random memory/disk access; with disk latency dominating, deep trees are slow. B-trees pack many keys per node to match the storage block size, minimizing the number of expensive block reads — the metric that actually matters for on-disk indexes.",
+  diagram,diagramCaption:"A full node splits on insert: the median key rises to the parent, keeping every leaf at the same depth.",
+  how:[
+    "Each node stores up to (order−1) sorted keys and up to (order) child pointers.",
+    "Search: within a node, binary-search keys; follow the child pointer for the matching range.",
+    "Insert into the correct leaf; if it overflows, split it in two.",
+    "The median key is promoted to the parent (which may split too, recursively).",
+    "Splitting the root increases height — the only way a B-tree grows taller, keeping it balanced."
+  ],
+  complexity:[["Search","O(log n)"],["Insert","O(log n)"],["Delete","O(log n)"],["Block reads","O(log_b n)"]],
+  advantages:["Very shallow → few disk reads","Always balanced (no skew)","High fan-out uses block I/O efficiently","B+ tree: fast ordered range scans"],
+  disadvantages:["Splits/merges add write overhead","In-place updates → write amplification","More complex than a BST","Random writes can fragment pages"],
+  tradeoffs:"Higher order (more keys/node) means shallower trees and fewer reads, but larger nodes and more in-node search/rebalancing work. B+ trees favor reads and range queries (great for OLTP indexes) but do in-place updates; LSM trees favor high write throughput via sequential writes at the cost of read amplification and compaction. Databases pick B+ trees for balanced read/write and predictable latency.",
+  whenNot:"Don't use a B-tree for purely in-memory ordered data where a balanced BST or skip list is simpler, for write-heavy workloads better served by an LSM tree, or for exact-match-only access where a hash index is faster and simpler.",
+  sim,
+  code:{
+"SQL":`-- B+ tree indexes are created implicitly for PKs and explicitly:\nCREATE INDEX idx_users_email ON users(email);          -- B+ tree\n-- range & prefix queries ride the sorted leaves efficiently\nSELECT * FROM users WHERE email BETWEEN 'a' AND 'c';\nSELECT * FROM orders WHERE created_at > NOW() - INTERVAL '1 day'\n  ORDER BY created_at;          -- ordered scan along leaf links\n-- composite index: order matters (leftmost-prefix rule)\nCREATE INDEX idx_o ON orders(customer_id, created_at);`,
+"Java":`// B-tree search: binary search within node, descend correct child\nNode search(Node x, int key){\n  int i = 0;\n  while (i < x.n && key > x.keys[i]) i++;      // find child range\n  if (i < x.n && key == x.keys[i]) return x;    // found in this node\n  if (x.leaf) return null;                      // absent\n  return search(x.child[i], key);               // one block read deeper\n}\n// insert splits a full child, promoting its median to the parent\nvoid splitChild(Node p, int i){\n  Node y = p.child[i], z = new Node(y.leaf);\n  int t = ORDER/2;\n  z.copyKeys(y, t);                 // right half -> z\n  int median = y.keys[t-1];\n  p.insertKey(i, median);           // median rises to parent\n  p.insertChild(i+1, z);\n}`,
+"Python":`# height stays tiny because fan-out is huge\nimport math\ndef btree_height(n_keys, order):\n    # order = max children; each node ~ order keys at capacity\n    return math.ceil(math.log(n_keys + 1, order))\nprint(btree_height(1_000_000_000, 256))  # -> 4 levels for 1B keys\n# => a lookup reads only ~4 disk blocks`
+  },
+  realWorld:[
+    ["PostgreSQL / MySQL (InnoDB)","Default indexes are B+ trees; InnoDB stores the table itself as a clustered B+ tree on the primary key."],
+    ["Oracle / SQL Server","B+ tree indexes power point lookups, range scans, and ordered results."],
+    ["Filesystems (NTFS, HFS+, ext4 htree)","Directory and metadata indexes use B-tree variants."],
+    ["MongoDB","WiredTiger uses B+ trees (and LSM as an option) for its indexes."],
+    ["Berkeley DB / SQLite","SQLite stores tables and indexes as B-trees in its page-based file format."]
+  ],
+  interview:[
+    ["basic","What is a B-tree and why not just a binary tree?","A B-tree is a balanced search tree where nodes hold many keys and children, sized to a disk block. A binary tree has height ~log₂n with a random access per level — too many slow block reads. A B-tree's high fan-out makes it very shallow (log_b n), so lookups read only a few blocks."],
+    ["basic","What's the difference between a B-tree and a B+ tree?","In a B-tree, keys (and their values) can live in internal nodes. In a B+ tree, all values are stored only in the leaves, internal nodes hold just routing keys, and leaves are linked in a list. B+ trees give higher fan-out and fast ordered range scans, which is why databases use them for indexes."],
+    ["inter","How does insertion keep the tree balanced?","You insert into the appropriate leaf. If a node exceeds its max keys it splits into two, and the median key is promoted to the parent — which may itself split, propagating upward. If the root splits, a new root is created and the tree's height increases by one. All leaves therefore stay at the same depth."],
+    ["inter","Why does node size match the disk block/page size?","Disk and SSD I/O happens in fixed-size pages. Making a node one page means each block read yields the maximum number of keys to search, minimizing the count of expensive I/O operations — the dominant cost. This is the whole reason B-trees exist."],
+    ["adv","B+ tree vs LSM tree — trade-offs?","B+ trees do in-place updates: good read latency and range scans, but random writes and write amplification. LSM trees buffer writes in memory and flush sorted runs sequentially: excellent write throughput, but reads may check several levels (mitigated by Bloom filters) and background compaction is needed. Choose B+ for balanced/read-heavy OLTP, LSM for write-heavy/ingest workloads."],
+    ["adv","What is the leftmost-prefix rule for composite indexes?","A composite B+ tree index on (a, b, c) is sorted by a, then b, then c. It can serve queries filtering on a, or a+b, or a+b+c (a left prefix), and can satisfy ORDER BY along that prefix — but not a query filtering only on b or c, because the leaves aren't sorted by those alone."],
+    ["sd","When would you choose a B+ tree index in a design?","For OLTP databases needing fast point lookups, range queries, ordered results, and predictable latency with a balanced read/write mix — the default choice for relational and many document databases. Switch to LSM-based storage when ingestion/write throughput dominates, and add covering/composite indexes to serve queries from the index alone."]
+  ],
+  mistakes:["Assuming a B-tree is binary — it's a high-fan-out multiway tree.","Ignoring the leftmost-prefix rule, so composite indexes go unused.","Over-indexing: every index adds write cost on inserts/updates.","Random UUID primary keys causing page splits and fragmentation in clustered B+ trees.","Expecting range scans from a hash index — only B+ trees give ordered ranges."],
+  best:["Size nodes to the page/block size for minimal I/O.","Design composite indexes to match query prefixes and sort order.","Prefer monotonic/sequential keys for clustered indexes to reduce splits.","Use covering indexes so queries are answered from the index alone.","Reindex/rebuild periodically to reduce fragmentation."],
+  related:[["Database Indexing","🔎","Index types & usage","system-designed.html"],["LSM Tree","🗃️","Write-optimized alternative","lsm-tree.html"],["Skip List","🪜","In-memory ordered structure","skip-list.html"],["SQL","🧮","Relational storage","system-designed.html"],["Sharding","🪓","Scaling indexes","system-designed.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

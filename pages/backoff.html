@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Retry & Backoff — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    const y=110;g.appendChild(S("line",{x1:40,y1:y,x2:580,y2:y,stroke:"#2f3742","stroke-width":1.5}));
+    g.appendChild(TX(40,y+22,"0",{fill:"#5b5b63","font-size":9}));g.appendChild(TX(560,y+22,"time →",{fill:"#5b5b63","font-size":9}));
+    if(phase===0){[60,90,120,150,180,210,240].forEach(x=>{g.appendChild(S("line",{x1:x,y1:y,x2:x,y2:y-22,stroke:"#f87171","stroke-width":2}));g.appendChild(S("circle",{cx:x,cy:y-22,r:3,fill:"#f87171"}));});
+      lbl.textContent="fixed/immediate retries — hammer the server";lbl.setAttribute("fill","#f87171");sub.textContent="constant-interval retries from many clients pile onto a struggling service (retry storm)";}
+    else{[60,90,150,270].forEach((x,i)=>{g.appendChild(S("line",{x1:x,y1:y,x2:x,y2:y-22,stroke:"#34d399","stroke-width":2}));g.appendChild(S("circle",{cx:x,cy:y-22,r:3,fill:"#34d399"}));g.appendChild(TX(x,y-30,(i===0?"try":Math.pow(2,i-1)+"×"),{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));});
+      g.appendChild(TX(400,y-40,"gaps double: 1 → 2 → 4 → 8 …",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="exponential backoff (+ jitter) — spread out";lbl.setAttribute("fill","#34d399");sub.textContent="each retry waits exponentially longer, with random jitter to de-synchronize clients";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">100 clients hit a service that's failing, then recovers. Compare retry strategies: <b>immediate</b> retries create a synchronized <b>thundering herd</b> that keeps the service down; <b>exponential backoff</b> spreads attempts out; adding <b>jitter</b> de-synchronizes clients so load smooths into a gentle curve.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Strategy</label><select id="pgStrat">
+        <option value="fixed">Immediate / fixed interval</option>
+        <option value="exp">Exponential backoff</option>
+        <option value="jitter" selected>Exponential + full jitter</option></select></div>
+      <div class="pg-field"><label>Clients: <b id="pgCV">100</b></label><input id="pgClients" type="range" min="20" max="200" value="100" step="10"></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRun" class="go">▶ Run outage</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">The service can handle ~15 requests per tick. Retries above that fail and must retry again. Watch the peak load per tick — the lower and flatter, the better.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Peak load/tick</div><div class="v bad" id="pgPeak">—</div></div>
+        <div class="pg-stat"><div class="k">Total attempts</div><div class="v ac" id="pgAtt">0</div></div>
+        <div class="pg-stat"><div class="k">Ticks to drain</div><div class="v wa" id="pgTicks">—</div></div>
+        <div class="pg-stat"><div class="k">Capacity/tick</div><div class="v ok">15</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const CAP=15,TICKS=24,W=560,H=150;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let hist;
+  function reset(){hist=new Array(TICKS).fill(0);draw();$("pgPeak").textContent="—";$("pgAtt").textContent="0";$("pgTicks").textContent="—";$("pgLog").innerHTML="";log("run an outage to compare load curves","ac");}
+  function run(){const strat=$("pgStrat").value||"jitter";const N=+$("pgClients").value||100;
+    hist=new Array(TICKS).fill(0);let attempts=0;
+    // each client retries until success; service up from tick 3 onward, serves CAP/tick
+    const clients=[];for(let i=0;i<N;i++)clients.push({next:0,attempt:0,done:false});
+    for(let t=0;t<TICKS;t++){
+      // gather clients scheduled at this tick
+      let scheduled=clients.filter(c=>!c.done&&c.next===t);
+      hist[t]=scheduled.length;attempts+=scheduled.length;
+      const serviceUp=t>=3;let budget=serviceUp?CAP:0;
+      scheduled.forEach(c=>{
+        if(budget>0){budget--;c.done=true;} // success
+        else{c.attempt++;c.next=t+delay(strat,c.attempt);if(c.next>=TICKS)c.done=true;}});}
+    const peak=Math.max(...hist);const drain=hist.reduce((a,v,i)=>v>0?i:a,0)+1;
+    $("pgPeak").textContent=peak;$("pgPeak").className="v "+(peak>CAP*3?"bad":peak>CAP?"wa":"ok");
+    $("pgAtt").textContent=attempts;$("pgTicks").textContent=drain;
+    log(name(strat)+": peak "+peak+"/tick, "+attempts+" total attempts, drained in "+drain+" ticks",peak>CAP*2?"bad":"ok");
+    if(strat==="fixed")log("all clients retry in lockstep → repeated spikes far above capacity (thundering herd)","bad");
+    else if(strat==="exp")log("backoff lowers frequency, but synchronized clients still spike together","wa");
+    else log("jitter randomizes each client's wait → load flattens under/near capacity ✓","ok");
+    draw();}
+  function delay(strat,attempt){if(strat==="fixed")return 1;const base=Math.min(8,Math.pow(2,attempt-1));
+    if(strat==="exp")return base;return 1+Math.floor(Math.random()*base);}
+  function name(s){return s==="fixed"?"Immediate/fixed":s==="exp"?"Exponential backoff":"Exp + full jitter";}
+  function draw(){svg.innerHTML="";const bw=(W-40)/TICKS;const peak=Math.max(CAP,...hist,1);const sc=(H-40)/peak;
+    svg.appendChild(S("line",{x1:20,y1:H-20-CAP*sc,x2:W-20,y2:H-20-CAP*sc,stroke:"#38bdf8","stroke-width":1.4,"stroke-dasharray":"4 3"}));
+    svg.appendChild(TX(W-20,H-24-CAP*sc,"capacity",{fill:"#38bdf8","font-size":9,"text-anchor":"end"}));
+    hist.forEach((v,i)=>{const x=20+i*bw,h=v*sc;const over=v>CAP;
+      svg.appendChild(S("rect",{x:x+1,y:H-20-h,width:bw-2,height:Math.max(0,h),rx:2,fill:over?"#f87171":"#34d399"}));
+      if(i===3)svg.appendChild(S("line",{x1:x,y1:20,x2:x,y2:H-20,stroke:"#5b5b63","stroke-width":1,"stroke-dasharray":"2 3"}));});
+    svg.appendChild(TX(20+3*bw,16,"↑ service recovers",{fill:"#8b8b93","font-size":9}));
+    svg.appendChild(TX(W/2,H-4,"requests per tick (green = served, red = over capacity → retried)",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgClients").oninput=()=>$("pgCV").textContent=$("pgClients").value;
+  $("pgRun").onclick=run;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"⏳",title:"Retry & Backoff",category:"Resilience",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Retrying Without Making Things Worse",
+  tagline:"Retries recover from transient failures — but naive retries can bury a struggling service under a synchronized <b>thundering herd</b>. Exponential backoff spaces attempts out, and <b>jitter</b> randomizes them so clients don't all retry in lockstep.",
+  pills:["<b>Transient</b> failures","<b>Exponential</b> backoff","<b>Jitter</b>","<b>Retry budgets</b>"],
+  overview:"Many failures in distributed systems are <b>transient</b>: a brief network blip, a momentary overload, a leader election. Retrying often succeeds. But retries are dangerous if done carelessly. If every client retries <b>immediately</b> and at a <b>fixed</b> interval, a service that's already struggling gets hit by wave after wave of synchronized retries — a <b>retry storm</b> or <b>thundering herd</b> — which can keep it down or push it over the edge just as it tries to recover. The fix is <b>exponential backoff</b>: wait 1, then 2, 4, 8… seconds between attempts, so retry frequency drops sharply. But exponential backoff alone still lets many clients retry at the <b>same</b> moments. Adding <b>jitter</b> (randomizing each delay) de-synchronizes clients, smoothing the aggregate load into a gentle curve. Retries should also be <b>bounded</b> (max attempts, overall deadline), applied only to <b>retryable</b>/idempotent operations, and ideally governed by a <b>retry budget</b> so retries can't exceed a fraction of normal traffic.",
+  problem:"Retrying is necessary for reliability, but uncoordinated retries amplify load exactly when a system is weakest. Fixed-interval, unbounded, synchronized retries turn a small hiccup into a self-sustaining overload. We need retries that recover from transient faults while actively avoiding overload during recovery.",
+  diagram,diagramCaption:"Fixed retries hammer the server in sync; exponential backoff with jitter spreads attempts out over time.",
+  how:[
+    "Only retry retryable errors (timeouts, 503, connection resets) and idempotent operations.",
+    "Wait an exponentially increasing delay between attempts: base × 2^attempt, capped at a max.",
+    "Add jitter — randomize the delay (e.g., random between 0 and the computed cap) to de-synchronize clients.",
+    "Bound retries: max attempts and/or an overall deadline; give up and surface an error/fallback.",
+    "Optionally enforce a retry budget and pair with circuit breakers so retries can't overwhelm a failing dependency."
+  ],
+  complexity:[["Delay","base × 2^n (capped)"],["Jitter","randomize the delay"],["Bound","max attempts / deadline"],["Guard","retry budget + breaker"]],
+  advantages:["Recovers from transient failures automatically","Backoff reduces load on struggling services","Jitter prevents synchronized retry storms","Improves overall success rate & reliability","Simple, widely supported in SDKs"],
+  disadvantages:["Naive retries amplify load (retry storms)","Adds latency (waiting between attempts)","Unsafe on non-idempotent operations","Can mask real problems if overused","Requires bounds & budgets to be safe"],
+  tradeoffs:"Retries trade extra latency and load for higher success rates. The core tension is recovery vs amplification: retrying too eagerly (short/fixed delays, no cap, no jitter) can convert a brief outage into a prolonged one by overwhelming the recovering service, while retrying too timidly wastes the reliability benefit. Exponential backoff plus jitter resolves most of this, but you still must bound attempts (to fail fast eventually) and only retry idempotent operations (or use idempotency keys) to avoid duplicate side effects. At scale, add a retry budget so aggregate retries stay a small fraction of traffic, and a circuit breaker so you stop retrying a clearly-dead dependency entirely.",
+  whenNot:"Don't retry non-idempotent operations without an idempotency key (risk of duplicates). Don't retry non-transient errors (400 bad request, 401/403, validation) — they'll fail again. Avoid retries on the deepest layer of a chain where upper layers also retry (multiplicative amplification — retry at one level). For user-facing latency-critical paths, prefer a fast fallback over many slow retries.",
+  sim,
+  code:{
+"Full jitter":`// Exponential backoff with FULL jitter (AWS-recommended).\nasync function withRetry(fn, { retries = 5, base = 100, cap = 10000 } = {}) {\n  for (let attempt = 0; ; attempt++) {\n    try { return await fn(); }\n    catch (err) {\n      if (attempt >= retries || !isRetryable(err)) throw err;   // bound + filter\n      const exp = Math.min(cap, base * 2 ** attempt);   // 100,200,400,800…\n      const delay = Math.random() * exp;                // FULL jitter\n      await sleep(delay);\n    }\n  }\n}\nconst isRetryable = e => e.code === "ETIMEDOUT" || [429,502,503,504].includes(e.status);`,
+"Jitter variants":`// Different jitter strategies (sleep before attempt n):\nno jitter:      delay = min(cap, base * 2**n)                 // synchronized!\nfull jitter:    delay = random(0, min(cap, base * 2**n))       // best spread\nequal jitter:   d = min(cap, base*2**n); delay = d/2 + random(0, d/2)\ndecorrelated:   delay = min(cap, random(base, prev * 3))       // AWS variant\n// Full/decorrelated jitter minimize both total work and completion time.`,
+"Retry budget":`// A retry budget stops retries from exceeding a fraction of real traffic,\n// preventing storms even if many calls fail at once.\nretryPolicy:\n  maxAttempts: 3\n  perTryTimeout: 1s\n  retryOn: [5xx, reset, connect-failure]\n  retryBudget:\n    budgetPercent: 20      # retries may add at most 20% over base RPS\n    minRetriesPerSecond: 10\n# Also: retry at ONE layer only, and open a circuit breaker on sustained failure.`
+  },
+  realWorld:[
+    ["AWS SDKs","Default exponential backoff with jitter on throttling/5xx errors."],
+    ["Google/gRPC","Retry policies with backoff, budgets, and retryable status codes."],
+    ["Envoy / Istio","Per-route retries with backoff and retry budgets to prevent storms."],
+    ["Kafka / SQS clients","Backoff on broker/consumer retries; DLQs after max attempts."],
+    ["Stripe / payment SDKs","Backoff retries combined with idempotency keys for safe re-sends."]
+  ],
+  interview:[
+    ["basic","Why not just retry immediately on failure?","Because immediate, synchronized retries from many clients pile load onto a service that's already struggling — a thundering herd / retry storm — which can keep it down or push it over the edge during recovery. Retries need to be spaced out (backoff) and de-synchronized (jitter), and bounded, to help rather than harm."],
+    ["basic","What is exponential backoff?","A strategy where the wait between retries grows exponentially: e.g., 100ms, 200ms, 400ms, 800ms, capped at some maximum. This rapidly reduces retry frequency so a failing dependency isn't hammered, giving it time to recover while still retrying transient failures."],
+    ["inter","Why add jitter, and what does it do?","Exponential backoff alone still lets many clients retry at the same instants (they failed together, so their backoff schedules align), causing periodic spikes. Jitter randomizes each client's delay so their retries scatter across time. This flattens the aggregate load curve, avoiding synchronized bursts. Full jitter (random between 0 and the backoff cap) is a common, effective choice."],
+    ["inter","Which errors and operations are safe to retry?","Retry only transient, retryable errors: timeouts, connection resets, 429 (throttling), and 5xx like 502/503/504. Don't retry deterministic client errors (400/401/403/404/422) — they'll just fail again. And only retry operations that are idempotent, or made idempotent via an idempotency key, so retries don't cause duplicate side effects (double charges, duplicate records)."],
+    ["adv","What is a retry budget and why use it?","A retry budget limits retries to a fraction of normal traffic (e.g., retries may add at most 20% over base request rate). It prevents retry storms even when many calls fail simultaneously — once the budget is exhausted, further failures aren't retried. This is more robust than per-call max attempts alone because it bounds aggregate retry load system-wide."],
+    ["adv","How do retries interact across a multi-layer call chain?","If every layer retries, failures multiply: 3 retries at each of 3 layers = up to 27 attempts, amplifying load dramatically. Best practice is to retry at a single layer (usually closest to the client or a dedicated gateway/mesh), propagate deadlines so retries respect the overall budget, and use circuit breakers to stop retrying a dependency that's clearly down."],
+    ["sd","Design a robust retry strategy for calls to a flaky downstream service.","Retry only idempotent operations (or use idempotency keys) and only on transient errors. Use exponential backoff with full jitter, a max attempt count, and an overall deadline. Enforce a retry budget so retries stay a small fraction of traffic. Wrap the dependency in a circuit breaker to fail fast when it's down, and retry at just one layer to avoid amplification. Monitor retry and success rates to tune."]
+  ],
+  mistakes:["Retrying immediately at a fixed interval (thundering herd).","Exponential backoff without jitter (clients still spike together).","Unbounded retries with no max attempts or deadline.","Retrying non-idempotent operations without idempotency keys.","Retrying at every layer of a call chain (multiplicative amplification)."],
+  best:["Use exponential backoff WITH jitter (e.g., full jitter).","Bound retries with max attempts and an overall deadline.","Retry only transient errors and idempotent operations.","Enforce a retry budget and retry at a single layer.","Combine with circuit breakers and monitor retry/success rates."],
+  related:[["Timeout","⏱️","Triggers retries","timeout.html"],["Idempotency","🔁","Makes retries safe","idempotency.html"],["Circuit Breaker","🔌","Stop retrying failures","system-designed.html"],["Bulkhead","🧱","Contain retry load","bulkhead.html"],["Rate Limiting","🚦","Cap request rate","rate-limiting.html"],["Message Queues","📨","Retries & DLQs","kafka.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

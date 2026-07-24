@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skip List — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 190"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const vals=[1,3,7,9,12,17,19,25,30];
+  const xOf=i=>60+i*62;const L=[130,95,60];// y per level (3 levels)
+  // level membership
+  const inLevel=[vals.map(()=>true),[true,false,true,false,true,false,true,false,true].map(Boolean),[true,false,false,false,true,false,false,false,true]];
+  const cells={};
+  for(let lv=0;lv<3;lv++){for(let i=0;i<vals.length;i++){if(!inLevel[lv][i])continue;
+    const x=xOf(i),y=L[lv];const r=S("rect",{x:x-16,y:y,width:32,height:22,rx:5,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    const t=TX(x,y+16,vals[i],{fill:"#c9c9d1","font-size":11,"text-anchor":"middle"});svg.appendChild(t);cells[lv+"_"+i]={r,t,x,y};}}
+  for(let lv=0;lv<3;lv++){svg.appendChild(TX(20,L[lv]+15,"L"+lv,{fill:"#5b5b66","font-size":10}));}
+  const arrow=S("line",{x1:0,y1:0,x2:0,y2:0,stroke:"#7C3AED","stroke-width":2,"marker-end":""});svg.appendChild(arrow);
+  const sub=TX(310,175,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  // search 19: path L2:1 -> L2:12(no, 12<19 next=30>19 drop) etc. Precompute path
+  const target=19;const path=[[2,0],[2,4],[1,4],[1,6],[0,6]];// visiting nodes toward 19
+  let step=0,timer=0,running=false,raf,last;
+  function reset(){for(const k in cells){cells[k].r.setAttribute("fill","#161619");cells[k].r.setAttribute("stroke","#2a2a32");}}
+  function doStep(){step=(step+1)%(path.length+2);timer=1.2;
+    if(step===0){reset();lbl.textContent="search for 19 — start top-left, level 2";sub.textContent="move right while next ≤ target, else drop a level";return;}
+    if(step<=path.length){const [lv,i]=path[step-1];const c=cells[lv+"_"+i];if(c){c.r.setAttribute("fill","rgba(124,58,237,.3)");c.r.setAttribute("stroke","#7C3AED");}
+      sub.textContent="at level "+lv+", node "+vals[i]+(vals[i]===target?" — found!":"");}
+    else{const c=cells["0_6"];c.r.setAttribute("fill","rgba(52,211,153,.35)");c.r.setAttribute("stroke","#34d399");lbl.textContent="found 19 in ~log n hops";lbl.setAttribute("fill","#34d399");}}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)doStep();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);reset();doStep();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Insert values (each gets a random height by coin flips) and search for any key. Watch the search start in the top express lane and drop down level by level — visiting only ~log n nodes instead of scanning the whole list.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Value</label><input id="pgVal" type="number" placeholder="e.g. 42" /></div>
+      <div class="pg-btns"><button id="pgIns" class="go">+ Insert</button><button id="pgSearch">Search</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRand">+10 random</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Each node is promoted to the next level with p=0.5, giving expected O(log n) search — a probabilistic alternative to a balanced tree.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Elements</div><div class="v ac" id="pgN">0</div></div>
+        <div class="pg-stat"><div class="k">Levels</div><div class="v" id="pgLv">1</div></div>
+        <div class="pg-stat"><div class="k">Last search hops</div><div class="v wa" id="pgHops">0</div></div>
+        <div class="pg-stat"><div class="k">vs linear</div><div class="v ok" id="pgVs">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const MAXL=5;let heads,size,maxLevel;
+  const svg=S("svg",{viewBox:"0 0 640 220"});$("pgViz").appendChild(svg);
+  function randLevel(){let l=1;while(Math.random()<0.5&&l<MAXL)l++;return l;}
+  function reset(){heads=[];size=0;maxLevel=1;draw();log("empty skip list","ac");$("pgHops").textContent="0";$("pgVs").textContent="—";}
+  // heads: sorted array of {v, height}
+  function insert(v){if(heads.some(n=>n.v===v)){log("value "+v+" already present","wa");return;}
+    const h=randLevel();heads.push({v,height:h});heads.sort((a,b)=>a.v-b.v);size++;maxLevel=Math.max(maxLevel,h);draw();
+    log("insert "+v+" at height "+h,"ok");$("pgN").textContent=size;$("pgLv").textContent=maxLevel;}
+  function search(v){if(!heads.length){log("list empty","wa");return;}
+    let hops=0;const visited=[];
+    for(let lv=maxLevel-1;lv>=0;lv--){
+      // nodes present at this level in order
+      const atLv=heads.filter(n=>n.height>lv);
+      for(const n of atLv){if(n.v<=v){hops++;visited.push(n.v+"@L"+lv);if(n.v===v){draw(visited,v,true);finish(hops,v,true);return;}}else break;}
+    }
+    draw(visited,v,false);finish(hops,v,false);}
+  function finish(hops,v,found){$("pgHops").textContent=hops;$("pgVs").textContent=size+" nodes";
+    log((found?"✓ found ":"✗ not found ")+v+" in "+hops+" hops (linear would scan up to "+size+")",found?"ok":"bad");}
+  function draw(visited,target,found){
+    svg.innerHTML="";const W=640,pad=44;const xs=heads.map((_,i)=>pad+ (heads.length<=1?0:i*(W-2*pad-30)/(heads.length-1)));
+    const rowH=30,baseY=190;
+    for(let lv=0;lv<maxLevel;lv++){svg.appendChild(TX(14,baseY-lv*rowH+15,"L"+lv,{fill:"#5b5b66","font-size":10}));}
+    // links per level
+    for(let lv=0;lv<maxLevel;lv++){const idxs=[];heads.forEach((n,i)=>{if(n.height>lv)idxs.push(i);});
+      for(let k=0;k<idxs.length-1;k++){const l=S("line",{x1:xs[idxs[k]]+16,y1:baseY-lv*rowH+11,x2:xs[idxs[k+1]]-16,y2:baseY-lv*rowH+11,stroke:"#2f2f37","stroke-width":1.5});svg.appendChild(l);}}
+    heads.forEach((n,i)=>{for(let lv=0;lv<n.height;lv++){const x=xs[i],y=baseY-lv*rowH;
+      const vis=visited&&visited.includes(n.v+"@L"+lv);const isT=found&&n.v===target;
+      const r=S("rect",{x:x-16,y:y,width:32,height:22,rx:5,fill:isT?"rgba(52,211,153,.35)":vis?"rgba(124,58,237,.3)":"#161619",stroke:isT?"#34d399":vis?"#7C3AED":"#2a2a32"});svg.appendChild(r);
+      if(lv===0){const t=TX(x,y+16,n.v,{fill:"#c9c9d1","font-size":10,"text-anchor":"middle"});svg.appendChild(t);}}});
+  }
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+
+  $("pgIns").onclick=()=>{const v=parseInt($("pgVal").value);if(!isNaN(v))insert(v);$("pgVal").value="";};
+  $("pgSearch").onclick=()=>{const v=parseInt($("pgVal").value);if(!isNaN(v))search(v);};
+  $("pgRand").onclick=()=>{for(let i=0;i<10;i++)insert(Math.floor(Math.random()*99)+1);};
+  $("pgReset").onclick=reset;
+  $("pgVal").addEventListener("keydown",e=>{if(e.key==="Enter")$("pgIns").click();});
+  reset();for(const v of [5,12,19,25,33,42,58,71])insert(v);
+}
+
+const DATA={
+  badge:"🪜",title:"Skip List",category:"Algorithms",difficulty:"Medium",readingTime:"7 min",
+  eyebrow:"Probabilistic Ordered Structure",
+  tagline:"A sorted linked list with randomized <b>express lanes</b> that let you skip ahead — giving O(log n) search, insert and delete on average, without the rotations of a balanced tree.",
+  pills:["<b>O(log n)</b> avg ops","<b>No rebalancing</b>","<b>Simple</b> to implement","<b>Great for concurrency</b>"],
+  overview:"A skip list is an ordered linked list augmented with multiple levels of 'express' forward pointers. Level 0 contains every element; each higher level contains a random subset (each node is promoted to the next level with probability p, usually 0.5). To search, you start at the top-left, move right while the next key ≤ target, and drop down a level when you'd overshoot — effectively halving the remaining range at each level, like a binary search over a linked list. It achieves balanced-tree performance using randomness instead of complex rotation logic.",
+  problem:"A plain sorted linked list has O(n) search. Balanced BSTs give O(log n) but require intricate rebalancing (rotations, color flips) that's hard to get right and to make concurrent. Skip lists get O(log n) expected time with simple pointer surgery and no global rebalancing — which is why concurrent skip lists power many lock-free ordered maps.",
+  diagram,diagramCaption:"Search 19: ride the top lanes, drop down when the next node overshoots — only ~log n nodes are visited.",
+  how:[
+    "Level 0 is a normal sorted linked list of all elements.",
+    "When inserting, flip coins: promote the node up one level each time it's heads (p=0.5).",
+    "Search starts at the highest level's head.",
+    "Move right while next.key ≤ target; otherwise drop down one level.",
+    "Reaching level 0 lands you at (or just before) the target."
+  ],
+  complexity:[["Search","O(log n) avg"],["Insert","O(log n) avg"],["Delete","O(log n) avg"],["Space","O(n) avg"]],
+  advantages:["O(log n) expected without rotations","Much simpler than balanced trees","Naturally supports range scans / ordered iteration","Easy to make lock-free / concurrent"],
+  disadvantages:["Probabilistic — worst case O(n) (rare)","Extra pointers = memory overhead","Randomness makes behavior non-deterministic","Cache locality worse than arrays/B-trees"],
+  tradeoffs:"The promotion probability p trades speed for space: p=0.5 gives ~2 pointers/node and good balance; smaller p uses less memory but more hops. Skip lists shine for in-memory ordered maps and concurrency (Java's ConcurrentSkipListMap, Redis sorted sets), while B+ trees win for disk-based storage due to better cache/block locality.",
+  whenNot:"Avoid skip lists when you need guaranteed (not just expected) O(log n) — use a balanced BST; when data is disk-resident — prefer a B+ tree for block efficiency; or when a simple hash map suffices because you don't need ordering or range queries.",
+  sim,
+  code:{
+"Java":`// skip list search + insert (probabilistic levels)\nclass SkipList<T extends Comparable<T>> {\n  static final int MAX = 16; final Node<T> head = new Node<>(null, MAX);\n  int level = 1; final Random rnd = new Random();\n  int randomLevel(){ int l=1; while(rnd.nextInt(2)==0 && l<MAX) l++; return l; }\n  Node<T> search(T key){\n    Node<T> x = head;\n    for(int i=level-1;i>=0;i--)\n      while(x.next[i]!=null && x.next[i].key.compareTo(key)<0)\n        x = x.next[i];             // move right on this express lane\n    return x.next[0];              // candidate at level 0\n  }\n  void insert(T key){\n    Node<T>[] update = new Node[MAX];\n    Node<T> x = head;\n    for(int i=level-1;i>=0;i--){\n      while(x.next[i]!=null && x.next[i].key.compareTo(key)<0) x=x.next[i];\n      update[i]=x;                  // remember where we dropped down\n    }\n    int lv = randomLevel();\n    if(lv>level){ for(int i=level;i<lv;i++) update[i]=head; level=lv; }\n    Node<T> n = new Node<>(key, lv);\n    for(int i=0;i<lv;i++){ n.next[i]=update[i].next[i]; update[i].next[i]=n; }\n  }\n}`,
+"Python":`import random\nclass SkipList:\n    def __init__(self, max_level=16, p=0.5):\n        self.max_level, self.p = max_level, p\n        self.head = [None]*max_level\n        self.level = 1\n    def _rand_level(self):\n        l = 1\n        while random.random() < self.p and l < self.max_level: l += 1\n        return l\n    def search(self, key):\n        node = self.head\n        for i in reversed(range(self.level)):\n            while node[i] and node[i].key < key:\n                node = node[i].fwd\n        cand = node[0]\n        return cand if cand and cand.key == key else None`,
+"Redis":`# Redis Sorted Sets (ZSET) use a skip list internally\nZADD leaderboard 100 "alice" 250 "bob" 175 "carol"\nZRANGE leaderboard 0 -1 WITHSCORES     # ordered iteration (skip list)\nZRANGEBYSCORE leaderboard 150 300      # range query in O(log n + m)\nZRANK leaderboard "bob"                # rank via skip-list spans`
+  },
+  realWorld:[
+    ["Redis","Sorted sets (ZSET) are backed by a skip list + hash map for O(log n) ranked/range queries."],
+    ["Java (JDK)","ConcurrentSkipListMap / ConcurrentSkipListSet give lock-free ordered concurrent maps."],
+    ["LevelDB / RocksDB","The in-memory memtable is a concurrent skip list before flushing to SSTables."],
+    ["Apache Lucene","Skip lists accelerate postings-list traversal in the inverted index."],
+    ["HBase","Uses skip lists for its in-memory MemStore ordered structure."]
+  ],
+  interview:[
+    ["basic","What is a skip list?","An ordered linked list with extra levels of forward pointers. Higher levels act as express lanes over a random subset of nodes, letting search skip large gaps and achieve O(log n) expected time without tree rebalancing."],
+    ["basic","How does search work?","Start at the top level's head. Move right while the next node's key is ≤ the target; when the next node would overshoot, drop down one level and continue. You end at level 0 at or just before the target."],
+    ["inter","Why is it O(log n) on average?","Each node is promoted to the next level with probability p, so level i has ~n·p^i nodes. With p=0.5 there are ~log₂n levels, and you take a constant expected number of steps per level, giving O(log n) expected search, insert, and delete."],
+    ["inter","Skip list vs balanced BST — why choose a skip list?","Same expected O(log n), but skip lists avoid complex rotations, are simpler to implement correctly, support ordered range scans naturally, and are far easier to make lock-free for concurrent use — which is why Redis and JDK use them."],
+    ["adv","What's the worst case and how likely is it?","Worst case is O(n) if the coin flips produce a degenerate structure (few promotions), but the probability is astronomically small for reasonable n; performance is O(log n) with high probability. You can bound MAX level ~log(n)."],
+    ["adv","How do you make a skip list concurrent/lock-free?","Insert/delete touch only local pointers, so you can use CAS on next-pointers level by level (bottom-up for insert, top-down logical-delete then physical unlink). Java's ConcurrentSkipListMap uses marker nodes and CAS to allow lock-free reads and non-blocking updates."],
+    ["sd","When would you use a skip list in a system design?","For in-memory ordered maps/leaderboards needing range queries and ranking (Redis ZSET), for the write buffer of an LSM engine (memtable), and wherever you want ordered, concurrent access with simpler code than a balanced tree. For disk-resident ordered data, prefer a B+ tree."]
+  ],
+  mistakes:["Not capping the max level, wasting memory or hurting cache behavior.","Assuming deterministic O(log n) — it's expected, not guaranteed.","Forgetting to update all levels' pointers on insert/delete.","Using a skip list on disk where a B+ tree's block locality is far better.","Poor RNG causing skewed level distributions."],
+  best:["Use p=0.5 and MAX ≈ log₂(expected n).","Track an 'update' array to fix pointers correctly on insert/delete.","Prefer a proven implementation (ConcurrentSkipListMap, Redis ZSET) for concurrency.","Store span/width counters if you need O(log n) rank queries.","Keep it in memory; use B+ trees for disk."],
+  related:[["B-Tree / B+ Tree","🌲","Disk-friendly ordered index","b-tree.html"],["LSM Tree","🗃️","Memtable uses skip lists","lsm-tree.html"],["Redis","🧠","ZSET internals","system-designed.html"],["Database Indexing","🔎","Ordered lookups","system-designed.html"],["Bloom Filter","🌸","Probabilistic structure","bloom-filter.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

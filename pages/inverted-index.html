@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inverted Index — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    if(phase===0){g.appendChild(TX(150,44,"documents",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+      [["D1: the cat sat",70],["D2: the dog ran",100],["D3: cat and dog",130]].forEach(([t,y])=>{g.appendChild(S("rect",{x:60,y:y-14,width:180,height:24,rx:5,fill:"rgba(56,189,248,.1)",stroke:"#38bdf8"}));g.appendChild(TX(150,y+2,t,{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));});
+      g.appendChild(S("line",{x1:250,y1:100,x2:330,y2:100,stroke:"#c4a2ff","stroke-width":2,"marker-end":"url(#a)"}));g.appendChild(TX(290,92,"invert",{fill:"#c4a2ff","font-size":9,"text-anchor":"middle"}));
+      g.appendChild(TX(470,44,"inverted index",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+      [["cat → D1, D3",70],["dog → D2, D3",100],["the → D1, D2",130]].forEach(([t,y])=>{g.appendChild(TX(360,y+2,t,{fill:"#34d399","font-size":10}));});
+      lbl.textContent="term → list of documents containing it";lbl.setAttribute("fill","#c4a2ff");sub.textContent="a forward index maps doc→words; the INVERTED index maps word→docs (built once, at index time)";}
+    else{g.appendChild(TX(310,60,'query: "cat AND dog"',{fill:"#fbbf24","font-size":12,"text-anchor":"middle","font-weight":700}));
+      g.appendChild(TX(160,100,"cat → {D1, D3}",{fill:"#34d399","font-size":11,"text-anchor":"middle"}));
+      g.appendChild(TX(460,100,"dog → {D2, D3}",{fill:"#34d399","font-size":11,"text-anchor":"middle"}));
+      g.appendChild(TX(310,140,"∩  intersect  →  {D3}",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="query = combine postings lists";lbl.setAttribute("fill","#c4a2ff");sub.textContent="AND = intersect the lists, OR = union — the whole point: never scan the documents";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Search a tiny corpus with an inverted index. Each term maps to a <b>postings list</b> of the documents containing it. A boolean query combines those lists — <b>AND</b> intersects, <b>OR</b> unions — so the engine touches only the relevant postings, never scanning the documents themselves.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Query terms</label><input id="pgQ" type="text" value="cat dog" style="width:150px"></div>
+      <div class="pg-field"><label>Operator</label><select id="pgOp"><option value="and">AND (intersect)</option><option value="or">OR (union)</option></select></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgRun" class="go">🔎 Search</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Postings lists are kept sorted by doc id, so AND is a fast merge-intersection. Real engines also store term positions (for phrases) and compress the lists.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Terms</div><div class="v ac" id="pgTerms">0</div></div>
+        <div class="pg-stat"><div class="k">Postings scanned</div><div class="v" id="pgScan">0</div></div>
+        <div class="pg-stat"><div class="k">Docs matched</div><div class="v ok" id="pgHits">0</div></div>
+        <div class="pg-stat"><div class="k">Corpus size</div><div class="v wa" id="pgN">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const DOCS=[
+    "the quick brown cat",
+    "the lazy dog sleeps",
+    "cat and dog play",
+    "a quick red fox",
+    "the brown dog runs",
+    "cat naps in the sun"];
+  const W=560,H=170;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let index;
+  function build(){index={};DOCS.forEach((d,i)=>{new Set(d.toLowerCase().split(/\s+/)).forEach(w=>{(index[w]??=[]).push(i);});});
+    for(const k in index)index[k].sort((a,b)=>a-b);}
+  function reset(){build();$("pgN").textContent=DOCS.length;run();log("index built over "+DOCS.length+" docs — try 'cat dog', 'the brown', op AND/OR","ac");}
+  function run(){const terms=($("pgQ").value||"").toLowerCase().split(/\s+/).filter(Boolean);const op=$("pgOp").value||"and";
+    $("pgTerms").textContent=terms.length;
+    const lists=terms.map(t=>({t,list:index[t]||[]}));
+    let scanned=lists.reduce((a,l)=>a+l.list.length,0);
+    let result;
+    if(!terms.length)result=[];
+    else if(op==="and"){result=lists[0].list.slice();for(let i=1;i<lists.length;i++){const s=new Set(lists[i].list);result=result.filter(d=>s.has(d));}}
+    else{const s=new Set();lists.forEach(l=>l.list.forEach(d=>s.add(d)));result=[...s].sort((a,b)=>a-b);}
+    $("pgScan").textContent=scanned;$("pgHits").textContent=result.length;
+    draw(lists,result,op);
+    $("pgLog").innerHTML="";
+    lists.forEach(l=>log("postings["+l.t+"] = ["+(l.list.map(d=>"D"+(d+1)).join(", ")||"∅")+"]",l.list.length?"ac":"bad"));
+    log((op==="and"?"∩ intersect":"∪ union")+" → "+(result.map(d=>"D"+(d+1)).join(", ")||"no matches"),result.length?"ok":"wa");}
+  function draw(lists,result,op){svg.innerHTML="";
+    const resSet=new Set(result);
+    // draw postings lists as rows
+    let y=24;svg.appendChild(TX(20,14,"postings lists (green cells = in result):",{fill:"#8b8b93","font-size":9.5}));
+    lists.forEach(l=>{svg.appendChild(TX(20,y+12,l.t,{fill:"#c4a2ff","font-size":11}));
+      const set=new Set(l.list);
+      for(let d=0;d<DOCS.length;d++){const x=90+d*72;const has=set.has(d);const inRes=has&&resSet.has(d);
+        svg.appendChild(S("rect",{x,y,width:64,height:20,rx:4,fill:inRes?"rgba(52,211,153,.25)":has?"rgba(56,189,248,.14)":"#141416",stroke:inRes?"#34d399":has?"#38bdf8":"#242a33","stroke-width":1.4}));
+        svg.appendChild(TX(x+32,y+14,has?("D"+(d+1)):"·",{fill:has?"#e4e4e7":"#3a3a42","font-size":9,"text-anchor":"middle"}));}
+      y+=28;});
+    // result row
+    svg.appendChild(TX(20,y+14,"result",{fill:"#34d399","font-size":11,"font-weight":700}));
+    for(let d=0;d<DOCS.length;d++){const x=90+d*72;const inRes=resSet.has(d);
+      svg.appendChild(S("rect",{x,y:y+2,width:64,height:20,rx:4,fill:inRes?"rgba(52,211,153,.3)":"#141416",stroke:inRes?"#34d399":"#242a33","stroke-width":inRes?2:1}));
+      svg.appendChild(TX(x+32,y+16,inRes?("D"+(d+1)):"·",{fill:inRes?"#e4e4e7":"#3a3a42","font-size":9,"text-anchor":"middle"}));}}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgQ").oninput=run;$("pgOp").onchange=run;$("pgRun").onclick=run;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔎",title:"Inverted Index",category:"Search",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"The Core of Full-Text Search",
+  tagline:"A map from each <b>term</b> to the list of documents that contain it (a <b>postings list</b>). Instead of scanning every document for a query, you look up terms and combine their postings — the data structure behind Elasticsearch, Lucene, and every search engine.",
+  pills:["<b>Term → docs</b>","<b>Postings lists</b>","<b>Intersect / union</b>","<b>Built at index time</b>"],
+  overview:"A <b>forward index</b> maps a document to its words (\"D1 contains cat, sat, the\"). Searching that way means scanning every document for the query — hopelessly slow at scale. An <b>inverted index</b> flips it: it maps each <b>term</b> to a <b>postings list</b> — the sorted list of document ids containing that term (often with term frequencies and positions). Building it is a one-time (or incremental) cost at <b>index time</b>: tokenize each document, then for every term append the doc id to that term's postings. At <b>query time</b> you look up only the query terms and <b>combine their postings lists</b>: a boolean AND <b>intersects</b> the lists (docs containing all terms), OR <b>unions</b> them, and NOT excludes. Because postings are kept sorted by doc id, intersection is a fast linear merge. Positions in the postings enable <b>phrase</b> queries (\"exact order\"), and per-term stats (frequency, document frequency) feed <b>relevance ranking</b> (TF-IDF/BM25). This is the fundamental structure of Lucene/Elasticsearch/Solr and web search.",
+  problem:"Text search over large corpora can't scan every document per query (O(total text) per search). Users expect sub-second results across millions/billions of documents. The inverted index moves the work to index time and reduces a query to looking up a few terms and merging their (often compressed) postings lists — turning search into set operations rather than full scans.",
+  diagram,diagramCaption:"Documents are inverted into term→postings; queries combine postings lists (AND=intersect, OR=union).",
+  how:[
+    "Index time: for each document, tokenize/analyze it into terms (lowercase, remove stopwords, stem).",
+    "For every term, append the document id (and position/frequency) to that term's postings list.",
+    "Keep postings lists sorted by doc id and compress them (delta + variable-byte/FOR encoding).",
+    "Query time: analyze the query the same way, fetch each term's postings list.",
+    "Combine lists: AND = intersect (merge), OR = union, phrase = positional intersect; then rank by relevance."
+  ],
+  complexity:[["Build","O(total tokens)"],["Term lookup","O(1) via dictionary"],["AND (intersect)","O(sum of postings)"],["Space","postings + term dict (compressed)"]],
+  advantages:["Sub-linear query time (touch only query terms)","Scales to billions of documents","Enables boolean, phrase, and ranked queries","Compresses extremely well (sorted doc ids)","Foundation for TF-IDF/BM25 relevance"],
+  disadvantages:["Index build/update cost & storage overhead","Updates/deletes are awkward (segment merges)","Needs an analysis pipeline (tokenizing, stemming)","Not great for structured range/aggregation alone","Memory/disk for large term dictionaries"],
+  tradeoffs:"An inverted index trades index-time work and storage for fast queries — the right trade for read-heavy search where documents are queried far more than they change. Updates are the pain point: Lucene-style engines write immutable <b>segments</b> and handle updates as delete-plus-reinsert, periodically <b>merging</b> segments in the background, which costs I/O and makes near-real-time indexing a tuning problem. Storing positions and frequencies enables phrases and ranking but enlarges the index; you choose what to store based on query needs. Compression (delta-encoding sorted doc ids plus variable-byte/FOR) dramatically shrinks postings at a small CPU cost. For purely structured filters/aggregations a columnar or B-tree index may be better; the inverted index shines specifically for term-based text retrieval.",
+  whenNot:"Don't build an inverted index for small datasets where a scan or a simple LIKE/regex is fine, or for purely structured queries (numeric ranges, joins, aggregations) better served by B-tree/columnar indexes. It's also not ideal when data changes extremely frequently and must be instantly consistent, since segment merging adds indexing latency. For approximate vector/semantic search, an ANN index (HNSW) complements or replaces it.",
+  sim,
+  code:{
+"Build":`# Invert documents into term -> sorted postings list.\nfrom collections import defaultdict\nindex = defaultdict(list)\nfor doc_id, text in enumerate(docs):\n    for pos, term in enumerate(analyze(text)):        # tokenize/lowercase/stem\n        # store (doc_id, position, ...) — positions enable phrase queries\n        if not index[term] or index[term][-1][0] != doc_id:\n            index[term].append((doc_id, [pos]))\n        else:\n            index[term][-1][1].append(pos)\n# index["cat"] -> [(0,[3]), (2,[0]), (5,[0])]   # docs 0,2,5 contain "cat"`,
+"Query (AND)":`# Boolean AND = intersect sorted postings via a linear merge (galloping).\ndef intersect(a, b):\n    i = j = 0; out = []\n    while i < len(a) and j < len(b):\n        if   a[i] == b[j]: out.append(a[i]); i += 1; j += 1\n        elif a[i] <  b[j]: i += 1        # advance the smaller — never rescan\n        else:              j += 1\n    return out\n\ndef search_and(terms):\n    lists = sorted((index[t] for t in terms), key=len)   # smallest first\n    result = doc_ids(lists[0])\n    for lst in lists[1:]:\n        result = intersect(result, doc_ids(lst))\n        if not result: break\n    return result`,
+"Compression":`# Postings are sorted doc ids -> delta-encode, then variable-byte compress.\ndoc_ids   = [3, 5, 12, 13, 40]\ndeltas    = [3, 2,  7,  1, 27]     # store gaps, not absolute ids\n# small gaps => few bytes each (VByte / Frame-of-Reference / PForDelta).\n# Lucene stores the TERM DICTIONARY as an FST and postings in compressed\n# blocks; skip lists let intersection 'skip' ahead without scanning all.`
+  },
+  realWorld:[
+    ["Lucene / Elasticsearch / Solr","Core engine is a segmented inverted index with BM25 ranking."],
+    ["Web search engines","Massive distributed inverted indexes over the crawled web."],
+    ["Database full-text (Postgres GIN)","GIN inverted indexes power to_tsvector/@@ text search."],
+    ["Log/observability search","Splunk, Loki, ELK index logs for fast term queries."],
+    ["Code search","GitHub/Sourcegraph index tokens/trigrams for fast lookups."]
+  ],
+  interview:[
+    ["basic","What is an inverted index?","A data structure mapping each term to a postings list — the documents (and often positions/frequencies) containing that term. It 'inverts' the natural document→words mapping into words→documents, so a search looks up query terms and combines their postings instead of scanning every document."],
+    ["basic","How does it make search fast?","Queries touch only the postings lists of the query terms, not the whole corpus. A term lookup is O(1) via the term dictionary, and combining lists (intersection/union) is linear in the size of those lists — which is far smaller than scanning all document text. The heavy work happens once at index time."],
+    ["inter","How is a boolean AND query executed?","Fetch each term's postings list (kept sorted by doc id), then intersect them with a linear merge: walk pointers through the lists, emitting doc ids present in all, advancing the pointer at the smaller id. Starting with the shortest list and using skip pointers/galloping search makes it faster. OR is a union merge; NOT excludes a list."],
+    ["inter","How do you support phrase queries like \"quick brown\"?","Store term positions in the postings (positional index). To match a phrase, intersect the documents that contain all the terms, then verify that the positions are adjacent/in order (position of 'brown' = position of 'quick' + 1) within the same document. This costs more storage and processing but enables exact-order matching."],
+    ["adv","How are inverted indexes updated, given documents change?","Lucene-style engines write immutable segments (mini inverted indexes). New/changed docs go into new segments; deletes are tombstones; an update is a delete + reinsert. A background process merges smaller segments into larger ones to reclaim space and keep query performance, applying deletions during the merge. This append-only design gives fast, lock-light writes at the cost of merge I/O and eventual (near-real-time) visibility."],
+    ["adv","How are postings lists compressed and why does it matter?","Because postings are sorted doc ids, you delta-encode them (store gaps) and then apply integer compression like variable-byte, Frame-of-Reference, or PForDelta, shrinking the index dramatically and improving cache/IO efficiency. The term dictionary itself is compressed (e.g., an FST). Skip lists embedded in postings let intersection jump ahead without decoding every entry, speeding up AND queries on long lists."],
+    ["sd","Design the indexing layer for a search engine.","At index time, run an analysis pipeline (tokenize, lowercase, stopwords, stemming) and build an inverted index of term→postings with positions and term frequencies, stored as immutable compressed segments with a term dictionary (FST). Shard the index by document across nodes and replicate for HA. At query time, analyze the query identically, scatter to shards, intersect/union postings, score with BM25, and gather the top-k. Merge segments in the background and support near-real-time refresh."]
+  ],
+  mistakes:["Not analyzing query and documents the same way (terms won't match).","Storing an unsorted/uncompressed index (slow, huge).","Intersecting starting from the largest list instead of the smallest.","Forgetting positions when phrase queries are required.","Trying to update documents in place instead of segment/rebuild strategy."],
+  best:["Use the same analyzer for indexing and querying.","Keep postings sorted; delta+compress and add skip pointers.","Store positions/frequencies only when phrases/ranking need them.","Intersect from the shortest postings list first.","Use immutable segments + background merges for updates; shard & replicate for scale."],
+  related:[["Full-Text Search","📄","Analysis + the index","full-text-search.html"],["Ranking (TF-IDF/BM25)","🏆","Score the matches","ranking.html"],["Elasticsearch","🔍","Distributed inverted index","elasticsearch.html"],["Trie","🌴","Term dictionary / prefixes","trie.html"],["Fuzzy Search","≈","Typo-tolerant matching","fuzzy-search.html"],["B-Tree","🌲","Structured index alt.","b-tree.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

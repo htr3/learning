@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TLS Handshake — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const steps=[["ClientHello","→","supported ciphers + client key share","#34d399",70],["ServerHello","←","chosen cipher + server key share","#38bdf8",95],["Certificate + Finished","←","cert (encrypted) proves identity","#38bdf8",120],["Finished + 🔒 app data","→","both derive keys → encrypted traffic","#34d399",145]];
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(TX(90,40,"Client",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-weight":700}));
+    g.appendChild(TX(530,40,"Server",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-weight":700}));
+    g.appendChild(S("line",{x1:90,y1:50,x2:90,y2:175,stroke:"#2f3742","stroke-width":1.5}));
+    g.appendChild(S("line",{x1:530,y1:50,x2:530,y2:175,stroke:"#2f3742","stroke-width":1.5}));
+    for(let i=0;i<=phase;i++){const s=steps[i];const rev=s[1]==="←";
+      g.appendChild(S("line",{x1:rev?530:90,y1:s[4],x2:rev?90:530,y2:s[4],stroke:s[3],"stroke-width":2,"marker-end":"url(#a)"}));
+      const t=S("text",{x:310,y:s[4]-5,fill:s[3],"font-size":9.5,"text-anchor":"middle"});t.textContent=s[0];g.appendChild(t);}
+    const s=steps[phase];lbl.textContent="TLS 1.3 — "+s[0];lbl.setAttribute("fill",s[3]);sub.textContent=s[2]+(phase>=3?" (1 round trip total)":"");}
+  function step(){phase=(phase+1)%steps.length;timer=2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Step through a <b>TLS 1.3</b> handshake. Watch what's exchanged, when the server's certificate is verified, and the moment both sides derive the same shared secret so traffic becomes <b>encrypted</b>. TLS 1.3 needs just <b>1 round trip</b> (vs 2 in TLS 1.2) — and 0-RTT on resumption.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Version</label><select id="pgVer"><option value="13">TLS 1.3 (1-RTT)</option><option value="12">TLS 1.2 (2-RTT)</option></select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgNext" class="go">▶ Next step</button><button id="pgAuto">Auto-play</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Restart</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">The handshake authenticates the server (via its certificate chain) and agrees a shared symmetric key using ephemeral Diffie-Hellman — giving forward secrecy. Bulk data then uses fast symmetric encryption.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Step</div><div class="v ac" id="pgStep">0 / 5</div></div>
+        <div class="pg-stat"><div class="k">Channel</div><div class="v" id="pgChan">plaintext</div></div>
+        <div class="pg-stat"><div class="k">Server verified</div><div class="v wa" id="pgVerif">no</div></div>
+        <div class="pg-stat"><div class="k">Round trips</div><div class="v ok" id="pgRTT">1</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=230;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const STEPS13=[
+    ["ClientHello","→","Client lists supported cipher suites, TLS versions, and sends its ephemeral (EC)DHE key share.",false,false],
+    ["ServerHello","←","Server picks a cipher suite and sends its own key share. Both can now compute the shared secret.",false,false],
+    ["Certificate + CertVerify","←","Server sends its certificate chain (encrypted) and a signature proving it owns the private key.",true,false],
+    ["Server Finished","←","Server confirms the handshake hash. Client validates the cert against trusted CAs.",true,true],
+    ["Client Finished + App Data","→","Client confirms; both derive session keys. 🔒 Application data is now encrypted.",true,true]
+  ];
+  const STEPS12=[
+    ["ClientHello","→","Client sends supported ciphers and a random nonce.",false,false],
+    ["ServerHello + Certificate","←","Server sends chosen cipher, its certificate, and a random nonce.",false,false],
+    ["ClientKeyExchange","→","Client verifies cert, sends key material (encrypted with server's public key).",true,false],
+    ["ChangeCipherSpec + Finished","→","Client switches to encrypted mode and sends Finished.",true,true],
+    ["Server Finished","←","Server switches to encrypted mode. 🔒 Secure channel established (2 round trips).",true,true]
+  ];
+  let idx,timer=null;
+  function steps(){return ($("pgVer").value||"13")==="13"?STEPS13:STEPS12;}
+  function reset(){idx=-1;if(timer){clearInterval(timer);timer=null;$("pgAuto").textContent="Auto-play";}draw();stats();$("pgLog").innerHTML="";log("click Next to begin the "+($("pgVer").value==="12"?"TLS 1.2":"TLS 1.3")+" handshake","ac");}
+  function next(){const st=steps();if(idx>=st.length-1){log("handshake complete — secure channel ready","ok");return;}
+    idx++;const s=st[idx];log((s[1]==="→"?"client → server: ":"server → client: ")+s[0]+" — "+s[2],s[3]?"ac":"wa");draw();stats();}
+  function stats(){const st=steps();$("pgStep").textContent=(idx+1)+" / "+(st.length);
+    const s=idx>=0?st[idx]:null;const enc=s?s[3]:false;const verified=s?s[4]:false;
+    $("pgChan").textContent=enc?"encrypted 🔒":"plaintext";$("pgChan").className="v "+(enc?"ok":"bad");
+    $("pgVerif").textContent=verified?"yes ✓":"no";$("pgVerif").className="v "+(verified?"ok":"wa");
+    $("pgRTT").textContent=($("pgVer").value||"13")==="13"?"1":"2";}
+  function draw(){svg.innerHTML="";const st=steps();
+    svg.appendChild(TX(80,20,"Client",{fill:"#c4a2ff","font-size":12,"text-anchor":"middle","font-weight":700}));
+    svg.appendChild(TX(W-80,20,"Server",{fill:"#c4a2ff","font-size":12,"text-anchor":"middle","font-weight":700}));
+    svg.appendChild(S("line",{x1:80,y1:28,x2:80,y2:H-10,stroke:"#2f3742","stroke-width":1.5}));
+    svg.appendChild(S("line",{x1:W-80,y1:28,x2:W-80,y2:H-10,stroke:"#2f3742","stroke-width":1.5}));
+    const y0=48,dy=(H-70)/st.length;
+    for(let i=0;i<=idx;i++){const s=st[i];const rev=s[1]==="←";const y=y0+i*dy;
+      const col=s[3]?"#34d399":"#fbbf24";
+      svg.appendChild(S("line",{x1:rev?W-80:80,y1:y,x2:rev?80:W-80,y2:y,stroke:col,"stroke-width":2,"marker-end":"url(#a)"}));
+      svg.appendChild(TX(W/2,y-5,(s[3]?"🔒 ":"")+s[0],{fill:col,"font-size":10,"text-anchor":"middle","font-weight":700}));}
+    if(idx<0)svg.appendChild(TX(W/2,H/2,"click Next step ▶",{fill:"#6b6b73","font-size":13,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+
+  $("pgNext").onclick=next;$("pgReset").onclick=reset;$("pgVer").onchange=reset;
+  $("pgAuto").onclick=()=>{if(timer){clearInterval(timer);timer=null;$("pgAuto").textContent="Auto-play";}
+    else{$("pgAuto").textContent="⏸ Stop";timer=setInterval(()=>{const st=steps();if(idx>=st.length-1){clearInterval(timer);timer=null;$("pgAuto").textContent="Auto-play";}else next();},1100);}};
+  reset();
+}
+
+const DATA={
+  badge:"🔐",title:"TLS Handshake",category:"Networking",difficulty:"Hard",readingTime:"10 min",
+  eyebrow:"Establishing an Encrypted Channel",
+  tagline:"How HTTPS becomes secure: the TLS handshake <b>authenticates the server</b> (via certificates), <b>agrees a shared secret</b> (ephemeral Diffie-Hellman for forward secrecy), and switches to fast <b>symmetric encryption</b> — in just <b>one round trip</b> with TLS 1.3.",
+  pills:["<b>Authenticate</b> server","<b>Key exchange</b> (ECDHE)","<b>Forward secrecy</b>","<b>1-RTT</b> (TLS 1.3)"],
+  overview:"TLS (Transport Layer Security) turns a plain TCP (or QUIC) connection into an authenticated, encrypted channel. The <b>handshake</b> accomplishes three things: (1) <b>authentication</b> — the server proves its identity with an X.509 <b>certificate</b> signed by a trusted Certificate Authority, and the client validates the chain; (2) <b>key agreement</b> — both sides use <b>ephemeral Diffie-Hellman (ECDHE)</b> to derive the same shared secret without ever transmitting it, giving <b>forward secrecy</b> (past traffic stays safe even if the long-term key later leaks); and (3) <b>cipher negotiation</b> — they pick a mutually supported cipher suite. Once keys are derived, bulk data uses efficient <b>symmetric</b> encryption (e.g., AES-GCM or ChaCha20-Poly1305). <b>TLS 1.3</b> streamlined all of this to a <b>single round trip</b> (1-RTT), with 0-RTT resumption for repeat visits — a big improvement over TLS 1.2's two round trips.",
+  problem:"The internet is a hostile, shared medium: without protection, anyone on the path can read, modify, or impersonate. Applications need confidentiality (eavesdroppers can't read data), integrity (tampering is detected), and authentication (you're really talking to the intended server). TLS provides all three, and the handshake is how two parties who've never met securely bootstrap a shared encryption key over an open network.",
+  diagram,diagramCaption:"TLS 1.3 in one round trip: hellos + key shares, certificate/verify, then encrypted application data.",
+  how:[
+    "ClientHello: client sends supported TLS versions, cipher suites, and its ephemeral (EC)DHE public key share.",
+    "ServerHello: server picks a cipher suite and sends its own key share — both can now compute the shared secret.",
+    "Certificate + CertificateVerify: server sends its certificate chain (encrypted in 1.3) and signs the handshake to prove it holds the private key.",
+    "Finished: both sides send a MAC over the handshake transcript; the client validates the certificate against trusted CAs.",
+    "Keys are derived from the shared secret; application data flows encrypted with symmetric AEAD ciphers (session resumption enables 0-RTT next time)."
+  ],
+  complexity:[["TLS 1.3 setup","1 RTT (0-RTT resume)"],["TLS 1.2 setup","2 RTT"],["Key exchange","ECDHE (forward secrecy)"],["Bulk cipher","AES-GCM / ChaCha20"]],
+  advantages:["Confidentiality, integrity, and authentication","Forward secrecy via ephemeral keys (TLS 1.3 default)","Fast: 1-RTT handshake, 0-RTT resumption","Strong modern AEAD ciphers","Widely supported; foundation of HTTPS/QUIC"],
+  disadvantages:["Handshake adds latency vs plaintext (esp. 1.2)","Certificate management/rotation overhead","Misconfiguration risks (weak ciphers, expired certs)","0-RTT data is replay-vulnerable if misused","CPU cost of crypto (mitigated by hardware/session reuse)"],
+  tradeoffs:"TLS trades a little setup latency and CPU for essential security. TLS 1.3 minimizes the latency cost (1-RTT, 0-RTT resumption) and removes legacy weak options, but 0-RTT early data can be replayed, so it must only carry idempotent requests. Ephemeral key exchange gives forward secrecy at slightly more compute than static RSA key transport (which 1.3 removed entirely). Terminating TLS at a load balancer/CDN offloads crypto from app servers and simplifies certs, but leaves the internal hop plaintext unless you re-encrypt (mTLS). Overall the security guarantees vastly outweigh the modest overhead — HTTPS is now the default everywhere.",
+  whenNot:"There's essentially no modern case for skipping TLS on network traffic — plaintext HTTP is deprecated. The real decisions are where to terminate it (edge vs end-to-end), whether internal service traffic needs mTLS (usually yes in zero-trust), and whether to enable 0-RTT (only for safe, idempotent requests). Avoid legacy TLS 1.0/1.1 and weak cipher suites entirely.",
+  sim,
+  code:{
+"Inspect":`# See the negotiated version, cipher, and certificate chain:\nopenssl s_client -connect example.com:443 -tls1_3 </dev/null\n#   SSL-Session: Protocol: TLSv1.3, Cipher: TLS_AES_128_GCM_SHA256\n#   Server certificate ... issuer=... verify return:0 (ok)\n\ncurl -v https://example.com 2>&1 | grep -E "SSL connection|subject|issuer"`,
+"Server (Nginx)":`server {\n  listen 443 ssl;\n  ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;\n  ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;\n  ssl_protocols       TLSv1.2 TLSv1.3;         # drop 1.0/1.1\n  ssl_ciphers         'TLS_AES_128_GCM_SHA256:ECDHE-ECDSA-AES128-GCM-SHA256';\n  ssl_prefer_server_ciphers off;               # let client choose (1.3)\n  ssl_session_tickets on;                       # enable resumption\n  add_header Strict-Transport-Security "max-age=63072000" always;  # HSTS\n}`,
+"Key schedule":`// TLS 1.3 derives keys from an ECDHE shared secret via HKDF.\n// Neither side ever transmits the secret — they compute the SAME value:\nclient:  shared = ECDH(client_priv, server_pub)\nserver:  shared = ECDH(server_priv, client_pub)   // identical result\n\n// HKDF expands 'shared' + handshake transcript into traffic keys:\nhandshake_secret = HKDF-Extract(salt, shared)\nclient_key = HKDF-Expand-Label(handshake_secret, "c hs traffic", ...)\nserver_key = HKDF-Expand-Label(handshake_secret, "s hs traffic", ...)\n// Ephemeral keys => FORWARD SECRECY: leaking the cert key can't decrypt past traffic.`
+  },
+  realWorld:[
+    ["HTTPS (every website)","TLS secures virtually all web traffic; browsers mark plain HTTP 'Not secure'."],
+    ["HTTP/3 / QUIC","Embeds TLS 1.3 directly into the transport handshake."],
+    ["Let's Encrypt / ACME","Automated free certificates powering mass HTTPS adoption."],
+    ["mTLS in service meshes","Istio/Linkerd use mutual TLS to authenticate service-to-service calls."],
+    ["Email, VPNs, databases","SMTP/IMAP over TLS, TLS-based VPNs, and encrypted DB connections."]
+  ],
+  interview:[
+    ["basic","What does the TLS handshake accomplish?","Three things: authenticates the server (and optionally the client) via certificates, agrees on a shared symmetric key without transmitting it (key exchange), and negotiates the cipher suite. After it completes, both sides encrypt/authenticate application data with fast symmetric AEAD ciphers, providing confidentiality, integrity, and authentication."],
+    ["basic","Why use asymmetric crypto for the handshake but symmetric for data?","Asymmetric (public-key) operations are needed to authenticate identities and securely agree on a key over an untrusted network, but they're computationally expensive. Symmetric encryption is far faster for bulk data. So TLS uses asymmetric crypto only during the handshake to establish a shared symmetric key, then switches to symmetric encryption for all subsequent traffic."],
+    ["inter","How does the server prove its identity?","It presents an X.509 certificate binding its domain to a public key, signed by a Certificate Authority the client trusts. The client verifies the signature chain up to a trusted root, checks validity dates, revocation, and that the domain matches. The server also signs the handshake transcript (CertificateVerify), proving it possesses the certificate's private key — not just a copy of the cert."],
+    ["inter","What is forward secrecy and how does TLS provide it?","Forward secrecy means recording encrypted traffic today can't be decrypted later even if the server's long-term private key is compromised. TLS achieves it with ephemeral Diffie-Hellman (ECDHE): a fresh key pair per session whose private parts are discarded afterward. Since the session key was never derived from (or protected solely by) the long-term key, leaking that key can't retroactively decrypt past sessions. TLS 1.3 mandates ephemeral key exchange."],
+    ["inter","How is TLS 1.3 faster than TLS 1.2?","TLS 1.2 needs two round trips (hello exchange, then key exchange/finished). TLS 1.3 combines steps: the client sends its key share in the ClientHello, the server responds with its share, certificate, and Finished, so data can flow after just one round trip. Resumed sessions can even send 0-RTT early data. TLS 1.3 also removed legacy/weak features and encrypts more of the handshake."],
+    ["adv","What is 0-RTT and its security caveat?","On resumption, TLS 1.3 lets a client send application data in its very first message using a pre-shared key from a prior session — zero round trips before data. The caveat is replay: because this early data isn't tied to a fresh handshake exchange, an attacker can capture and resend it. So 0-RTT must only carry idempotent, non-state-changing requests (e.g., a GET), with server-side replay protection."],
+    ["sd","Where should TLS be terminated in a large system?","Commonly at the edge — CDN or reverse proxy/load balancer — which offloads crypto from app servers, centralizes certificate management (e.g., ACME auto-renewal), and enables caching/routing on decrypted requests. In zero-trust internal networks, re-encrypt to backends or use mTLS (often via a service mesh) so the internal hop isn't plaintext. Enforce TLS 1.2+/1.3, strong ciphers, HSTS, and automated cert rotation."]
+  ],
+  mistakes:["Allowing legacy TLS 1.0/1.1 or weak cipher suites.","Letting certificates expire (outages) — automate renewal.","Using 0-RTT for non-idempotent requests (replay risk).","Terminating TLS at the edge but leaving internal traffic plaintext.","Not validating the full certificate chain / hostname on clients."],
+  best:["Use TLS 1.3 (fallback 1.2); disable older versions and weak ciphers.","Automate certificate issuance/rotation (ACME/Let's Encrypt).","Enable HSTS and OCSP stapling; prefer AEAD ciphers with forward secrecy.","Restrict 0-RTT to idempotent requests with replay protection.","Use mTLS / re-encryption for internal service traffic in zero-trust."],
+  related:[["HTTP/2 & HTTP/3","🚀","QUIC embeds TLS 1.3","http2-3.html"],["TCP & UDP","📶","TLS runs over both","tcp-udp.html"],["Forward & Reverse Proxy","🔁","TLS termination","forward-proxy.html"],["Service Mesh","🕸️","Automatic mTLS","service-mesh.html"],["REST API","🌐","Secured by HTTPS","rest.html"],["OAuth2 & JWT","🔑","Auth over TLS","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

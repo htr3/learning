@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lamport Clocks — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const rows=[70,130];
+  function dot(x,y,v,hot){g.appendChild(S("circle",{cx:x,cy:y,r:7,fill:hot?"#a06bff":"#34d399"}));
+    const t=S("text",{x:x,y:y-13,fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-weight":700});t.textContent=v;g.appendChild(t);}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    rows.forEach((y,i)=>{g.appendChild(S("line",{x1:70,y1:y,x2:560,y2:y,stroke:"#2f3742","stroke-width":1.5}));
+      const t=S("text",{x:35,y:y+4,fill:"#c4a2ff","font-size":11});t.textContent="P"+i;g.appendChild(t);});
+    dot(150,70,"1");dot(250,70,"2");
+    dot(180,130,"1");
+    if(phase>=1){g.appendChild(S("line",{x1:250,y1:70,x2:380,y2:130,stroke:"#a06bff","stroke-width":1.6}));dot(380,130,"3",true);}
+    if(phase===0){lbl.textContent="tick +1 on every local event";lbl.setAttribute("fill","#c4a2ff");sub.textContent="P0: 1,2   P1: 1  — each process counts its own events";}
+    else{lbl.textContent="on receive: max(local, msg) + 1";lbl.setAttribute("fill","#34d399");sub.textContent="P1 receives P0's timestamp 2 → max(1,2)+1 = 3, so send(2) < receive(3)";}}
+  function step(){phase=(phase+1)%2;timer=2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Three processes, each with a single integer Lamport clock. Every local event ticks +1; sending carries the timestamp; on receive the clock jumps to <code>max(local, message) + 1</code>. This guarantees if event A causally precedes B then <b>L(A) &lt; L(B)</b> — a consistent ordering — with ties broken by process id for a total order.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-btns"><button id="pgE0" class="go">P0 event</button><button id="pgE1" class="go">P1 event</button><button id="pgE2" class="go">P2 event</button></div>
+      <div class="pg-field" style="margin-top:12px"><label>Send message</label>
+        <div style="display:flex;gap:6px">
+          <select id="pgFrom"><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option></select>
+          <span style="align-self:center;color:var(--muted)">→</span>
+          <select id="pgTo"><option value="1">P1</option><option value="2">P2</option><option value="0">P0</option></select>
+        </div></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgSend">Send / receive</button></div>
+      <div class="pg-btns" style="margin-top:12px"><button id="pgOrder">Show total order</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Note: a smaller timestamp does NOT prove causality — that's the key limitation vs vector clocks. Lamport gives order, not concurrency detection.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">P0 clock</div><div class="v ac" id="pgC0">0</div></div>
+        <div class="pg-stat"><div class="k">P1 clock</div><div class="v ok" id="pgC1">0</div></div>
+        <div class="pg-stat"><div class="k">P2 clock</div><div class="v wa" id="pgC2">0</div></div>
+        <div class="pg-stat"><div class="k">Events</div><div class="v" id="pgN">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const P=3,W=560,H=230;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const rowY=[55,120,185];const colors=["#c4a2ff","#34d399","#fbbf24"];
+  let clock,events,step;
+  function reset(){clock=[0,0,0];events=[];step=0;draw();stats();$("pgLog").innerHTML="";log("all Lamport clocks = 0","ac");}
+  function localEvent(p){clock[p]++;step++;events.push({p,ts:clock[p],step,type:"e"});log("P"+p+" event → L="+clock[p],"ac");draw();stats();}
+  function send(){const from=+$("pgFrom").value,to=+$("pgTo").value;
+    if(from===to){log("choose two different processes","wa");return;}
+    clock[from]++;step++;const msgTs=clock[from];const sendEv={p:from,ts:msgTs,step,type:"s"};events.push(sendEv);
+    clock[to]=Math.max(clock[to],msgTs)+1;step++;
+    events.push({p:to,ts:clock[to],step,type:"r",fromStep:sendEv.step});
+    log("P"+from+" send(L="+msgTs+") → P"+to+": max("+(clock[to]-1>=msgTs?"…":"")+")+1 = "+clock[to],"ok");draw();stats();}
+  function showOrder(){if(!events.length){log("no events yet","wa");return;}
+    const sorted=events.slice().sort((a,b)=>a.ts-b.ts||a.p-b.p);
+    log("total order (ts, then pid): "+sorted.map(e=>"P"+e.p+":"+e.ts).join("  <  "),"ac");}
+  function draw(){svg.innerHTML="";
+    for(let p=0;p<P;p++){svg.appendChild(S("line",{x1:70,y1:rowY[p],x2:W-20,y2:rowY[p],stroke:"#2f3742","stroke-width":1.5}));
+      svg.appendChild(TX(30,rowY[p]+4,"P"+p,{fill:colors[p],"font-size":12,"font-weight":700}));}
+    const maxStep=Math.max(6,step);const sx=s=>80+(s-0.5)*((W-110)/(maxStep+1));
+    events.forEach(ev=>{if(ev.type==="r"){const src=events.find(e=>e.step===ev.fromStep);if(src)svg.appendChild(S("line",{x1:sx(src.step),y1:rowY[src.p],x2:sx(ev.step),y2:rowY[ev.p],stroke:"#a06bff","stroke-width":1.5}));}});
+    events.forEach(ev=>{const x=sx(ev.step),y=rowY[ev.p];
+      svg.appendChild(S("circle",{cx:x,cy:y,r:9,fill:colors[ev.p],stroke:"#0d0d0f","stroke-width":1.5}));
+      svg.appendChild(TX(x,y+4,String(ev.ts),{fill:"#0d0d0f","font-size":10,"text-anchor":"middle","font-weight":700}));
+      svg.appendChild(TX(x,y-16,ev.type==="s"?"snd":ev.type==="r"?"rcv":"evt",{fill:"#5b5b63","font-size":8,"text-anchor":"middle"}));});
+    svg.appendChild(TX(W/2,H-4,"numbers are Lamport timestamps; arrows are messages",{fill:"#5b5b63","font-size":10,"text-anchor":"middle"}));}
+  function stats(){$("pgC0").textContent=clock[0];$("pgC1").textContent=clock[1];$("pgC2").textContent=clock[2];$("pgN").textContent=events.length;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgE0").onclick=()=>localEvent(0);$("pgE1").onclick=()=>localEvent(1);$("pgE2").onclick=()=>localEvent(2);
+  $("pgSend").onclick=send;$("pgOrder").onclick=showOrder;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"⏱️",title:"Lamport Clocks",category:"Distributed Systems",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Logical Timestamps",
+  tagline:"A single integer per process that orders events without any synchronized clock. Lamport's rule guarantees that if event A <b>happened-before</b> B, then <b>L(A) &lt; L(B)</b> — giving a consistent (and, with tie-breaking, total) ordering of distributed events.",
+  pills:["<b>O(1)</b> scalar","<b>A→B ⇒ L(A)&lt;L(B)</b>","<b>Total order</b> with pid","<b>No clock sync</b>"],
+  overview:"Leslie Lamport's logical clock (1978) assigns each event a number using a simple rule set. Every process keeps one counter: it increments the counter before each local event, attaches the counter to any message it sends, and on receiving a message sets its counter to <b>max(local, received) + 1</b>. This enforces the <b>clock condition</b>: whenever event A causally precedes event B (same process, or connected by a message chain), A's timestamp is strictly less than B's. Note the one-way nature — A→B implies L(A)&lt;L(B), but a smaller timestamp does <b>not</b> prove causality; two unrelated (concurrent) events can have any timestamps. To break ties and get a <b>total order</b>, combine the timestamp with the process id: (L, pid). Lamport clocks are the basis for algorithms like distributed mutual exclusion and totally-ordered multicast.",
+  problem:"Distributed events have no shared physical clock, and wall-clock time is unreliable (skew, drift, NTP jumps). Yet many algorithms need a consistent ordering of events across machines — for mutual exclusion, log ordering, or snapshot consistency. Lamport clocks provide a cheap, correct logical ordering that respects causality, without synchronizing physical clocks.",
+  diagram,diagramCaption:"Each event ticks +1; a receive jumps to max(local, message)+1, so a send always precedes its receive.",
+  how:[
+    "Each process keeps an integer counter L, initialized to 0.",
+    "Before any local event, increment L (L = L + 1).",
+    "When sending a message, increment L and attach it to the message.",
+    "On receiving a message with timestamp t, set L = max(L, t) + 1.",
+    "For a total order, order events by (L, processId) so ties are broken deterministically."
+  ],
+  complexity:[["Per event","O(1)"],["Message overhead","1 integer"],["Guarantee","A→B ⇒ L(A)<L(B)"],["Concurrency detection","not possible"]],
+  advantages:["Tiny: a single integer, O(1) everywhere","Respects causality (the clock condition)","Enables a total order with (L, pid)","No physical clock synchronization required","Simple to implement and reason about"],
+  disadvantages:["Cannot detect concurrency (unlike vector clocks)","Small timestamp doesn't imply causal ancestry","Total order is arbitrary for concurrent events","Counters grow unbounded over time"],
+  tradeoffs:"Lamport clocks are the minimalist choice: O(1) space and one integer per message, versus vector clocks' O(n). The cost is expressiveness — they give you a consistent order but throw away concurrency information, so you can't tell whether two events were causally related or independent. If your algorithm only needs 'some' consistent/total order (e.g., tie-breaking, mutual exclusion, ordered multicast), Lamport is ideal. If you need to detect and merge concurrent conflicting updates (Dynamo-style), you must step up to vector clocks or dotted version vectors.",
+  whenNot:"Don't use Lamport clocks when you need to detect concurrency or resolve conflicting writes — a small timestamp can't distinguish causal from concurrent, so use vector clocks/CRDTs. They're also unnecessary when a single leader already serializes events, and they don't provide real-time/wall-clock guarantees (for that, look at hybrid logical clocks or TrueTime).",
+  sim,
+  code:{
+"Python":`class LamportClock:\n    def __init__(self): self.t = 0\n    def local_event(self):\n        self.t += 1                       # tick before the event\n        return self.t\n    def send(self):\n        self.t += 1\n        return self.t                     # piggyback timestamp on message\n    def receive(self, msg_t):\n        self.t = max(self.t, msg_t) + 1   # the Lamport merge rule\n        return self.t\n\n# Total order: sort events by (timestamp, process_id)\nevents.sort(key=lambda e: (e.timestamp, e.process_id))`,
+"Total-order multicast":`# Totally-ordered multicast using Lamport timestamps (Lamport 1978):\n# 1. tag each message with (L, pid) and multicast it (incl. to self)\n# 2. every node keeps a queue sorted by (L, pid)\n# 3. deliver a message only when it's at the queue head AND the node has\n#    received a higher-timestamped ack from every other node\n#    -> guarantees all nodes deliver in the SAME total order\ndef on_receive(msg):\n    clock.receive(msg.t)\n    queue.insert_sorted(msg)         # by (t, pid)\n    multicast_ack(clock.send())\n    deliver_stable_prefix()`,
+"Ordering caveat":`// The clock condition is one-directional:\n//   A happened-before B   =>   L(A) < L(B)   (always true)\n//   L(A) < L(B)           =>   A happened-before B   (NOT necessarily!)\n// Two concurrent events can have L(A) < L(B) purely by chance.\n// => Lamport clocks give ORDER, not CAUSALITY detection.\n// For "did A cause B, or are they concurrent?" use vector clocks.`
+  },
+  realWorld:[
+    ["Distributed mutual exclusion","Lamport's classic algorithm uses timestamps to grant a lock fairly in FIFO causal order."],
+    ["Totally-ordered multicast","Replicated state machines deliver messages in a single agreed order via Lamport timestamps."],
+    ["Databases (e.g. commit ordering)","Logical timestamps help order transactions/events without synchronized clocks."],
+    ["Hybrid Logical Clocks (HLC)","Combine Lamport logic with physical time; used in CockroachDB, MongoDB."],
+    ["Version stamps in caches/logs","Monotonic logical counters order updates across replicas."]
+  ],
+  interview:[
+    ["basic","What is a Lamport clock?","A logical clock: a single integer counter per process that produces timestamps for events. Its update rules guarantee that if one event causally happened-before another, the first has a smaller timestamp — giving a consistent ordering of distributed events without any synchronized physical clock."],
+    ["basic","State the Lamport clock rules.","Increment the counter before each local event; attach the (incremented) counter to outgoing messages; on receiving a message with timestamp t, set the counter to max(local, t) + 1. This ensures every message's send timestamp is strictly less than its receive timestamp."],
+    ["inter","What is the 'clock condition' and why is it one-directional?","The clock condition states: if A → B (A happened-before B) then L(A) < L(B). It's one-directional because the converse fails: L(A) < L(B) does not imply A → B. Two concurrent, causally-unrelated events can end up with any relative timestamps, so a smaller timestamp doesn't prove causal ancestry."],
+    ["inter","How do you get a total order from Lamport clocks?","Lamport timestamps alone give a partial order (concurrent events may tie). Break ties with a unique, consistent secondary key — typically the process id — ordering events by the pair (timestamp, processId). Every node applies the same rule, so they all agree on one total order, which is what totally-ordered multicast and mutual-exclusion algorithms rely on."],
+    ["adv","Lamport clocks vs vector clocks — when to use which?","Use Lamport clocks when you only need a consistent/total order and want minimal overhead (one integer). Use vector clocks when you must detect concurrency or resolve conflicting writes, since only vectors capture the full happened-before relation and can tell causal from concurrent events — at O(n) space instead of O(1)."],
+    ["adv","What are Hybrid Logical Clocks and why do they exist?","HLCs combine Lamport's logical rule with physical wall-clock time into one timestamp that stays close to real time yet preserves causality (monotonic, A→B ⇒ HLC(A)<HLC(B)) despite clock skew. They give the ordering guarantees of Lamport clocks plus meaningful physical-time semantics for TTLs, snapshots, and debugging — used by CockroachDB and MongoDB."],
+    ["sd","Where would you apply Lamport clocks in a system design?","For ordering without synchronized clocks: totally-ordered multicast to replicas (state-machine replication), fair distributed mutual exclusion / lock queues, ordering log entries or events across services for a deterministic replay, and as the basis for HLCs when you also want near-real-time timestamps. If the design needs conflict detection instead of just ordering, switch to vector clocks."]
+  ],
+  mistakes:["Assuming L(A) < L(B) means A caused B (it doesn't).","Trying to detect concurrency with Lamport clocks (impossible; use vectors).","Forgetting to break ties with pid, so 'total order' isn't actually total.","Treating logical timestamps as physical/wall-clock time.","Not incrementing on send/receive, breaking the clock condition."],
+  best:["Use Lamport clocks when you need order, not concurrency detection.","Break ties with (timestamp, processId) for a deterministic total order.","Increment strictly on every local event, send, and receive.","Upgrade to vector clocks when conflict detection is required.","Consider Hybrid Logical Clocks when you also need physical-time meaning."],
+  related:[["Vector Clocks","🕰️","Detects concurrency","vector-clocks.html"],["Consensus / Raft","🧭","Ordering the log","consensus-raft.html"],["Distributed Locking","🔒","Mutual exclusion","distributed-lock.html"],["Gossip Protocol","🗣️","Versioned updates","gossip.html"],["Quorum","🗳️","Conflict resolution","quorum.html"],["Split Brain","🧠","Divergence & order","split-brain.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

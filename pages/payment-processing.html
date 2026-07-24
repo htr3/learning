@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Payment Processing System — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:770px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:600px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:16px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+  .pg-stage svg{width:100%;height:auto;display:block;overflow:visible}
+  .pg-log{margin-top:12px;background:var(--panel);border:1px solid var(--gray-border);border-radius:10px;padding:10px 12px;
+    height:120px;overflow-y:auto;font-family:"JetBrains Mono",monospace;font-size:11.5px;line-height:1.7}
+  .pg-log .ln{color:#a9a9b3} .pg-log .ok{color:var(--ok)} .pg-log .bad{color:var(--bad)} .pg-log .wa{color:var(--warn)} .pg-log .ac{color:#c4a2ff}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">💳</span> Payment Processing System</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Payment Processing</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Distributed Txn</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Saga Simulator</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Payment Processing System</h1>
+      <p class="tagline">How Stripe / PayPal move money correctly — a checkout initiates a payment, the gateway
+        <b>authorizes</b> and later <b>captures</b> funds, <b>fraud</b> checks gate it, a <b>double-entry ledger</b>
+        records every cent, a <b>saga</b> coordinates the distributed transaction (with compensating rollbacks),
+        the <b>outbox</b> pattern reliably emits events to Kafka, and <b>idempotency</b> guarantees you're never charged
+        twice. Explore each with live visualizations and a real saga simulator.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>Exactly-once</b>&nbsp;charging</span>
+        <span class="hpill"><b>Saga</b>&nbsp;+ compensation</span>
+        <span class="hpill"><b>Double-entry</b>&nbsp;ledger</span>
+        <span class="hpill"><b>Live</b>&nbsp;saga simulator</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Design Choices</div><h2>Distributed Transactions</h2></div></div>
+      <div class="card">
+        <div class="block-title">2PC vs Saga vs Outbox / Eventual</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>Why payments avoid 2PC —</b> two-phase commit holds locks across services and blocks if the coordinator dies — unacceptable at scale and across external banks. Payments use a <b>saga</b>: a sequence of local transactions where each step has a <b>compensating action</b> that semantically undoes it (refund, release hold), plus <b>idempotency</b> and <b>retries</b> to survive failures.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The core pieces — the flow, idempotency keys, a saga orchestrator with compensation, the transactional outbox, a double-entry ledger and retries with backoff.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Saga &amp; Idempotency Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Fraud decline rate <b id="pgFraudV">10%</b></label><input id="pgFraud" type="range" min="0" max="50" step="5" value="10"></div>
+            <div class="pg-field"><label>Bank failure rate <b id="pgBankV">15%</b></label><input id="pgBank" type="range" min="0" max="60" step="5" value="15"></div>
+            <div class="pg-field"><label>Max retries <b id="pgMaxV">2</b></label><input id="pgMax" type="range" min="0" max="4" step="1" value="2"></div>
+            <div class="pg-field">
+              <label>Idempotency</label>
+              <select id="pgIdem"><option value="on" selected>On (safe)</option><option value="off">Off (unsafe)</option></select>
+            </div>
+            <div class="pg-btns"><button id="pgDup" class="go">⧉ Retry last (same key)</button></div>
+            <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Payments stream through the saga. Raise the failure rates to trigger compensations &amp; retries. Hit <b>Retry last</b> to resend a completed payment's key — with idempotency <b>on</b> it's a no-op; turn it <b>off</b> to see a double charge.</p>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Succeeded</div><div class="v ok" id="pgOk">0</div></div>
+              <div class="pg-stat"><div class="k">Compensated</div><div class="v wa" id="pgComp">0</div></div>
+              <div class="pg-stat"><div class="k">Retries</div><div class="v ac" id="pgRetries">0</div></div>
+              <div class="pg-stat"><div class="k">Dbl-charge stopped</div><div class="v ok" id="pgPrevented">0</div></div>
+              <div class="pg-stat"><div class="k">Ledger</div><div class="v" id="pgLedger">$0</div></div>
+            </div>
+            <div id="pgViz"></div>
+            <div class="pg-log" id="pgLog"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   PAYMENT PROCESSING SYSTEM — modular vanilla JS (SVG, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* NAVIGATION */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* SIDEBAR */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* CODE VIEWER */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally "+
+    "function const let var await async of in typeof this export default throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None while not and or true false null val "+
+    "String List Map Set Node BigDecimal Transaction begin commit rollback SELECT INSERT UPDATE FROM WHERE select insert update").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(#[^\n]*|\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* ANIMATION ENGINE */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* VIZ base */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":10.5,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 650 200"); }
+  setup(){
+    this.defs=[["👤","User"],["🛒","Checkout"],["💳","Gateway"],["🛡️","Fraud"],["📒","Ledger"],["📨","Kafka"],["🏦","Bank"],["🔔","Notify"],["💰","Settle"]];
+    this.w=66; const gap=5; this.xs=[]; let x=6;
+    this.defs.forEach((d,i)=>{ this.xs.push(x);
+      const col=i===2?"#7C3AED":i===3?"#f87171":i===4?"#38bdf8":i===5?"#fbbf24":i===6?"#34d399":"#3a3a42";
+      this.box(x,86,this.w,44,d[1],col,d[0]);
+      if(i<this.defs.length-1) this.arrow(x+this.w,108,x+this.w+gap,108);
+      x+=this.w+gap; });
+    this.centers=this.xs.map(x=>x+this.w/2);
+    this.packets=[]; this.spawn=0;
+    this.cap("A payment flows from checkout through the gateway (authorize), fraud screening, the ledger, and the bank; Kafka carries events reliably; settlement moves the net funds to the merchant. Every step is idempotent and retryable.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.8); this.packets.push({prog:0,dead:false,el:this.dot(this.centers[0],108,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.9;
+      if(p.prog>=this.centers.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog),f=p.prog-seg; p.el.setAttribute("cx",this.centers[seg]+(this.centers[seg+1]-this.centers[seg])*f);
+      p.el.setAttribute("fill",p.prog>=6?"#34d399":p.prog>=5?"#fbbf24":p.prog>=4?"#38bdf8":p.prog>=3?"#f87171":p.prog>=2?"#7C3AED":"#c4a2ff"); });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. Payment Lifecycle (auth / capture / refund) ---- */
+class LifecycleViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.states=[["INITIATED",90],["AUTHORIZED",235],["CAPTURED",385],["SETTLED",535]];
+    this.y=70; this.circs=this.states.map(([nm,x])=>{ if(x>90) this.arrow(x-115+25,this.y,x-25,this.y,"#2a2a32");
+      const c=S("circle",{cx:x,cy:this.y,r:26,fill:"#161619",stroke:"#3a3a42","stroke-width":2}); this.svg.appendChild(c);
+      this.svg.appendChild(T(x,this.y+45,nm,{fill:"#8b8b93","font-size":9.5,"text-anchor":"middle","font-weight":600})); return c; });
+    // refund arrow from captured back
+    this.arrow(385,110,235,110,"#f87171","dash"); this.svg.appendChild(T(310,128,"REFUND (reverse)",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+    this.token=this.dot(90,this.y,"#c4a2ff",8);
+    this.lbl=T(320,180,"",{fill:"#c4a2ff","font-size":12.5,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.lbl);
+    this.notes=["Payment initiated at checkout — amount + method captured.","Authorize: bank places a HOLD on funds (not yet moved).","Capture: the held funds are actually transferred to the merchant.","Settled: funds land in the merchant account (batched).","Refund: reverse a captured payment back to the customer."];
+    this.idx=0; this.timer=0; this.refund=false;
+    this.cap("A payment is a state machine. Authorization places a hold; capture moves the money (often later, e.g. when an item ships); settlement batches payouts. A refund reverses a captured payment — money never just 'disappears', every transition is recorded.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=1.5;
+    this.circs.forEach(c=>{ c.setAttribute("stroke","#3a3a42"); c.setAttribute("fill","#161619"); });
+    if(!this.refund){ const [nm,x]=this.states[this.idx]; this.token.setAttribute("cx",x); this.token.setAttribute("cy",this.y); this.token.setAttribute("fill","#7C3AED");
+      this.circs[this.idx].setAttribute("stroke","#7C3AED"); this.circs[this.idx].setAttribute("fill","rgba(124,58,237,.25)");
+      this.lbl.textContent=this.notes[this.idx]; this.lbl.setAttribute("fill","#c4a2ff");
+      this.idx++; if(this.idx>=this.states.length){ this.refund=true; this.timer=1.7; } }
+    else { this.token.setAttribute("cx",235); this.token.setAttribute("cy",110); this.token.setAttribute("fill","#f87171");
+      this.circs[1].setAttribute("stroke","#f87171"); this.circs[1].setAttribute("fill","rgba(248,113,113,.2)");
+      this.lbl.textContent=this.notes[4]; this.lbl.setAttribute("fill","#f87171");
+      this.refund=false; this.idx=0; this.timer=1.9; }
+  }
+}
+
+/* ---- 3. Idempotency ---- */
+class IdempotencyViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(20,40,110,44,"Client","#7C3AED","key=abc123");
+    this.box(255,40,130,44,"Payment API","#fbbf24","idem store");
+    this.box(255,130,130,44,"Charge","#34d399","$50 once");
+    this.arrow(130,62,255,62); this.arrow(320,84,320,130,"#2a2a32");
+    this.chargeCount=0;
+    this.svg.appendChild(T(500,50,"charges made:",{fill:"#8b8b93","font-size":10}));
+    this.countEl=T(500,78,"0",{fill:"#34d399","font-size":26,"font-weight":800}); this.svg.appendChild(this.countEl);
+    this.status=T(320,196,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.status);
+    this.step=0; this.timer=0;
+    this.cap("The client sends an idempotency key with the request. The first time, the server processes the charge and stores the result under that key. A retry (network glitch, double-click) with the SAME key returns the stored result — the customer is charged exactly once.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.step=(this.step+1)%5; this.timer=1.4;
+    if(this.step===1){ this.status.textContent="1st request (key=abc123) → not seen before"; this.status.setAttribute("fill","#c4a2ff");
+      const p=this.dot(130,62,"#c4a2ff",5); }
+    else if(this.step===2){ this.chargeCount=1; this.countEl.textContent="1"; this.status.textContent="→ process charge $50, store result under key"; this.status.setAttribute("fill","#34d399"); }
+    else if(this.step===3){ this.status.textContent="RETRY (same key=abc123) → already seen!"; this.status.setAttribute("fill","#fbbf24");
+      const p=this.dot(130,62,"#fbbf24",5); }
+    else if(this.step===4){ this.status.textContent="→ return STORED result — no second charge ✓"; this.status.setAttribute("fill","#34d399"); }
+    else { this.status.textContent=""; this.chargeCount=0; this.countEl.textContent="0"; }
+  }
+}
+
+/* ---- 4. Saga Pattern (+ compensation) ---- */
+class SagaViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.steps=[["Reserve",70],["Fraud OK",210],["Debit acct",350],["Credit merch",490]];
+    this.w=110; this.y=60;
+    this.boxes=this.steps.map(([nm,x],i)=>{ if(i>0) this.arrow(x-30,this.y+20,x,this.y+20,"#2a2a32");
+      const g=this.box(x,this.y,this.w,40,nm,"#3a3a42","step "+(i+1)); return g.querySelector?g:g; });
+    this.rects=this.svg.querySelectorAll("rect");
+    this.token=this.dot(70,this.y+20,"#c4a2ff",7);
+    this.lbl=T(320,175,"",{fill:"#c4a2ff","font-size":12,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.lbl);
+    this.mode=0; this.idx=0; this.timer=0; this.failAt=-1;
+    this.cap("A saga is a chain of local transactions across services. Each step can be undone by a compensating action. If a later step fails, the saga runs compensations in reverse (release the hold, refund) so the system ends consistent — no distributed locks required.");
+  }
+  color(i,c,fill){ const r=this.boxes[i].children?this.boxes[i].children[0]:null; if(r){ r.setAttribute("stroke",c); r.setAttribute("fill",fill||"#1a1a1c"); } }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=1.0;
+    if(this.mode===0){ // start
+      this.steps.forEach((s,i)=>this.color(i,"#3a3a42","#1a1a1c"));
+      this.failAt = Math.random()<0.5 ? randi(2,3) : -1; this.idx=0; this.mode=1; this.timer=.6;
+    } else if(this.mode===1){ // forward
+      const [nm,x]=this.steps[this.idx]; this.token.setAttribute("cx",x+this.w/2); this.token.setAttribute("cy",this.y+20);
+      if(this.idx===this.failAt){ this.color(this.idx,"#f87171","rgba(248,113,113,.2)"); this.token.setAttribute("fill","#f87171");
+        this.lbl.textContent="✗ step "+(this.idx+1)+" failed → begin compensation"; this.lbl.setAttribute("fill","#f87171");
+        this.mode=2; this.idx--; this.timer=1.0; }
+      else { this.color(this.idx,"#34d399","rgba(52,211,153,.16)"); this.token.setAttribute("fill","#34d399");
+        this.lbl.textContent="✓ "+nm+" committed (local transaction)"; this.lbl.setAttribute("fill","#34d399");
+        this.idx++; if(this.idx>=this.steps.length){ this.mode=3; this.timer=1.4; } } }
+    else if(this.mode===2){ // compensate backward
+      if(this.idx<0){ this.mode=0; this.timer=1.6; this.lbl.textContent="↺ all steps compensated — system consistent"; this.lbl.setAttribute("fill","#fbbf24"); return; }
+      this.color(this.idx,"#fbbf24","rgba(251,191,36,.16)"); this.token.setAttribute("cx",this.steps[this.idx][1]+this.w/2); this.token.setAttribute("fill","#fbbf24");
+      this.lbl.textContent="↩ compensate step "+(this.idx+1)+" (undo)"; this.lbl.setAttribute("fill","#fbbf24"); this.idx--; }
+    else { this.lbl.textContent="✓ saga complete — payment succeeded"; this.lbl.setAttribute("fill","#34d399"); this.mode=0; this.timer=1.6; }
+  }
+}
+
+/* ---- 5. Outbox Pattern ---- */
+class OutboxViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    // atomic write box containing two rows
+    this.svg.appendChild(T(140,26,"one DB transaction (atomic)",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.svg.appendChild(S("rect",{x:24,y:36,width:232,height:88,rx:12,fill:"#0e0e11",stroke:"#7C3AED","stroke-dasharray":"5 4"}));
+    this.svg.appendChild(S("rect",{x:40,y:52,width:200,height:26,rx:6,fill:"rgba(124,58,237,.16)",stroke:"#7C3AED"}));
+    this.svg.appendChild(T(50,69,"payments  (business row)",{fill:"#d4d4d8","font-size":10,"font-family":"JetBrains Mono,monospace"}));
+    this.svg.appendChild(S("rect",{x:40,y:84,width:200,height:26,rx:6,fill:"rgba(56,189,248,.14)",stroke:"#38bdf8"}));
+    this.svg.appendChild(T(50,101,"outbox   (event row)",{fill:"#d4d4d8","font-size":10,"font-family":"JetBrains Mono,monospace"}));
+    this.box(330,44,110,40,"Relay / CDC","#fbbf24","polls outbox");
+    this.box(330,120,110,40,"Kafka","#fbbf24","payment.events");
+    this.box(510,120,110,40,"Consumers","#34d399","fraud, notify…");
+    this.arrow(256,97,330,64); this.arrow(385,84,385,120,"#2a2a32"); this.arrow(440,140,510,140);
+    this.stat=T(320,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.packets=[]; this.spawn=0;
+    this.cap("The 'dual write' problem: writing to the DB then publishing to Kafka can lose events if you crash between them. The outbox pattern writes the business row AND an event row in one transaction; a relay (or CDC) reads the outbox and publishes reliably — at-least-once, no lost events.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=1.6; this.packets.push({leg:0,prog:0,dead:false,el:this.dot(140,97,"#38bdf8",5)}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.4;
+      if(p.leg===0){ p.el.setAttribute("cx",140+(385-140)*p.prog); p.el.setAttribute("cy",97+(64-97)*p.prog);
+        if(p.prog>=1){ p.leg=1; p.prog=0; p.el.setAttribute("fill","#fbbf24"); } }
+      else if(p.leg===1){ p.el.setAttribute("cx",385); p.el.setAttribute("cy",64+(140-64)*p.prog);
+        if(p.prog>=1){ p.leg=2; p.prog=0; } }
+      else { p.el.setAttribute("cx",440+(565-440)*p.prog); p.el.setAttribute("cy",140); p.el.setAttribute("fill","#34d399");
+        if(p.prog>=1){ p.dead=true; p.el.remove(); } } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    this.stat.textContent="business row + event committed atomically → relay publishes to Kafka";
+  }
+}
+
+/* ---- 6. Double-Entry Ledger ---- */
+class LedgerViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.svg.appendChild(T(160,26,"Journal (every entry is balanced)",{fill:"#8b8b93","font-size":10.5,"text-anchor":"middle"}));
+    // header
+    this.svg.appendChild(T(40,52,"Account",{fill:"#8b8b93","font-size":10}));
+    this.svg.appendChild(T(230,52,"Debit",{fill:"#8b8b93","font-size":10,"text-anchor":"end"}));
+    this.svg.appendChild(T(330,52,"Credit",{fill:"#8b8b93","font-size":10,"text-anchor":"end"}));
+    this.rows=[["Customer cash","", ""],["Merchant payable","",""],["Processor fee","",""]];
+    this.rowEls=this.rows.map((r,i)=>{ const y=76+i*30;
+      this.svg.appendChild(T(40,y,r[0],{fill:"#d4d4d8","font-size":11,"font-family":"JetBrains Mono,monospace"}));
+      const d=T(230,y,"",{fill:"#f87171","font-size":11,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(d);
+      const c=T(330,y,"",{fill:"#34d399","font-size":11,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(c);
+      return {d,c}; });
+    this.svg.appendChild(S("line",{x1:40,y1:168,x2:340,y2:168,stroke:"#2a2a32"}));
+    this.totD=T(230,188,"",{fill:"#f87171","font-size":11.5,"text-anchor":"end","font-weight":700,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.totD);
+    this.totC=T(330,188,"",{fill:"#34d399","font-size":11.5,"text-anchor":"end","font-weight":700,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.totC);
+    this.svg.appendChild(T(40,188,"TOTALS",{fill:"#8b8b93","font-size":10.5,"font-weight":700}));
+    this.check=T(500,120,"",{fill:"#34d399","font-size":13,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.check);
+    this.step=0; this.timer=0;
+    this.cap("A ledger uses double-entry bookkeeping: every transaction writes equal debits and credits, so total debits always equal total credits. A $50 payment debits the customer $50 and credits the merchant $48.50 + processor fee $1.50 — the books are always balanced and auditable.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.step=(this.step+1)%4; this.timer=1.2;
+    const set=(i,d,c)=>{ this.rowEls[i].d.textContent=d; this.rowEls[i].c.textContent=c; };
+    if(this.step===1){ set(0,"$50.00",""); this.check.textContent=""; this.totD.textContent="$50.00"; this.totC.textContent="$0.00"; }
+    else if(this.step===2){ set(1,"","$48.50"); set(2,"","$1.50"); this.totD.textContent="$50.00"; this.totC.textContent="$50.00";
+      this.check.textContent="Σ debits = Σ credits ✓"; }
+    else if(this.step===3){ this.check.textContent="balanced & auditable"; }
+    else { set(0,"",""); set(1,"",""); set(2,"",""); this.totD.textContent=""; this.totC.textContent=""; this.check.textContent=""; }
+  }
+}
+
+/* ---- 7. Retry & Failure Recovery ---- */
+class RetryViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.box(20,70,96,48,"Payment","#7C3AED","idem key");
+    this.box(520,70,100,48,"Bank","#34d399","charge");
+    this.svg.appendChild(T(320,26,"exponential backoff + jitter (same idempotency key)",{fill:"#8b8b93","font-size":10.5,"text-anchor":"middle"}));
+    this.attempts=[[160,"1s","fail"],[250,"2s","fail"],[360,"4s","ok"]];
+    this.timer=0; this.i=-1; this.markers=[];
+    this.lbl=T(320,170,"",{fill:"#c4a2ff","font-size":11.5,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.lbl);
+    this.cap("Bank calls can fail transiently (timeouts, 5xx). Retry with exponential backoff + jitter, always reusing the SAME idempotency key so a retry can't double-charge. After max attempts a payment goes to a dead-letter queue for manual recovery, never silently lost.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=1.1;
+    this.i++;
+    if(this.i>=this.attempts.length+1){ this.i=-1; this.markers.forEach(m=>m.remove()); this.markers=[]; this.lbl.textContent=""; this.timer=1.2; return; }
+    if(this.i<this.attempts.length){ const [x,delay,res]=this.attempts[this.i]; const ok=res==="ok";
+      const p=this.dot(116,94,ok?"#34d399":"#f87171",5); this.markers.push(p);
+      const m=S("circle",{cx:x,cy:94,r:6,fill:ok?"#34d399":"#f87171"}); this.svg.appendChild(m); this.markers.push(m);
+      this.svg.appendChild(T(x,120,"try "+(this.i+1),{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"})); 
+      const t2=T(x,134,ok?"200 OK":"wait "+delay,{fill:ok?"#34d399":"#fbbf24","font-size":8.5,"text-anchor":"middle"}); this.svg.appendChild(t2); this.markers.push(t2);
+      this.lbl.textContent = ok? "✓ attempt "+(this.i+1)+" succeeded — charged once (idempotent)" : "✗ attempt "+(this.i+1)+" failed → back off "+delay;
+      this.lbl.setAttribute("fill",ok?"#34d399":"#f87171"); }
+  }
+}
+
+/* ---- 8. Settlement ---- */
+class SettlementViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.svg.appendChild(T(120,26,"captured payments (during the day)",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.box(250,80,120,44,"Batch","#fbbf24","net + reconcile");
+    this.box(440,40,120,40,"Bank","#34d399","ACH transfer");
+    this.box(440,124,120,40,"Merchant","#7C3AED","payout");
+    this.arrow(370,96,440,60); this.arrow(560,60,560,124,"#2a2a32"); this.arrow(560,124,560,124);
+    this.arrow(500,80,500,124,"#2a2a32");
+    this.batchN=0; this.dots=[]; this.spawn=0; this.settleTimer=0;
+    this.batchEl=T(310,106,"0",{fill:"#fbbf24","font-size":16,"text-anchor":"middle","font-weight":800}); this.svg.appendChild(this.batchEl);
+    this.stat=T(320,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.cap("Rather than wire each payment individually, captured payments accumulate and are settled in batches: netted, transferred via ACH to the merchant, and reconciled against the ledger and bank statement. Batching cuts fees and load; reconciliation catches any mismatch.");
+  }
+  frame(dt){ this.spawn-=dt; this.settleTimer-=dt;
+    if(this.spawn<=0 && this.batchN<8){ this.spawn=rand(.25,.5);
+      const p=this.dot(rand(40,200),rand(50,110),"#c4a2ff",4); this.dots.push({el:p,prog:0}); }
+    this.dots.forEach(d=>{ if(d.done)return; d.prog+=dt*1.6; d.el.setAttribute("cx",d.el.getAttribute("cx")*1);
+      const sx=+d.el.getAttribute("cx"), sy=+d.el.getAttribute("cy");
+      d.el.setAttribute("cx",sx+(310-sx)*dt*2.2); d.el.setAttribute("cy",sy+(102-sy)*dt*2.2);
+      if(d.prog>=1){ d.done=true; d.el.remove(); this.batchN++; this.batchEl.textContent=this.batchN; } });
+    this.dots=this.dots.filter(d=>!d.done);
+    if(this.batchN>=8 && this.settleTimer<=0){ this.settleTimer=2.2;
+      const s=this.dot(370,96,"#34d399",7); 
+      this.stat.textContent="batch of 8 settled → ACH payout to merchant → reconcile ✓";
+      setTimeout(()=>{ this.batchN=0; this.batchEl.textContent="0"; },900); }
+    else if(this.batchN<8){ this.stat.textContent="accumulating captured payments into the settlement batch…"; }
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS)
+   ===================================================================== */
+const CODE_flow =
+"POST /payments  { amount, method, idempotencyKey }\n" +
+"  1. idempotency: if key seen -> return stored result (no re-charge)\n" +
+"  2. fraud check (risk score) -> allow / decline\n" +
+"  3. authorize with bank    -> HOLD funds\n" +
+"  4. ledger: record double-entry (pending)\n" +
+"  5. capture                -> move funds (now or later)\n" +
+"  6. write outbox event in same tx -> Kafka -> notify\n" +
+"  7. settlement job batches captures -> payout + reconcile\n" +
+"Any step fails -> saga compensates completed steps (release/refund).";
+
+const CODE_idem =
+"// idempotency: same key => same result, charged exactly once\n" +
+"Payment charge(Request req){\n" +
+"  String key = req.idempotencyKey();          // client-generated, unique per intent\n" +
+"  Optional<Payment> prior = store.get(key);\n" +
+"  if (prior.isPresent()) return prior.get();   // replay stored response, no re-charge\n" +
+"  // reserve the key atomically to block concurrent duplicates\n" +
+"  if (!store.putIfAbsent(key, PENDING)) return store.awaitResult(key);\n" +
+"  Payment p = process(req);                    // do the real work once\n" +
+"  store.put(key, p);                           // persist result under the key\n" +
+"  return p;\n" +
+"}";
+
+const CODE_saga =
+"// orchestrated saga: each step has a compensating action\n" +
+"class PaymentSaga {\n" +
+"  void run(Order o){\n" +
+"    List<Runnable> compensations = new ArrayList<>();\n" +
+"    try {\n" +
+"      reserveFunds(o);      compensations.add(() -> releaseFunds(o));\n" +
+"      fraudCheck(o);        // no side-effect to undo\n" +
+"      debitAccount(o);      compensations.add(() -> refundAccount(o));\n" +
+"      creditMerchant(o);    compensations.add(() -> reverseCredit(o));\n" +
+"      commit(o);\n" +
+"    } catch (Exception e) {\n" +
+"      // run compensations in REVERSE order to roll back\n" +
+"      for (int i = compensations.size()-1; i >= 0; i--) compensations.get(i).run();\n" +
+"      markFailed(o, e);\n" +
+"    }\n" +
+"  }\n" +
+"}";
+
+const CODE_outbox =
+"// transactional outbox: business row + event in ONE tx\n" +
+"@Transactional\n" +
+"void createPayment(Payment p){\n" +
+"  paymentRepo.insert(p);                       // business state\n" +
+"  outboxRepo.insert(new OutboxEvent(\n" +
+"      \"PaymentCreated\", toJson(p)));           // event, same transaction\n" +
+"}                                              // both commit or both roll back\n" +
+"// a separate relay polls the outbox and publishes, then marks sent:\n" +
+"for (OutboxEvent e : outboxRepo.findUnpublished()){\n" +
+"  kafka.send(\"payment.events\", e.payload());\n" +
+"  outboxRepo.markPublished(e.id());            // at-least-once (consumers dedup)\n" +
+"}";
+
+const CODE_ledger =
+"// double-entry: every posting is balanced (sum = 0)\n" +
+"void postPayment(Money amount, Money fee){\n" +
+"  Money net = amount.minus(fee);\n" +
+"  ledger.transaction(txn -> {\n" +
+"    txn.debit (CUSTOMER_CASH,     amount);     // customer pays 50.00\n" +
+"    txn.credit(MERCHANT_PAYABLE,  net);        // merchant gets 48.50\n" +
+"    txn.credit(PROCESSOR_FEE,     fee);        // processor keeps 1.50\n" +
+"    assert txn.debits().equals(txn.credits()); // invariant: must balance\n" +
+"  });\n" +
+"}";
+
+const CODE_retry =
+"// retry transient failures with exponential backoff + jitter\n" +
+"Result callBank(Charge c){\n" +
+"  int attempt = 0;\n" +
+"  while (true){\n" +
+"    try {\n" +
+"      // SAME idempotency key on every attempt -> never double-charge\n" +
+"      return bank.charge(c.withIdempotencyKey(c.key()));\n" +
+"    } catch (TransientException e){\n" +
+"      if (++attempt > MAX_RETRIES){ deadLetter(c); throw e; }  // DLQ, not lost\n" +
+"      long backoff = (long)(Math.pow(2, attempt) * 100);\n" +
+"      sleep(backoff + random(0, 100));         // jitter avoids thundering herd\n" +
+"    }\n" +
+"  }\n" +
+"}";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A payment system's job is to move money <b>correctly</b> — exactly once, fully auditable, and consistent across the merchant, the bank, and internal accounts. It coordinates a distributed transaction across services (gateway, fraud, ledger, bank) using sagas, idempotency, an outbox, and a double-entry ledger.",
+    problem:"Money must never be lost, duplicated, or created. But payments span multiple services and an external bank, over unreliable networks — so you need correctness without distributed locks.",
+    how:["Checkout initiates a payment with an idempotency key.","Gateway authorizes (holds) funds; fraud screens the request.","The ledger records balanced double-entry postings.","Capture moves funds; the outbox emits events to Kafka.","Settlement batches payouts and reconciles."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Correctness without 2PC / distributed locks","Auditable via ledger + event log","Resilient to partial failures"],
+    disadvantages:["Eventual consistency is harder to reason about","Many patterns to implement correctly","Compensations must be carefully designed"],
+    interview:[["Design a payment processing system (Stripe/PayPal).","Correctness first: make every operation idempotent (idempotency keys) so retries can't double-charge; coordinate the multi-service transaction with a saga that has compensating actions instead of 2PC; record money in a double-entry ledger so books always balance and are auditable; publish events reliably with the transactional outbox → Kafka; retry transient bank failures with backoff and route exhausted ones to a DLQ; and settle/reconcile in batches. Separate authorize vs capture, and handle refunds as reversing entries."]] },
+
+  { id:"lifecycle", num:2, icon:"🔄", tag:"State Machine", title:"Payment Lifecycle", viz:LifecycleViz,
+    definition:"A payment is a state machine: <b>initiated → authorized → captured → settled</b>, with <b>refund</b> as a reverse transition. <b>Authorization</b> places a hold on funds; <b>capture</b> actually moves them (often later); settlement pays out. Separating auth from capture is essential for real commerce.",
+    problem:"You often can't charge immediately at checkout (item ships later, order may be adjusted) — you need to reserve funds now and move them later, and cleanly reverse if needed.",
+    how:["Initiate: record intent (amount, method).","Authorize: bank holds the funds (guaranteed available).","Capture: transfer the held funds to the merchant.","Settle: batch payout lands in the merchant account.","Refund: reverse a captured payment to the customer."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Hold-now/charge-later fits real commerce","Clean, auditable state transitions","Refunds are explicit reversals"],
+    disadvantages:["Auth holds expire (must re-auth)","Partial captures/refunds add complexity","More states to manage & persist"],
+    interview:[["What's the difference between authorization and capture?","Authorization checks the card and places a HOLD on the funds (guaranteeing availability) without moving money. Capture actually transfers the held funds to the merchant, and can happen later (e.g. when the order ships) — that's why the two are separate. Holds expire, so uncaptured auths must be captured within a window or re-authorized. Refunds reverse captured funds."]] },
+
+  { id:"idempotency", num:3, icon:"🔁", tag:"Correctness", title:"Idempotency", viz:IdempotencyViz,
+    definition:"<b>Idempotency</b> means performing the same operation multiple times has the same effect as once. Clients send an <b>idempotency key</b>; the server processes the first request and stores the result, so any retry with the same key returns that stored result — never a second charge.",
+    problem:"Networks fail after a charge but before the response, and users double-click. Without idempotency, the safe retry becomes a double charge — the cardinal sin of payments.",
+    how:["Client generates a unique key per payment intent.","Server checks if the key was already processed.","If yes → return the stored result (no side effect).","If no → reserve the key, process once, store the result.","Concurrent duplicates block on the reserved key."],
+    code:{ "Idempotency":CODE_idem },
+    advantages:["Retries become safe (exactly-once effect)","Handles double-clicks & network retries","Foundational for reliable payments"],
+    disadvantages:["Must persist keys/results (with TTL)","Careful concurrency on key reservation","Key scope/expiry design matters"],
+    interview:[["How do you guarantee a customer isn't charged twice?","Idempotency keys. The client sends a unique key per payment intent; the server atomically reserves that key, processes the charge exactly once, and stores the result. Any retry (network timeout, double-click) with the same key returns the stored result instead of charging again. Combine with the same key passed to the bank on retries, so even the downstream call is idempotent."]] },
+
+  { id:"saga", num:4, icon:"🧩", tag:"Distributed Txn", title:"Saga Pattern", viz:SagaViz,
+    definition:"A <b>saga</b> models a distributed transaction as a sequence of local transactions, each with a <b>compensating action</b> that semantically undoes it. If a step fails, the saga runs the compensations in reverse — achieving consistency without holding locks across services (unlike 2PC).",
+    problem:"You can't wrap 'reserve funds → fraud check → debit → credit merchant' across services and a bank in one ACID transaction. 2PC would block and lock; you need a non-blocking way to stay consistent.",
+    how:["Break the transaction into ordered local steps.","Each step commits its own local transaction.","Record a compensating action for each committed step.","On failure, execute compensations in reverse order.","End state is consistent: fully done or fully undone."],
+    code:{ "Saga":CODE_saga },
+    advantages:["No distributed locks / blocking","Scales across services & external banks","Explicit, testable failure handling"],
+    disadvantages:["Only eventual consistency","Compensations can be tricky (or impossible)","More moving parts to orchestrate"],
+    interview:[["What is the Saga pattern and when do you use it?","A saga is a sequence of local transactions where each step has a compensating transaction to undo it. Instead of a blocking 2PC across services, you commit each step locally and, if a later step fails, run compensations in reverse to roll back (release the hold, refund). Use it for long-lived, cross-service business transactions like payments/orders. Flavors: orchestration (a central coordinator drives steps) vs choreography (services react to events). Trade-off: eventual consistency and careful compensation design."]] },
+
+  { id:"outbox", num:5, icon:"📤", tag:"Reliability", title:"Outbox Pattern", viz:OutboxViz,
+    definition:"The <b>transactional outbox</b> solves the dual-write problem: instead of writing to the DB and then publishing to Kafka (which can lose events on a crash), you write the business row and an <b>event row</b> in the <i>same</i> transaction. A relay/CDC then reads the outbox and publishes reliably.",
+    problem:"Writing to the database and separately publishing an event isn't atomic — a crash between them either loses the event or emits one for a rolled-back change.",
+    how:["In one DB transaction, write the business row + an outbox row.","Both commit together or both roll back.","A relay (poller or CDC like Debezium) reads unpublished outbox rows.","It publishes them to Kafka and marks them sent.","Delivery is at-least-once → consumers dedup (idempotent)."],
+    code:{ "Outbox":CODE_outbox },
+    advantages:["No lost events (atomic with state)","Decouples DB writes from message broker","Works with CDC (Debezium) or polling"],
+    disadvantages:["At-least-once → consumers must dedup","Relay adds a moving part & latency","Outbox table needs pruning"],
+    interview:[["What is the dual-write problem and how does the outbox solve it?","Dual write = updating the database and publishing a message as two separate steps; a crash in between loses the event or publishes one for an aborted change — inconsistency. The transactional outbox writes the state change and an event row in the same DB transaction (atomic), then a relay (polling or CDC) publishes outbox rows to the broker and marks them sent. Delivery is at-least-once, so consumers dedup by event id."]] },
+
+  { id:"ledger", num:6, icon:"📒", tag:"Accounting", title:"Double-Entry Ledger", viz:LedgerViz,
+    definition:"Money is recorded in a <b>double-entry ledger</b>: every transaction posts equal <b>debits</b> and <b>credits</b>, so the books always balance (Σ debits = Σ credits). This makes balances derivable, tamper-evident, and auditable — money is never created or destroyed, only moved between accounts.",
+    problem:"A single 'balance' column is fragile and unauditable — bugs or races can silently create or lose money, and you can't prove where funds went.",
+    how:["Model accounts (customer, merchant, fees, escrow).","Each transaction posts balanced debit/credit entries.","Enforce the invariant Σ debits = Σ credits per transaction.","Balances are the sum of an account's postings (append-only).","Refunds/adjustments are new reversing entries, never edits."],
+    code:{ "Double-entry":CODE_ledger },
+    advantages:["Always balanced & auditable","Append-only = tamper-evident history","Balances derivable, reconciliation-friendly"],
+    disadvantages:["More storage (many entries)","Requires accounting discipline","High write volume on hot accounts"],
+    interview:[["Why use a double-entry ledger for payments?","Because it makes money conservation an enforceable invariant: every transaction posts equal debits and credits, so total debits always equal total credits and money can't be silently created or lost. It's append-only (you post reversing entries rather than editing), which gives a tamper-evident audit trail, lets you derive any balance by summing postings, and makes reconciliation against the bank straightforward. It's how real accounting — and Stripe's ledger — works."]] },
+
+  { id:"retry", num:7, icon:"🔂", tag:"Resilience", title:"Retry & Failure Recovery", viz:RetryViz,
+    definition:"Bank and network calls fail transiently, so payments <b>retry with exponential backoff + jitter</b>, always reusing the same idempotency key so a retry can't double-charge. After max attempts, the payment goes to a <b>dead-letter queue</b> for recovery — it's never silently dropped.",
+    problem:"Transient failures (timeouts, 5xx) are inevitable. Giving up loses payments; naive immediate retries cause thundering herds and risk double charges.",
+    how:["Classify errors: transient (retry) vs permanent (fail fast).","Retry transient errors with exponential backoff.","Add jitter to avoid synchronized retry storms.","Reuse the SAME idempotency key on every attempt.","After max retries → dead-letter queue for manual/auto recovery."],
+    code:{ "Retry":CODE_retry },
+    advantages:["Survives transient failures automatically","Backoff + jitter protect downstreams","Nothing is silently lost (DLQ)"],
+    disadvantages:["Retries need idempotency to be safe","Backoff tuning & error classification","DLQ needs a recovery process"],
+    interview:[["How do you handle a failed/timed-out bank call?","First classify: transient (timeout, 5xx, network) → retry; permanent (declined, invalid) → fail fast. Retry transient errors with exponential backoff and jitter, reusing the same idempotency key so the bank treats retries as the same charge (no double charge). Cap the attempts and send exhausted payments to a dead-letter queue for automated or manual recovery, so nothing is lost. On timeouts specifically, reconcile: query the bank for the charge's status rather than blindly assuming failure."]] },
+
+  { id:"settlement", num:8, icon:"💰", tag:"Money Movement", title:"Settlement", viz:SettlementViz,
+    definition:"<b>Settlement</b> is the actual movement of net funds to the merchant. Rather than wiring each payment, captured payments are <b>batched</b>, netted (payments minus refunds/fees), transferred (e.g. via ACH), and <b>reconciled</b> against the ledger and the bank statement to catch any discrepancy.",
+    problem:"Settling every transaction individually is expensive and slow, and without reconciliation you can't be sure the money that moved matches what your ledger says.",
+    how:["Accumulate captured payments over a settlement period.","Net payments against refunds and fees.","Initiate a batch transfer (ACH/wire) to the merchant.","Record settlement entries in the ledger.","Reconcile ledger vs bank statement; flag mismatches."],
+    code:{ "Flow":CODE_flow, "Ledger":CODE_ledger },
+    advantages:["Batching cuts fees & load","Netting reduces transfers","Reconciliation guarantees integrity"],
+    disadvantages:["Payout latency (T+1/T+2)","Reconciliation tooling needed","Handling disputes/chargebacks post-settlement"],
+    interview:[["What is settlement and reconciliation?","Settlement is moving the actual net funds to the merchant, usually in batches (e.g. daily ACH) — you net captures against refunds and fees rather than wiring each payment. Reconciliation then matches your ledger's records against the bank/processor statements to confirm every expected movement happened and amounts agree, flagging any mismatch for investigation. Together they ensure the money that physically moved equals what the system says — the final integrity check."]] }
+];
+
+/* SECTION RENDERER */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ tabs[k]=s.code[k]; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* INTERVIEW TOPICS */
+const TOPICS=[
+  ["🧩","Saga Pattern","Coordinate a cross-service transaction as local steps with compensating actions — consistency without 2PC."],
+  ["📤","Outbox Pattern","Write state + event in one DB transaction, then relay to Kafka — solves the dual-write problem, no lost events."],
+  ["🔁","Idempotency","Idempotency keys make retries safe so a payment is charged exactly once, despite timeouts and double-clicks."],
+  ["🔒","ACID","Local transactions are ACID; across services you trade strict ACID for saga-based eventual consistency."],
+  ["📜","Event Sourcing","Store the immutable sequence of events (Authorized, Captured, Refunded); state is a fold over the log — perfect audit."],
+  ["📒","Double-Entry Ledger","Balanced debits & credits make money conservation an invariant; append-only and fully auditable."],
+  ["🤝","Two-Phase Commit","The blocking, lock-holding alternative to sagas — correct but doesn't scale across services/banks."],
+  ["🧾","Reconciliation","Match the ledger against bank/processor statements to prove every expected movement actually happened."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* COMPARISON */
+const CMP=[
+  ["2PC (XA)","Strong (atomic)","Tight (locks)","Blocks if coordinator dies","Single DB / trusted, low-scale"],
+  ["Saga — orchestration","Eventual","Central coordinator","Compensations in reverse","Complex payment/order flows"],
+  ["Saga — choreography","Eventual","Loose (events)","Each service compensates","Event-driven microservices"],
+  ["Outbox + events","Eventual","Loose","Retry + dedup (at-least-once)","Reliable event publishing"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Approach</th><th>Consistency</th><th>Coupling</th><th>Failure handling</th><th>Best for</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* INTERVIEW Q&A */
+const QA=[
+  ["Design a payment processing system (Stripe/PayPal).","Optimize for correctness. Make operations idempotent (idempotency keys) so retries can't double-charge; coordinate the multi-service, bank-spanning transaction with a saga (compensating actions) instead of 2PC; record money in a double-entry ledger so it always balances and is auditable; publish events reliably via the transactional outbox → Kafka (consumers dedup); retry transient failures with backoff+jitter and DLQ the rest; separate authorize/capture; handle refunds as reversing entries; and settle/reconcile in batches."],
+  ["How do you guarantee exactly-once charging?","You can't get exactly-once delivery, so you get exactly-once effect via idempotency. The client sends a unique idempotency key; the server reserves it atomically, processes once, and stores the result so retries replay it. Pass the same key to the bank so the downstream charge is idempotent too. Combined with a ledger invariant and reconciliation, the customer is charged exactly once."],
+  ["Why not use two-phase commit (2PC) across services?","2PC holds locks across all participants and blocks if the coordinator fails — it doesn't scale and can't span an external bank you don't control. Payments instead use a saga: commit each step locally and compensate (refund, release hold) on failure. You trade strict atomicity for eventual consistency, but gain availability, scalability, and the ability to include external systems."],
+  ["Explain the Saga pattern and compensating transactions.","A saga is an ordered set of local transactions; each has a compensating action that semantically undoes it. If a step fails, you run the compensations for the already-committed steps in reverse, leaving the system consistent (fully done or fully undone). Orchestration uses a central coordinator; choreography uses events. Compensations must be idempotent and, ideally, always possible (e.g. refund rather than 'un-charge')."],
+  ["What is the transactional outbox and why is it needed?","It fixes the dual-write problem: you can't atomically update the DB and publish to Kafka in two steps. The outbox writes the business row and an event row in one DB transaction; a relay (polling or CDC like Debezium) then publishes outbox rows and marks them sent. This guarantees the event exists iff the state change committed — at-least-once delivery, so consumers dedup by event id."],
+  ["Why a double-entry ledger instead of a balance column?","Double-entry makes money conservation an enforceable invariant: every transaction posts equal debits and credits, so Σ debits = Σ credits and money can't be silently created or destroyed. It's append-only (reversing entries, not edits), giving a tamper-evident audit trail; balances are derived by summing postings; and it reconciles cleanly against bank statements. A single mutable balance is race-prone and unauditable."],
+  ["How do you handle retries without double-charging?","Retry only transient errors, with exponential backoff and jitter, and always reuse the same idempotency key so both your service and the bank treat retries as the same operation. Cap attempts and DLQ the rest. On ambiguous outcomes (timeout after sending), don't blindly retry-charge — reconcile by querying the charge status first, then decide."],
+  ["What is idempotency and where do you apply it?","Idempotency means repeating an operation yields the same result as doing it once. Apply it at the API (idempotency keys per payment intent), at the bank call (same key downstream), and at event consumers (dedup by event id) so the at-least-once outbox is safe. It's what makes retries — essential for reliability — safe in a money system."],
+  ["How do settlement and reconciliation work?","Settlement moves the net funds to the merchant, typically batched (e.g. daily ACH) with payments netted against refunds and fees to reduce transfers and cost. Reconciliation then matches your ledger against the bank/processor statement to confirm every expected movement occurred with matching amounts, flagging discrepancies (missing, duplicate, or mismatched entries) for investigation — the final guarantee that recorded money equals moved money."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* GLOBAL CODE */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Flow":CODE_flow, "Idempotency":CODE_idem, "Saga":CODE_saga,
+  "Outbox":CODE_outbox, "Double-entry":CODE_ledger, "Retry":CODE_retry
+}); }
+
+/* RELATED */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Notification System","🔔","Kafka + retries","notification-system.html"],
+    ["Cloud File Storage","☁️","Consistency + sync","cloud-file-storage.html"],
+    ["Twitter News Feed","🐦","Kafka fan-out","news-feed.html"],
+    ["Video Streaming","🎬","CDN + pipeline","video-streaming.html"],
+    ["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — saga state-machine simulator
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.STAGES=["Authorize","Fraud","Debit","Capture","Notify"];
+    this.host=$("pgViz"); this.buildStage(); this.bind(); this.reset();
+    this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t));
+  }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+  reset(){
+    this.ok=0; this.comp=0; this.retries=0; this.prevented=0; this.ledger=0;
+    this.idemStore=new Set(); this.lastKey=null; this.active=null; this.acc=0; this.stepEvery=0.55;
+    this.stageStatus=this.STAGES.map(()=>""); this.logEl && (this.logEl.innerHTML="");
+    this.updateStats(); this.render(); this.caption="streaming payments through the saga…";
+  }
+  buildStage(){
+    this.svg=S("svg",{viewBox:"0 0 600 170"}); this.host.appendChild(this.svg);
+    this.w=100; this.gap=12; this.y=54; const startX=26;
+    this.stageEls=this.STAGES.map((nm,i)=>{ const x=startX+i*(this.w+this.gap);
+      if(i>0) this.svg.appendChild(S("path",{d:`M ${x-this.gap} ${this.y+20} L ${x} ${this.y+20}`,stroke:"#2a2a32","stroke-width":1.5}));
+      const r=S("rect",{x,y:this.y,width:this.w,height:40,rx:9,fill:"#1a1a1c",stroke:"#3a3a42","stroke-width":1.5}); this.svg.appendChild(r);
+      this.svg.appendChild(T(x+this.w/2,this.y+18,nm,{fill:"#f4f4f5","font-size":10.5,"font-weight":600,"text-anchor":"middle"}));
+      const sub=T(x+this.w/2,this.y+31,"",{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}); this.svg.appendChild(sub);
+      return {x,r,sub}; });
+    this.token=this.dot(startX+this.w/2,this.y+20,"#c4a2ff",7); this.startX=startX;
+    this.amtLbl=T(300,28,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.amtLbl);
+    this.capEl=T(300,148,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.capEl);
+    this.logEl=$("pgLog");
+  }
+  bind(){
+    $("pgFraud").addEventListener("input",()=>$("pgFraudV").textContent=$("pgFraud").value+"%");
+    $("pgBank").addEventListener("input",()=>$("pgBankV").textContent=$("pgBank").value+"%");
+    $("pgMax").addEventListener("input",()=>$("pgMaxV").textContent=$("pgMax").value);
+    $("pgReset").onclick=()=>this.reset();
+    $("pgDup").onclick=()=>this.duplicate();
+  }
+  log(msg,cls){ if(!this.logEl)return; const ln=el("div","ln"+(cls?" "+cls:""),msg);
+    this.logEl.insertBefore(ln,this.logEl.firstChild);
+    while(this.logEl.children.length>40) this.logEl.removeChild(this.logEl.lastChild); }
+  newKey(){ return "pi_"+Math.random().toString(36).slice(2,8); }
+  spawn(key,isDup){ const amount=+(rand(5,200)).toFixed(2);
+    this.active={key:key||this.newKey(),amount,idx:-1,dir:"fwd",attempts:0,debited:false,isDup:!!isDup,startAmt:amount};
+    this.stageStatus=this.STAGES.map(()=>"");
+    // idempotency check at intake
+    if(this.idemStore.has(this.active.key)){
+      if($("pgIdem").value==="on"){ this.prevented++; this.caption="idempotent hit — returning stored result, NO charge";
+        this.log("↩ idempotent: key "+this.active.key+" already processed → no charge","ok"); this.active=null; this.updateStats(); return; }
+      else { this.caption="⚠ duplicate key but idempotency OFF → will double charge!";
+        this.log("⚠ duplicate key "+this.active.key+" with idempotency OFF","bad"); }
+    }
+    this.amtLbl.textContent="$"+amount.toFixed(2)+"  ·  "+this.active.key+(isDup?"  (retry)":"");
+  }
+  duplicate(){ if(this.active) return; if(!this.lastKey){ this.log("no completed payment to retry yet","wa"); return; }
+    this.spawn(this.lastKey,true); }
+  loop(now){ const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.step(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  step(dt){ this.acc+=dt; if(this.acc<this.stepEvery)return; this.acc=0;
+    if(!this.active){ this.spawn(); this.render(); return; }
+    const a=this.active; const fraudRate=+$("pgFraud").value/100, bankRate=+$("pgBank").value/100, maxR=+$("pgMax").value;
+    if(a.dir==="fwd"){
+      a.idx++;
+      if(a.idx>=this.STAGES.length){ // success
+        this.ok++; this.ledger+=a.amount; this.idemStore.add(a.key); this.lastKey=a.key;
+        this.caption="✓ payment succeeded — captured $"+a.amount.toFixed(2);
+        this.log("✓ $"+a.amount.toFixed(2)+" succeeded ("+a.key+")","ok"); this.active=null; this.updateStats(); this.render(); return;
+      }
+      const stage=this.STAGES[a.idx];
+      if(stage==="Fraud" && Math.random()<fraudRate){ this.stageStatus[a.idx]="fail";
+        this.caption="✗ fraud declined → compensate"; this.log("✗ fraud declined $"+a.amount.toFixed(2),"bad");
+        a.dir="comp"; a.compIdx=a.idx-1; this.startComp(); this.render(); return; }
+      if(stage==="Capture" && Math.random()<bankRate){
+        if(a.attempts<maxR){ a.attempts++; this.retries++; this.stageStatus[a.idx]="retry";
+          this.caption="bank failed → retry "+a.attempts+"/"+maxR+" (same key, backoff)";
+          this.log("↻ bank fail, retry "+a.attempts+"/"+maxR+" ("+a.key+")","wa"); a.idx--; this.render(); return; }
+        else { this.stageStatus[a.idx]="fail"; this.caption="✗ bank failed after "+maxR+" retries → DLQ + compensate";
+          this.log("✗ bank exhausted retries → DLQ + compensate","bad"); a.dir="comp"; a.compIdx=a.idx-1; this.startComp(); this.render(); return; } }
+      // success at this stage
+      this.stageStatus[a.idx]="pass"; if(stage==="Debit") a.debited=true;
+      this.caption="✓ "+stage+" committed"; this.render(); return;
+    } else { // compensating
+      if(a.compIdx<0){ this.caption="↺ compensated — system consistent (no charge)";
+        this.log("↺ compensations done — consistent","wa"); this.active=null; this.render(); return; }
+      this.stageStatus[a.compIdx]="comp"; if(this.STAGES[a.compIdx]==="Debit" && a.debited){ a.debited=false; }
+      this.caption="↩ compensating "+this.STAGES[a.compIdx];
+      a.compIdx--; this.render(); return;
+    }
+  }
+  startComp(){ this.comp++; this.updateStats(); }
+  render(){
+    const a=this.active;
+    this.stageEls.forEach((e,i)=>{ const st=this.stageStatus[i];
+      const map={pass:["#34d399","rgba(52,211,153,.16)"],fail:["#f87171","rgba(248,113,113,.2)"],retry:["#fbbf24","rgba(251,191,36,.16)"],comp:["#fbbf24","rgba(251,191,36,.14)"],"":["#3a3a42","#1a1a1c"]};
+      const [stroke,fill]=map[st]||map[""]; e.r.setAttribute("stroke",stroke); e.r.setAttribute("fill",fill);
+      e.sub.textContent = st==="pass"?"ok":st==="fail"?"fail":st==="retry"?"retry":st==="comp"?"undo":""; });
+    if(a && a.idx>=0 && a.idx<this.STAGES.length){ const e=this.stageEls[a.idx];
+      this.token.setAttribute("cx",e.x+this.w/2); this.token.setAttribute("cy",this.y+20);
+      this.token.setAttribute("fill", a.dir==="comp"?"#fbbf24":(this.stageStatus[a.idx]==="fail"?"#f87171":"#7C3AED")); }
+    else { this.token.setAttribute("cx",this.startX+this.w/2); this.token.setAttribute("cy",this.y+20); this.token.setAttribute("fill","#c4a2ff"); }
+    if(!a) this.amtLbl.textContent="";
+    this.capEl.textContent=this.caption||"";
+  }
+  updateStats(){
+    $("pgOk").textContent=this.ok;
+    $("pgComp").textContent=this.comp;
+    $("pgRetries").textContent=this.retries;
+    $("pgPrevented").textContent=this.prevented;
+    $("pgLedger").textContent="$"+this.ledger.toFixed(0);
+  }
+}
+
+/* BOOT */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

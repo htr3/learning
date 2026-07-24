@@ -171,6 +171,63 @@ function initHomeProgress() {
   });
 }
 
+// Replace YouTube <iframe> embeds with a click-to-play facade.
+// Embedded YouTube playback requires an HTTP Referer, which is absent when the
+// page is opened over the file:// protocol — YouTube then shows "Error 153:
+// Video player configuration error". The facade shows the thumbnail and, on
+// click, either loads the real player (when served over http/https) or opens
+// the video on YouTube in a new tab (when running from a local file).
+function initVideoFacades() {
+  const iframes = document.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]');
+  iframes.forEach(iframe => {
+    const src = iframe.getAttribute("src") || "";
+    const m = src.match(/embed\/([\w-]{6,})/);
+    if (!m) return;
+    const videoId = m[1];
+    const listMatch = src.match(/[?&]list=([\w-]+)/);
+    const list = listMatch ? listMatch[1] : null;
+    const watchUrl = list
+      ? `https://www.youtube.com/watch?v=${videoId}&list=${list}`
+      : `https://www.youtube.com/watch?v=${videoId}`;
+
+    const facade = document.createElement("button");
+    facade.type = "button";
+    facade.className = "yt-facade";
+    facade.setAttribute("aria-label", "Play video");
+    facade.style.cssText =
+      "position:absolute;top:0;left:0;width:100%;height:100%;border:0;padding:0;cursor:pointer;border-radius:8px;" +
+      "background-size:cover;background-position:center;background-color:#000;" +
+      `background-image:url('https://img.youtube.com/vi/${videoId}/hqdefault.jpg');`;
+    facade.innerHTML =
+      '<span style="position:absolute;inset:0;background:rgba(0,0,0,.28);border-radius:8px"></span>' +
+      '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
+      'width:68px;height:48px;border-radius:12px;background:#ff0000;display:flex;align-items:center;justify-content:center;' +
+      'box-shadow:0 2px 10px rgba(0,0,0,.5)">' +
+      '<span style="border-style:solid;border-width:11px 0 11px 19px;border-color:transparent transparent transparent #fff"></span></span>';
+
+    facade.addEventListener("click", () => {
+      // file:// can't satisfy YouTube's Referer requirement, so open on YouTube.
+      if (window.location.protocol === "file:") {
+        window.open(watchUrl, "_blank", "noopener");
+        return;
+      }
+      // Served over http(s): swap in the real autoplay player in place.
+      const real = document.createElement("iframe");
+      real.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:0;border-radius:8px";
+      const sep = src.includes("?") ? "&" : "?";
+      real.setAttribute("src", src + sep + "autoplay=1");
+      real.setAttribute("title", iframe.getAttribute("title") || "Video");
+      real.setAttribute("frameborder", "0");
+      real.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+      real.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      real.setAttribute("allowfullscreen", "");
+      facade.replaceWith(real);
+    });
+
+    iframe.replaceWith(facade);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const page = document.body.dataset.page || "home";
   renderSidebar(page);
@@ -178,6 +235,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
     document.querySelector(".sidebar")?.classList.toggle("open");
   });
+
+  initVideoFacades();
 
   if (page === "home") initHomeProgress();
   else if (page !== "dsa-visuals" && page !== "system-design-diagrams" && page !== "striver-sheet") initQAPage(page);

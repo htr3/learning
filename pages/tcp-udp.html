@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TCP & UDP — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(TX(90,40,"Client",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-weight":700}));
+    g.appendChild(TX(530,40,"Server",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-weight":700}));
+    g.appendChild(S("line",{x1:90,y1:50,x2:90,y2:175,stroke:"#2f3742","stroke-width":1.5}));
+    g.appendChild(S("line",{x1:530,y1:50,x2:530,y2:175,stroke:"#2f3742","stroke-width":1.5}));
+    if(phase===0){
+      arrow(90,530,70,"SYN","#34d399");arrow(530,90,105,"SYN-ACK","#38bdf8");arrow(90,530,140,"ACK","#34d399");
+      lbl.textContent="TCP — 3-way handshake before any data";lbl.setAttribute("fill","#34d399");sub.textContent="SYN → SYN-ACK → ACK establishes a reliable, ordered connection";}
+    else{
+      arrow(90,530,70,"datagram 1","#fbbf24");arrow(90,530,105,"datagram 2","#fbbf24");arrow(90,530,140,"datagram 3","#fbbf24");
+      lbl.textContent="UDP — just send, no handshake, no ACKs";lbl.setAttribute("fill","#fbbf24");sub.textContent="fire-and-forget datagrams: fast, but may be lost, duplicated, or reordered";}}
+  function arrow(x1,x2,y,label,c){g.appendChild(S("line",{x1,y1:y,x2,y2:y,stroke:c,"stroke-width":2,"marker-end":"url(#a)"}));
+    const t=S("text",{x:(x1+x2)/2,y:y-6,fill:c,"font-size":10,"text-anchor":"middle"});t.textContent=label;g.appendChild(t);}
+  function step(){phase=(phase+1)%2;timer=2.8;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Send 6 numbered packets over a lossy, reordering network. <b>TCP</b> retransmits losses and reassembles everything <b>in order</b> — the app sees a perfect stream. <b>UDP</b> just delivers whatever arrives: lost packets stay lost and order isn't guaranteed. Tune the loss rate and compare.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Protocol</label>
+        <select id="pgProto"><option value="tcp">TCP (reliable, ordered)</option><option value="udp">UDP (fast, best-effort)</option></select></div>
+      <div class="pg-field"><label>Packet loss: <b id="pgLV">30%</b></label><input id="pgLoss" type="range" min="0" max="70" value="30"></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgSend" class="go">▶ Send 6 packets</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">TCP trades latency for reliability (handshake, ACKs, retransmits, ordering). UDP trades reliability for speed — the app must handle loss itself if it cares.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Protocol</div><div class="v ac" id="pgP">TCP</div></div>
+        <div class="pg-stat"><div class="k">Delivered</div><div class="v ok" id="pgDel">0/6</div></div>
+        <div class="pg-stat"><div class="k">Retransmits</div><div class="v wa" id="pgRT">0</div></div>
+        <div class="pg-stat"><div class="k">In order?</div><div class="v" id="pgOrd">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=6,W=560,H=110;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let delivered;
+  function reset(){delivered=[];draw();$("pgDel").textContent="0/"+N;$("pgRT").textContent="0";$("pgOrd").textContent="—";$("pgLog").innerHTML="";
+    $("pgP").textContent=proto().toUpperCase();log("send packets to compare delivery","ac");}
+  function proto(){return $("pgProto").value||"tcp";}
+  function loss(){return (+$("pgLoss").value||0)/100;}
+  function send(){const p=proto();const L=loss();delivered=[];let rt=0;
+    if(p==="tcp"){log("TCP handshake: SYN → SYN-ACK → ACK ✓","ac");
+      for(let i=1;i<=N;i++){let tries=1;while(Math.random()<L&&tries<8){rt++;log("seq "+i+" lost → ACK timeout → retransmit","wa");tries++;}
+        log("seq "+i+" delivered & ACKed"+(tries>1?" (after "+(tries-1)+" retransmit)":""),"ok");}
+      delivered=Array.from({length:N},(_,i)=>i+1); // always in order
+      $("pgOrd").textContent="yes ✓";$("pgOrd").className="v ok";
+      log("TCP reassembled the stream in perfect order 1..6","ok");}
+    else{const arrived=[];for(let i=1;i<=N;i++){if(Math.random()<L){log("datagram "+i+" LOST — gone forever (no retransmit)","bad");}else arrived.push(i);}
+      // reorder
+      for(let i=arrived.length-1;i>0;i--){if(Math.random()<0.4){const j=i-1;[arrived[i],arrived[j]]=[arrived[j],arrived[i]];}}
+      delivered=arrived;const ordered=arrived.every((v,i)=>i===0||v>arrived[i-1]);
+      log("UDP delivered "+arrived.length+" datagrams as: ["+arrived.join(", ")+"]"+(ordered?"":" (out of order!)"),arrived.length===N?"ok":"bad");
+      $("pgOrd").textContent=ordered?"maybe":"no ✗";$("pgOrd").className="v "+(ordered?"wa":"bad");}
+    $("pgDel").textContent=delivered.length+"/"+N;$("pgRT").textContent=rt;$("pgP").textContent=p.toUpperCase();draw();}
+  function draw(){svg.innerHTML="";
+    svg.appendChild(TX(20,20,"receiver buffer (what the app sees):",{fill:"#8b8b93","font-size":10}));
+    if(!delivered.length){svg.appendChild(TX(W/2,65,"—",{fill:"#6b6b73","font-size":12,"text-anchor":"middle"}));return;}
+    const gap=Math.min(80,(W-40)/N);const startX=30;
+    delivered.forEach((seq,i)=>{const x=startX+i*gap;
+      svg.appendChild(S("rect",{x:x,y:40,width:gap-10,height:34,rx:6,fill:"rgba(52,211,153,.16)",stroke:"#34d399","stroke-width":1.6}));
+      svg.appendChild(TX(x+(gap-10)/2,61,"#"+seq,{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));});}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+
+  $("pgLoss").oninput=()=>$("pgLV").textContent=$("pgLoss").value+"%";
+  $("pgProto").onchange=()=>{$("pgP").textContent=proto().toUpperCase();reset();};
+  $("pgSend").onclick=send;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"📶",title:"TCP & UDP",category:"Networking",difficulty:"Easy",readingTime:"9 min",
+  eyebrow:"Transport Layer Protocols",
+  tagline:"The two core transport protocols. <b>TCP</b> gives a reliable, ordered, connection-based byte stream (handshake, ACKs, retransmission, flow/congestion control). <b>UDP</b> is a thin, connectionless datagram service — fast and simple, but best-effort with no guarantees.",
+  pills:["<b>TCP</b>: reliable + ordered","<b>UDP</b>: fast + best-effort","<b>TCP</b>: 3-way handshake","<b>UDP</b>: fire-and-forget"],
+  overview:"TCP and UDP both sit on top of IP but make opposite trade-offs. <b>TCP</b> (Transmission Control Protocol) is <b>connection-oriented</b>: it establishes a session with a <b>three-way handshake</b> (SYN, SYN-ACK, ACK), then delivers a <b>reliable, in-order byte stream</b> using sequence numbers, acknowledgments, retransmission of lost segments, flow control (receiver windows), and congestion control. This makes it perfect when every byte must arrive correctly and in order — web pages, APIs, file transfer, email. <b>UDP</b> (User Datagram Protocol) is <b>connectionless</b>: it just sends independent <b>datagrams</b> with almost no overhead — no handshake, no ACKs, no ordering, no retransmission. Packets may be lost, duplicated, or reordered, and the application must cope. UDP wins where low latency beats perfect reliability, or where the app implements its own logic on top: live video/voice, gaming, DNS, and QUIC/HTTP/3.",
+  problem:"Applications have very different needs. A bank transfer must not lose or reorder a single byte (use TCP). A live voice call would rather drop a stale packet than wait for a retransmission that arrives too late to matter (use UDP). Having two protocols lets each application pick the right balance of reliability versus latency/overhead instead of forcing one model on everyone.",
+  diagram,diagramCaption:"TCP handshakes and guarantees order; UDP fires datagrams with no setup and no guarantees.",
+  how:[
+    "TCP: three-way handshake (SYN → SYN-ACK → ACK) opens a connection.",
+    "TCP: data split into segments with sequence numbers; receiver ACKs; unacked segments are retransmitted after a timeout.",
+    "TCP: flow control (receive window) and congestion control (slow start, AIMD) pace the sender; connection closed with FIN/ACK.",
+    "UDP: application hands a datagram to UDP, which adds a tiny header (ports, length, checksum) and sends it — no state, no ACKs.",
+    "UDP: receiver gets whatever arrives; loss/reorder/dup handling (if any) is the application's job."
+  ],
+  complexity:[["TCP header","20+ bytes"],["UDP header","8 bytes"],["TCP setup","1 RTT handshake"],["UDP setup","none"]],
+  advantages:["TCP: reliable, ordered, no data loss","TCP: built-in flow & congestion control","UDP: minimal latency & overhead","UDP: supports broadcast/multicast, many small messages","UDP: app controls its own reliability semantics"],
+  disadvantages:["TCP: handshake + ACKs add latency","TCP: head-of-line blocking under loss","TCP: per-connection state (heavier at scale)","UDP: no delivery/order guarantees","UDP: app must handle loss, dedup, ordering, congestion"],
+  tradeoffs:"The core trade-off is reliability vs latency/overhead. TCP guarantees correctness but at the cost of setup round trips, acknowledgments, retransmission delays, and head-of-line blocking — a late packet can stall everything behind it, which hurts real-time media. UDP has almost no overhead and never waits, but gives no guarantees, so any needed reliability/ordering must be rebuilt in the app (exactly what QUIC does over UDP, adding streams and loss recovery in userspace). Choose TCP when integrity and order are non-negotiable; choose UDP when timeliness matters more than completeness, or when you want to implement custom transport logic.",
+  whenNot:"Don't use TCP for latency-critical real-time media where a delayed retransmit is useless (voice/video/gaming) — a lost frame is better dropped than stalled. Don't use raw UDP when you need guaranteed, ordered delivery unless you're prepared to reimplement reliability (or use QUIC/a reliable-UDP library). Avoid UDP for large bulk transfers that need congestion control you'd otherwise get free from TCP.",
+  sim,
+  code:{
+"TCP (Python)":`import socket\n# TCP: connection-oriented, reliable, ordered byte STREAM\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\ns.connect(("example.com", 80))          # performs the 3-way handshake\ns.sendall(b"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n")\ndata = s.recv(4096)                     # bytes arrive in order, no loss\ns.close()                               # FIN/ACK teardown`,
+"UDP (Python)":`import socket\n# UDP: connectionless, best-effort DATAGRAMS\ns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\ns.sendto(b"ping", ("1.2.3.4", 9999))    # no handshake, just send\ns.settimeout(1.0)\ntry:\n    data, addr = s.recvfrom(1500)       # may never arrive (no retransmit)\nexcept socket.timeout:\n    pass  # app decides: retry? give up? -> reliability is YOUR job`,
+"Choosing":`# Rule of thumb\nTCP  ->  HTTP/1.1 & HTTP/2, TLS, SSH, SMTP, FTP, database connections,\n         anything where every byte must arrive in order.\nUDP  ->  DNS, DHCP, VoIP/RTP, video conferencing, live streaming, gaming,\n         QUIC/HTTP-3, and metrics (statsd) — latency > perfect reliability.\n# QUIC = UDP + streams + loss recovery + TLS, rebuilding reliability\n# in userspace to avoid TCP's head-of-line blocking.`
+  },
+  realWorld:[
+    ["Web / APIs / TLS","HTTP/1.1 and HTTP/2, TLS, SSH, and databases all run on TCP for reliability."],
+    ["DNS","Uses UDP for fast, small lookups (falls back to TCP for large responses)."],
+    ["VoIP / video calls (RTP)","Use UDP — dropping a late packet beats stalling the call."],
+    ["Online games","UDP for low-latency state updates; games add their own reliability where needed."],
+    ["QUIC / HTTP/3","Built on UDP, reimplementing reliable ordered streams in userspace."]
+  ],
+  interview:[
+    ["basic","What's the difference between TCP and UDP?","TCP is connection-oriented, reliable, and ordered: it handshakes, acknowledges data, retransmits losses, and delivers an in-order byte stream with flow/congestion control. UDP is connectionless and best-effort: it sends independent datagrams with no handshake, no ACKs, and no ordering — faster and lighter, but packets may be lost, duplicated, or reordered."],
+    ["basic","Describe the TCP three-way handshake.","The client sends SYN (with an initial sequence number), the server replies SYN-ACK (acknowledging the client's and sending its own sequence number), and the client sends ACK. After these three messages both sides have agreed on sequence numbers and the connection is established, ready for reliable data transfer."],
+    ["inter","How does TCP guarantee reliable, ordered delivery?","Each byte has a sequence number; the receiver sends acknowledgments for received data. If the sender doesn't get an ACK within a timeout (or sees duplicate ACKs), it retransmits. The receiver buffers and reorders segments by sequence number before handing them to the application, so the app always sees a correct, in-order stream even if the network reorders or drops packets."],
+    ["inter","When would you choose UDP over TCP?","When low latency matters more than guaranteed delivery, or the app manages its own reliability. Examples: real-time voice/video (a delayed retransmit is useless), online gaming, DNS lookups, and multicast/broadcast. TCP's retransmissions and ordering would add latency that hurts these use cases more than occasional packet loss does."],
+    ["adv","What is TCP head-of-line blocking, and how does QUIC address it?","Because TCP delivers a single ordered byte stream, a lost segment blocks delivery of all subsequent bytes (even for independent logical streams multiplexed over it, like HTTP/2). QUIC runs over UDP and implements independent streams with per-stream loss recovery, so a lost packet only stalls its own stream — the others keep flowing. That's why HTTP/3 uses QUIC/UDP."],
+    ["adv","What are TCP flow control and congestion control?","Flow control prevents overwhelming the receiver: the receiver advertises a window of how much data it can buffer, and the sender never exceeds it. Congestion control prevents overwhelming the network: algorithms like slow start and AIMD (additive-increase/multiplicative-decrease), plus fast retransmit/recovery, adjust the sending rate based on inferred loss/RTT so the network doesn't collapse under load."],
+    ["sd","How would you choose transport protocols when designing a live video platform with chat?","Use UDP-based transport (WebRTC/RTP or QUIC) for the live media so late packets are dropped rather than stalling playback, tolerating minor loss with error concealment. Use TCP (WebSockets over TCP, or HTTP) for chat and control signaling where every message must arrive in order. Combining them gives smooth low-latency video plus reliable messaging — each stream on the protocol suited to its needs."]
+  ],
+  mistakes:["Assuming UDP is 'just faster TCP' — it has no delivery/order guarantees.","Using TCP for real-time media, causing stalls from retransmissions.","Forgetting UDP apps must handle loss, ordering, dedup, and congestion themselves.","Ignoring TCP head-of-line blocking when multiplexing (HTTP/2 over lossy links).","Sending UDP datagrams larger than the path MTU, causing fragmentation/loss."],
+  best:["Use TCP when correctness/order are required; UDP when latency dominates.","On UDP, add just the reliability you need (acks/seq) — or use QUIC.","Keep UDP datagrams under the path MTU to avoid fragmentation.","Rely on TCP's congestion control for bulk transfers.","Split media (UDP) from signaling/control (TCP) in real-time systems."],
+  related:[["HTTP/2 & HTTP/3","🚀","H3 rides UDP/QUIC","http2-3.html"],["TLS Handshake","🔐","Runs over TCP/QUIC","tls-handshake.html"],["WebSockets","🔌","Long-lived TCP","websockets.html"],["DNS","🌍","UDP-based lookups","system-designed.html"],["Load Balancer","⚖️","L4 (TCP/UDP) balancing","system-designed.html"],["gRPC","🔗","TCP via HTTP/2","grpc.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

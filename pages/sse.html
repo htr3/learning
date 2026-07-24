@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Server-Sent Events — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:32,y:80,width:110,height:40,rx:8,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));g.appendChild(TX(87,104,"Browser",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:478,y:80,width:110,height:40,rx:8,fill:"rgba(124,58,237,.2)",stroke:"#7C3AED","stroke-width":2}));g.appendChild(TX(533,104,"Server",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    g.appendChild(S("line",{x1:142,y1:100,x2:478,y2:100,stroke:"#34d399","stroke-width":5}));
+    if(phase===0){g.appendChild(S("line",{x1:142,y1:88,x2:300,y2:88,stroke:"#fbbf24","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(TX(230,80,"GET /events",{fill:"#fbbf24","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="1) client opens ONE long-lived GET";lbl.setAttribute("fill","#fbbf24");sub.textContent="Accept: text/event-stream — the response never ends";}
+    else{[300,360,420].forEach((x,i)=>g.appendChild(S("circle",{cx:x,cy:100,r:6,fill:"#38bdf8"})));
+      g.appendChild(TX(310,72,"◀ event  ◀ event  ◀ event",{fill:"#38bdf8","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="2) server streams events, one-way";lbl.setAttribute("fill","#34d399");sub.textContent="each event has an id; on drop the browser auto-reconnects with Last-Event-ID";}}
+  function step(){phase=(phase+1)%2;timer=2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Open an event stream and let the server push events over one long-lived HTTP response. Then <b>drop</b> the connection: the browser automatically reconnects and sends the <b>Last-Event-ID</b>, so the server resumes exactly where it left off — <b>no events lost</b>. This built-in resume is SSE's superpower over raw WebSockets.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-btns"><button id="pgStart" class="go">Open stream</button><button id="pgEmit">Server emits event</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgDrop">✂ Drop connection</button><button id="pgRecon">↻ Reconnect</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">SSE is one-way (server→client) over plain HTTP. The browser's EventSource handles reconnection and Last-Event-ID for you — you just listen for messages.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">State</div><div class="v ac" id="pgState">closed</div></div>
+        <div class="pg-stat"><div class="k">Last-Event-ID</div><div class="v ok" id="pgLast">—</div></div>
+        <div class="pg-stat"><div class="k">Received</div><div class="v" id="pgRecv">0</div></div>
+        <div class="pg-stat"><div class="k">Lost on resume</div><div class="v wa" id="pgLost">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=140,cx1=70,cx2=490,cy=70;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let open,serverId,clientLast,recv,dots,raf=null;
+  function reset(){open=false;serverId=0;clientLast=0;recv=0;dots=[];if(raf)cancelAnimationFrame(raf);raf=null;draw();stats();$("pgLog").innerHTML="";log("closed — click Open stream","ac");}
+  function start(){if(open){log("already open","wa");return;}open=true;log("→ GET /events  Accept: text/event-stream (connection stays open)","wa");stats();draw();}
+  function emit(){if(!open){log("stream not open","bad");return;}serverId++;log("server → event id="+serverId+" data={price:"+(100+serverId)+"}","ac");
+    deliver(serverId);}
+  function deliver(id){dots.push({id,p:0});recv++;clientLast=id;stats();animate();}
+  function drop(){if(!open){log("not open","wa");return;}open=false;log("✂ connection dropped (network blip). Browser will auto-reconnect…","bad");stats();draw();}
+  function recon(){if(open){log("already connected","wa");return;}open=true;
+    log("↻ reconnect → GET /events  Last-Event-ID: "+clientLast,"wa");
+    const missed=serverId-clientLast;
+    if(missed>0){log("server resumes AFTER id="+clientLast+", replays "+missed+" missed event(s)","ok");
+      for(let i=clientLast+1;i<=serverId;i++)deliver(i);}
+    else log("nothing missed — resumed cleanly","ok");
+    $("pgLost").textContent="0";stats();draw();}
+  function animate(){if(raf)cancelAnimationFrame(raf);let last=performance.now();
+    function fr(now){const dt=(now-last)/1000;last=now;dots.forEach(d=>{if(d.p<1){d.p+=dt*0.9;if(d.p>1)d.p=1;}});draw();
+      dots=dots.filter(d=>d.p<1.05);if(dots.length)raf=requestAnimationFrame(fr);else raf=null;}
+    raf=requestAnimationFrame(fr);}
+  function draw(){svg.innerHTML="";
+    svg.appendChild(S("rect",{x:cx1-42,y:cy-20,width:84,height:40,rx:8,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));
+    svg.appendChild(TX(cx1,cy+4,"Client",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(S("rect",{x:cx2-42,y:cy-20,width:84,height:40,rx:8,fill:"rgba(124,58,237,.2)",stroke:"#7C3AED","stroke-width":2}));
+    svg.appendChild(TX(cx2,cy+4,"Server",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(S("line",{x1:cx1+42,y1:cy,x2:cx2-42,y2:cy,stroke:open?"#34d399":"#f87171","stroke-width":open?5:2,"stroke-dasharray":open?"none":"6 5"}));
+    svg.appendChild(TX(W/2,26,open?"● stream open (one-way ◀)":"✂ disconnected",{fill:open?"#34d399":"#f87171","font-size":11,"text-anchor":"middle","font-weight":700}));
+    dots.forEach(d=>{if(d.p>=1)return;const x=cx2-42-(cx2-cx1-84)*d.p;svg.appendChild(S("circle",{cx:x,cy:cy,r:6,fill:"#38bdf8"}));
+      svg.appendChild(TX(x,cy-12,"#"+d.id,{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));});}
+  function stats(){$("pgState").textContent=open?"open":"closed";$("pgState").className="v "+(open?"ok":"ac");
+    $("pgLast").textContent=clientLast||"—";$("pgRecv").textContent=recv;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgStart").onclick=start;$("pgEmit").onclick=emit;$("pgDrop").onclick=drop;$("pgRecon").onclick=recon;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"📡",title:"Server-Sent Events",category:"Networking",difficulty:"Easy",readingTime:"8 min",
+  eyebrow:"One-Way Server Push over HTTP",
+  tagline:"A simple standard for the server to stream a continuous flow of events to the browser over a single long-lived HTTP response — with <b>automatic reconnection</b> and <b>Last-Event-ID</b> resume built into the browser's <code>EventSource</code>.",
+  pills:["<b>One-way</b> (server→client)","<b>Plain HTTP</b>","<b>Auto-reconnect</b>","<b>text/event-stream</b>"],
+  overview:"Server-Sent Events (SSE) let a server push a stream of updates to a client over one ordinary HTTP connection that stays open. The client opens it with the <code>EventSource</code> API (a GET with <code>Accept: text/event-stream</code>); the server keeps the response open and writes events in a tiny text format (<code>id:</code>, <code>event:</code>, <code>data:</code> lines separated by blank lines). It's <b>unidirectional</b> — only server→client — which is exactly right for feeds, notifications, progress updates, and live metrics. The killer feature is resilience for free: the browser <b>automatically reconnects</b> if the connection drops and sends the <b>Last-Event-ID</b> header, so the server can replay any missed events. Compared to WebSockets, SSE is simpler, works over plain HTTP/HTTPS (and multiplexes nicely over HTTP/2), but can't send client→server over the same channel.",
+  problem:"Many real-time features only need the server to push to the client — stock prices, notifications, job progress, live scores. WebSockets work but add complexity (framing protocol, manual reconnection, stateful scaling, sticky routing). SSE gives one-way push using nothing but HTTP, with reconnection and event-resume handled by the browser.",
+  diagram,diagramCaption:"One long-lived GET; the server streams id-tagged events, and drops auto-resume via Last-Event-ID.",
+  how:[
+    "Client creates an EventSource, opening GET /events with Accept: text/event-stream.",
+    "Server responds with Content-Type: text/event-stream and keeps the connection open.",
+    "Server writes events as text: optional id:, event: (name), and data: lines, each event ended by a blank line.",
+    "Client fires message/named-event handlers as events arrive.",
+    "On disconnect the browser auto-reconnects and sends Last-Event-ID; the server replays events after that id."
+  ],
+  complexity:[["Direction","server → client only"],["Transport","HTTP (text/event-stream)"],["Reconnect","automatic (browser)"],["Resume","Last-Event-ID header"]],
+  advantages:["Dead simple — just HTTP + EventSource","Automatic reconnection & event resume","Works through proxies/firewalls (plain HTTP)","Efficient for one-way streams","Multiplexes well over HTTP/2"],
+  disadvantages:["One-way only (no client→server on same channel)","Text/UTF-8 only (no binary frames)","HTTP/1.1 per-domain connection limit (~6)","Long-lived conns still need scaling care","Not supported in some old environments/IE"],
+  tradeoffs:"SSE trades WebSockets' bidirectionality and binary support for simplicity and built-in resilience. If you only need server→client updates, SSE is less code and more robust (auto-reconnect/resume) than raw WebSockets. Its main gotcha is the browser's ~6-connection-per-domain limit on HTTP/1.1 (mostly solved by HTTP/2 multiplexing). Like any long-lived connection it needs a scaling strategy (pub/sub backplane, connection draining). Choose WebSockets when the client also streams to the server (chat, games); choose SSE for feeds, notifications, and progress where the traffic is one-way.",
+  whenNot:"Don't use SSE when you need client→server streaming or low-latency bidirectional traffic (use WebSockets), when you must send binary data efficiently, or for simple infrequent updates where a periodic fetch/poll is adequate. Also reconsider on HTTP/1.1-heavy environments with many concurrent streams per domain.",
+  sim,
+  code:{
+"Browser":`const es = new EventSource("/events");           // opens the stream\nes.onmessage = (e) => append(JSON.parse(e.data)); // default "message" events\nes.addEventListener("price", (e) => updateTicker(JSON.parse(e.data)));\nes.onerror = () => { /* browser AUTO-reconnects; nothing to do */ };\n// on reconnect the browser automatically sends "Last-Event-ID" for you\nes.close();   // stop listening`,
+"Node server":`app.get("/events", (req, res) => {\n  res.writeHead(200, {\n    "Content-Type": "text/event-stream",\n    "Cache-Control": "no-cache",\n    "Connection": "keep-alive",\n  });\n  const since = Number(req.headers["last-event-id"] || 0);  // resume point\n  replayEventsAfter(since, (ev) => send(res, ev));           // no data lost\n\n  const sub = bus.subscribe("prices", (ev) => send(res, ev));\n  req.on("close", () => sub.unsubscribe());\n});\nfunction send(res, ev){\n  res.write(\`id: \${ev.id}\\n\`);\n  res.write(\`event: price\\n\`);\n  res.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);   // blank line ends the event\n}`,
+"Wire format":`# The text/event-stream wire format is trivial:\nid: 42\nevent: price\ndata: {"symbol":"ACME","price":101}\n\nid: 43\ndata: first line\ndata: second line          # multiple data: lines are joined with \\n\n\nretry: 5000                # tell the browser to wait 5s before reconnecting\n: this is a comment / heartbeat to keep the connection alive`
+  },
+  realWorld:[
+    ["Live scores / tickers","Push price and score updates one-way to many browsers cheaply."],
+    ["Notifications & feeds","Twitter-style timelines and alert streams over SSE."],
+    ["AI chat token streaming","LLM apps stream generated tokens to the UI via SSE."],
+    ["CI/CD & job progress","Stream build logs and progress bars to dashboards."],
+    ["Monitoring dashboards","Continuously push metrics/events to Grafana-like UIs."]
+  ],
+  interview:[
+    ["basic","What are Server-Sent Events?","A standard for one-way, server-to-client streaming over a single long-lived HTTP response. The browser's EventSource opens the stream and the server writes text events (id/event/data). It's ideal for pushing updates like notifications, feeds, and live metrics."],
+    ["basic","How does SSE differ from WebSockets?","SSE is one-way (server→client) over plain HTTP, text-only, with automatic reconnection and event resume built in. WebSockets are full-duplex (both directions), support binary, and are lower-level (you implement reconnection yourself). Use SSE for server push, WebSockets when the client also needs to stream."],
+    ["inter","How does SSE recover from a dropped connection without losing events?","Each event can include an id. The browser tracks the last id it saw and, on automatic reconnect, sends it in the Last-Event-ID header. The server uses that id to replay only the events the client missed, so the stream resumes seamlessly — all handled by EventSource with no app code on the client."],
+    ["inter","What is the text/event-stream format?","A simple UTF-8 text format: fields like `data:`, `event:` (event name), `id:` (event id), and `retry:` (reconnect delay), one per line, with a blank line terminating each event. Multiple `data:` lines are concatenated with newlines. Lines starting with `:` are comments, often used as heartbeats."],
+    ["adv","What are SSE's scaling limitations and how do you address them?","On HTTP/1.1 browsers cap ~6 connections per domain, so many SSE streams per page can starve other requests — HTTP/2 multiplexing largely fixes this. Like all long-lived connections, servers hold per-client state, so you scale with a pub/sub backplane (Redis/Kafka) to fan out events across instances, use connection draining on deploys, and send periodic heartbeats/timeouts to detect dead clients."],
+    ["adv","How do you deliver an event to a user connected to a different server?","Use a shared pub/sub system. Each server subscribes to per-user/topic channels; when an event is produced, publish it to the channel and whichever server holds that user's SSE connection writes it to the response. Persist events with ids so a reconnecting client can resume via Last-Event-ID even if it lands on a different node."],
+    ["sd","When would you choose SSE in a system design?","When updates flow only server→client and you want simplicity and resilience: notification feeds, live dashboards, progress/log streaming, and LLM token streaming. Back it with a pub/sub backplane and event store for resume. Switch to WebSockets if the client must also send frequent messages (chat, collaboration, games)."]
+  ],
+  mistakes:["Trying to send client→server over the same SSE channel (it's one-way).","Not assigning event ids, so reconnects can't resume and events are lost.","Forgetting heartbeats, so idle connections get killed by proxies.","Opening many SSE streams per domain on HTTP/1.1 (connection starvation).","No pub/sub backplane, so events can't reach users on other instances."],
+  best:["Assign monotonic event ids and support Last-Event-ID replay.","Send periodic comment/heartbeat lines to keep connections alive.","Serve over HTTP/2 to avoid per-domain connection limits.","Use a pub/sub backplane + event store for multi-instance fan-out and resume.","Pick SSE for one-way push; use WebSockets only when you need two-way."],
+  related:[["WebSockets","🔌","Full-duplex alternative","websockets.html"],["HTTP/2 & HTTP/3","🚀","Fixes connection limits","http2-3.html"],["REST API","🌐","SSE is just HTTP","rest.html"],["Notification System","🔔","Push delivery","notification-system.html"],["News Feed","🐦","Live timeline updates","news-feed.html"],["Gossip Protocol","🗣️","Other dissemination","gossip.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

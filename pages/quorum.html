@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quorum — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,188,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const xs=[190,270,350,430,510];const y=105;
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    // W set = first 3, R set = last 3, overlap = middle (index 2)
+    xs.forEach((x,i)=>{const inW=i<3,inR=i>=2;const overlap=inW&&inR;
+      g.appendChild(S("circle",{cx:x,cy:y,r:24,
+        fill:overlap?"rgba(251,191,36,.3)":inW?"rgba(124,58,237,.22)":inR?"rgba(56,189,248,.18)":"#161619",
+        stroke:overlap?"#fbbf24":inW?"#7C3AED":inR?"#38bdf8":"#3a3a42","stroke-width":2}));
+      g.appendChild(TX(x,y+4,"N"+(i+1),{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));});
+    g.appendChild(TX(230,55,"W = 3 (write set)",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle"}));
+    g.appendChild(TX(470,155,"R = 3 (read set)",{fill:"#38bdf8","font-size":11,"text-anchor":"middle"}));
+    lbl.textContent="N=5, W=3, R=3  →  R + W = 6 > 5 = N";
+    sub.textContent="the write set and read set always overlap (N3) → a read sees the latest write";}
+  function step(){render();timer=3;}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Tune N (replicas), W (write quorum) and R (read quorum). Write increments a version on W nodes; read fetches from R nodes and returns the newest it sees. When <b>R + W &gt; N</b> the read and write sets are guaranteed to overlap, so reads always see the latest write — even with nodes down.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>N replicas: <b id="pgNV">5</b></label><input id="pgN" type="range" min="3" max="7" value="5"></div>
+      <div class="pg-field"><label>W (write quorum): <b id="pgWV">3</b></label><input id="pgW" type="range" min="1" max="7" value="3"></div>
+      <div class="pg-field"><label>R (read quorum): <b id="pgRV">3</b></label><input id="pgR" type="range" min="1" max="7" value="3"></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgWrite" class="go">Write (v+1)</button><button id="pgRead">Read</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Click a node to toggle it down. R+W&gt;N ⇒ strong consistency. W&gt;N/2 ⇒ no two conflicting writes. Small R/W ⇒ low latency but possible stale reads.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">R + W vs N</div><div class="v ac" id="pgFormula">6 &gt; 5 ✓</div></div>
+        <div class="pg-stat"><div class="k">Consistency</div><div class="v ok" id="pgCons">strong</div></div>
+        <div class="pg-stat"><div class="k">Latest version</div><div class="v wa" id="pgLatest">v0</div></div>
+        <div class="pg-stat"><div class="k">Last read</div><div class="v" id="pgReadV">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=180;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let n,ver,up,latest;
+  function reset(){n=+$("pgN").value||5;ver=new Array(n).fill(0);up=new Array(n).fill(true);latest=0;
+    fixSliders();draw([],[]);stats();$("pgLog").innerHTML="";log("cluster of "+n+" replicas, all at v0","ac");}
+  function fixSliders(){n=+$("pgN").value||5;$("pgW").max=n;$("pgR").max=n;
+    if(+$("pgW").value>n)$("pgW").value=n;if(+$("pgR").value>n)$("pgR").value=n;
+    $("pgNV").textContent=n;$("pgWV").textContent=$("pgW").value;$("pgRV").textContent=$("pgR").value;}
+  function upIdx(){const a=[];for(let i=0;i<n;i++)if(up[i])a.push(i);return a;}
+  function write(){const w=+$("pgW").value||3;const avail=upIdx();
+    if(avail.length<w){log("WRITE FAILED — only "+avail.length+" nodes up, need W="+w,"bad");draw([],[]);return;}
+    const chosen=avail.slice(0,w);latest++;chosen.forEach(i=>ver[i]=latest);
+    log("WRITE v"+latest+" → acked by "+w+" nodes ["+chosen.map(i=>"N"+(i+1)).join(",")+"]","ok");
+    draw(chosen,[]);stats();}
+  function read(){const r=+$("pgR").value||3;const avail=upIdx();
+    if(avail.length<r){log("READ FAILED — only "+avail.length+" nodes up, need R="+r,"bad");draw([],[]);return;}
+    const chosen=avail.slice(0,r);const seen=Math.max(...chosen.map(i=>ver[i]));
+    const stale=seen<latest;
+    log("READ from "+r+" nodes ["+chosen.map(i=>"N"+(i+1)).join(",")+"] → returns v"+seen+(stale?" ⚠ STALE (latest is v"+latest+")":" ✓ latest"),stale?"bad":"ok");
+    $("pgReadV").textContent="v"+seen+(stale?" stale":"");$("pgReadV").className="v "+(stale?"bad":"ok");
+    draw([],chosen);}
+  function draw(wset,rset){svg.innerHTML="";
+    const gap=Math.min(90,(W-60)/n);const startX=W/2-(n-1)*gap/2;
+    for(let i=0;i<n;i++){const x=startX+i*gap,y=80;const inW=wset.includes(i),inR=rset.includes(i);
+      svg.appendChild(S("circle",{cx:x,cy:y,r:24,
+        fill:!up[i]?"rgba(120,120,130,.1)":inW?"rgba(124,58,237,.35)":inR?"rgba(56,189,248,.3)":"#161619",
+        stroke:!up[i]?"#4a4a52":inW?"#a06bff":inR?"#38bdf8":"#3a3a42","stroke-width":2,"stroke-dasharray":up[i]?"none":"4 4"}));
+      const t=S("text",{x:x,y:y-2,fill:!up[i]?"#6b6b73":"#e4e4e7","font-size":10,"text-anchor":"middle"});t.textContent=up[i]?"N"+(i+1):"✕";svg.appendChild(t);
+      svg.appendChild(TX(x,y+11,"v"+ver[i],{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+      const hit=S("circle",{cx:x,cy:y,r:24,fill:"transparent",style:"cursor:pointer"});hit.dataset.i=i;
+      hit.addEventListener("click",()=>{up[i]=!up[i];log((up[i]?"N"+(i+1)+" back up":"N"+(i+1)+" taken down"),"ac");draw([],[]);stats();});
+      svg.appendChild(hit);}
+    svg.appendChild(TX(W/2,150,"purple = write set · blue = read set · click a node to toggle",{fill:"#6b6b73","font-size":10,"text-anchor":"middle"}));}
+  function stats(){const N=+$("pgN").value||5,w=+$("pgW").value||3,r=+$("pgR").value||3;const sum=r+w;const strong=sum>N;
+    $("pgFormula").textContent=r+"+"+w+" = "+sum+(strong?" > ":" ≤ ")+N+(strong?" ✓":" ✗");
+    $("pgCons").textContent=strong?"strong":"eventual";$("pgCons").className="v "+(strong?"ok":"wa");
+    $("pgLatest").textContent="v"+latest;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  ["pgN","pgW","pgR"].forEach(id=>$(id).oninput=()=>{const keepVer=(id!=="pgN");if(id==="pgN"){reset();}else{fixSliders();stats();}});
+  $("pgWrite").onclick=write;$("pgRead").onclick=read;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🗳️",title:"Quorum",category:"Distributed Systems",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Read/Write Majority Consistency",
+  tagline:"In a replicated store of N nodes, require a <b>write quorum W</b> and a <b>read quorum R</b>. When <b>R + W &gt; N</b>, the read and write sets must overlap on at least one node — so every read is guaranteed to see the latest write.",
+  pills:["<b>R + W &gt; N</b> = strong","<b>W &gt; N/2</b> = no split writes","<b>Tunable</b> per query","<b>Dynamo-style</b>"],
+  overview:"Quorum-based replication (as in Dynamo, Cassandra, Riak) stores each key on N replicas and lets you tune consistency with two numbers: how many replicas must acknowledge a <b>write</b> (W) and how many must respond to a <b>read</b> (R). The key insight is set overlap: if <b>R + W &gt; N</b>, then any read quorum and any write quorum share at least one node, and that node holds the most recent version — so reads never miss the latest committed write. Additionally requiring <b>W &gt; N/2</b> prevents two concurrent writes from both succeeding on disjoint majorities. By dialing R and W you slide between strong consistency and low latency/high availability, often on a per-operation basis.",
+  problem:"With N replicas, waiting for all of them is slow and fragile (any one down blocks you), but reading/writing just one risks stale data and lost updates. Quorums give a principled middle ground: pick the smallest R and W that meet your consistency and availability needs, tolerating some node failures while bounding staleness.",
+  diagram,diagramCaption:"With N=5, W=3, R=3, the write set and read set overlap on at least one node, guaranteeing fresh reads.",
+  how:[
+    "Store each key on N replicas.",
+    "A write is acknowledged once W replicas have durably stored the new version.",
+    "A read queries R replicas and returns the value with the highest version/timestamp.",
+    "If R + W > N, read and write quorums intersect, so the read set contains a node with the latest write.",
+    "Conflicts (concurrent writes) are resolved by version vectors/timestamps or read-repair; W > N/2 avoids two winning writes."
+  ],
+  complexity:[["Strong read","R + W > N"],["No split writes","W > N/2"],["Tolerate f writes","W = N − f"],["Fastest reads","R = 1 (weak)"]],
+  advantages:["Tunable consistency vs latency per operation","Tolerates node failures (no single point)","Simple, well-understood math (set overlap)","Enables read-your-writes with the right R,W"],
+  disadvantages:["Higher R/W = higher latency (wait for more nodes)","Doesn't by itself order concurrent writes (needs versioning)","Coordinator must contact multiple replicas","Sloppy quorums/hinted handoff weaken the guarantee"],
+  tradeoffs:"R and W are opposite dials on the same budget. Write-heavy systems often use small W and large R (or vice versa) to make the common path fast. R+W>N buys strong consistency but raises tail latency because you wait for more replicas; R=W=1 is fastest and most available but eventually consistent. W=N gives durable writes but any single failure blocks writes; W=1 is fast but risks losing the write if that node dies before replicating. 'Sloppy quorums' with hinted handoff boost availability during partitions but can temporarily break the overlap guarantee, allowing stale reads until anti-entropy heals.",
+  whenNot:"Skip strict quorums when you need linearizable, ordered operations across keys (use consensus/Raft), when a single-leader replicated database already meets your needs, or when ultra-low latency matters more than freshness (use R=W=1 with eventual consistency and conflict resolution). Quorums alone don't give transactions or global ordering.",
+  sim,
+  code:{
+"Cassandra":`-- Cassandra exposes quorum as per-query consistency levels (RF = N)\n-- Strong (read-your-writes) on RF=3:  W=QUORUM(2) + R=QUORUM(2) => 2+2 > 3\nCONSISTENCY QUORUM;\nINSERT INTO users (id, name) VALUES (42, 'Ada');   -- W = 2 acks\nSELECT name FROM users WHERE id = 42;              -- R = 2 responses\n\n-- Fast but eventually consistent: R=W=ONE (1 + 1 = 2, not > 3)\nCONSISTENCY ONE;\nSELECT name FROM users WHERE id = 42;   -- may return a stale value`,
+"Python":`def read(replicas, R):\n    # query R replicas, return the value with the newest version\n    responses = query_fastest(replicas, count=R)\n    newest = max(responses, key=lambda r: r.version)\n    read_repair(replicas, newest)        # push latest to stale replicas\n    return newest.value\n\ndef write(replicas, key, value, N, W):\n    version = next_version(key)\n    acks = send_write(replicas, key, value, version)\n    if count(acks) >= W:                 # W durable acks => success\n        return "OK"\n    raise QuorumNotReached(f"got {len(acks)} < W={W}")`,
+"Guarantee":`# The overlap guarantee, in one line of reasoning:\nN = 5; W = 3; R = 3\nassert R + W > N          # 6 > 5  -> read & write sets MUST share a node\n# that shared node has the latest write => read sees the freshest version\n\n# Prevent two conflicting writes from both committing:\nassert W > N / 2          # 3 > 2.5 -> any two write quorums also overlap`
+  },
+  realWorld:[
+    ["Amazon DynamoDB / Dynamo","Originated tunable N/R/W quorums with versioning and read-repair."],
+    ["Apache Cassandra","Per-query consistency levels (ONE, QUORUM, ALL, LOCAL_QUORUM) implement R and W."],
+    ["Riak","Explicit n_val, r, w knobs per bucket for quorum tuning."],
+    ["MongoDB","writeConcern majority + readConcern majority provide quorum-like guarantees."],
+    ["Consensus systems (etcd/ZK)","Use majority quorums (a special case: R=W=majority) for linearizable state."]
+  ],
+  interview:[
+    ["basic","What is a quorum in replication?","A minimum number of replicas that must participate in an operation. With N replicas you require W acknowledgments for a write and R responses for a read; choosing R and W lets you trade consistency against latency and availability."],
+    ["basic","What does R + W > N guarantee?","That the set of replicas involved in a read always overlaps the set involved in the most recent write by at least one node. Since that node holds the newest version, the read is guaranteed to observe the latest committed write — i.e., strong (read-your-writes) consistency."],
+    ["inter","Why also require W > N/2?","R+W>N ensures reads see writes, but two concurrent writes could each reach a different set of W replicas. Requiring W > N/2 makes any two write quorums overlap, so they can't both commit on disjoint majorities — preventing conflicting 'both succeeded' writes and enabling a single winner via versioning."],
+    ["inter","How do R and W affect latency and availability?","Larger R/W means waiting for more replicas, raising latency and reducing availability (more nodes must be up). Smaller R/W is faster and more available but risks staleness. Common tunings: W=N for durable writes with fast reads (R=1), or balanced QUORUM/QUORUM for read-your-writes. You can even choose different R/W per query."],
+    ["adv","What is a sloppy quorum and hinted handoff?","During failures, a 'sloppy quorum' writes to the first W reachable nodes — even if they're not the key's normal replicas — storing hints to hand off later. This preserves write availability under partition, but it temporarily breaks the R+W>N overlap guarantee (a read might miss the write until anti-entropy/read-repair heals), trading consistency for availability."],
+    ["adv","How are conflicting versions resolved with quorums?","Quorums ensure you can find the latest write but don't order concurrent writes by themselves. Systems attach version vectors or timestamps; on read, the coordinator returns the newest (or all siblings for the app to merge), and read-repair/anti-entropy propagates the winning version. Last-writer-wins uses timestamps; Dynamo-style uses vector clocks to detect true concurrency."],
+    ["sd","Design tunable consistency for a shopping cart vs a bank balance.","Shopping cart: prioritize availability — N=3, W=1/R=1 (or sloppy quorum) with vector-clock merge so writes never block and conflicts merge items. Bank balance: prioritize correctness — use W=QUORUM and R=QUORUM (R+W>N) for read-your-writes, and ideally back critical invariants with consensus/transactions rather than quorums alone, since money needs ordering and atomicity."]
+  ],
+  mistakes:["Assuming any quorum config is strongly consistent (only R+W>N is).","Forgetting W>N/2, allowing two conflicting writes to both commit.","Ignoring versioning, so quorum reads can't resolve concurrent writes.","Treating sloppy quorums as equivalent to strict quorums.","Setting W=N (or R=N) and then being surprised writes/reads block on any failure."],
+  best:["Choose R and W from the actual consistency/latency needs, per operation.","Use R+W>N and W>N/2 for strong, conflict-free behavior when required.","Attach version vectors/timestamps and enable read-repair/anti-entropy.","Prefer LOCAL_QUORUM in multi-region setups to avoid cross-region latency.","Reserve strict quorums for correctness paths; relax for availability-first data."],
+  related:[["PACELC","🔀","Latency vs consistency","pacelc.html"],["Consensus / Raft","🧭","Majority quorum special case","consensus-raft.html"],["Vector Clocks","🕰️","Resolve concurrent writes","vector-clocks.html"],["Split Brain","🧠","Quorum prevents it","split-brain.html"],["Replication","📑","Where quorums apply","system-designed.html"],["CAP Theorem","🔺","The underlying trade-off","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

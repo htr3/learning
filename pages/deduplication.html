@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deduplication — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const colors={A:"#38bdf8",B:"#34d399",C:"#fbbf24",D:"#f472b6"};
+  let phase=0,timer=0,running=false,raf,last;
+  function chunk(x,y,label){g.appendChild(S("rect",{x,y,width:34,height:26,rx:4,fill:colors[label]+"33",stroke:colors[label]}));g.appendChild(TX(x+17,y+17,label,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));}
+  function render(){g.innerHTML="";
+    const f1=["A","B","C","A"],f2=["A","B","D","A"];
+    g.appendChild(TX(70,55,"file 1",{fill:"#8b8b93","font-size":10}));f1.forEach((c,i)=>chunk(120+i*40,44,c));
+    g.appendChild(TX(70,95,"file 2",{fill:"#8b8b93","font-size":10}));f2.forEach((c,i)=>chunk(120+i*40,84,c));
+    if(phase===0){lbl.textContent="two files share many identical chunks";lbl.setAttribute("fill","#fbbf24");sub.textContent="A appears 4×, B twice — naively stored = 8 chunks on disk";}
+    else if(phase===1){f1.concat(f2).forEach((c,i)=>{});g.appendChild(TX(320,130,"hash each chunk → detect duplicates by fingerprint",{fill:"#a78bfa","font-size":10,"text-anchor":"middle"}));
+      [["A","h:9f2a"],["B","h:4c1d"],["C","h:7e88"],["D","h:2b55"]].forEach(([c,h],i)=>{chunk(180+i*70,150,c);g.appendChild(TX(197+i*70,190,h,{fill:"#8b8b93","font-size":7,"text-anchor":"middle"}));});
+      lbl.textContent="fingerprint every chunk (SHA-256)";lbl.setAttribute("fill","#a78bfa");sub.textContent="identical content → identical hash → store the unique chunk only once";}
+    else{g.appendChild(TX(320,128,"store 4 UNIQUE chunks; files = lists of references",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      ["A","B","C","D"].forEach((c,i)=>chunk(230+i*40,145,c));
+      g.appendChild(TX(320,190,"8 logical chunks → 4 stored = 2× space saved",{fill:"#34d399","font-size":10,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="store each unique chunk once; files reference them";lbl.setAttribute("fill","#34d399");sub.textContent="duplicates cost only a tiny pointer — huge savings for backups/VMs";}}
+  function step(){phase=(phase+1)%3;timer=3.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Upload a series of files (think daily backups). Each file is split into chunks and each chunk is <b>hashed</b>; a chunk is stored on disk only if its hash hasn't been seen before. Watch the <b>dedup ratio</b> climb as repeated content is stored once and later files become mostly <b>references</b>.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>File contents (letters = chunks)</label><input id="pgIn" type="text" value="ABCABD" style="width:180px"></div>
+      <button class="pg-btn" id="pgAdd">store this file</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button class="pg-btn secondary" id="pgBk" style="font-size:10px">simulate daily backup</button>
+        <button class="pg-btn secondary" id="pgReset" style="font-size:10px">reset store</button>
+      </div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">Each letter is one chunk. Re-storing a file (or one with mostly the same chunks) adds almost no new physical data — only new/changed chunks are written.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Logical chunks</div><div class="v" id="pgLog2">0</div></div>
+        <div class="pg-stat"><div class="k">Physically stored</div><div class="v ok" id="pgPhys">0</div></div>
+        <div class="pg-stat"><div class="k">Dedup ratio</div><div class="v ac" id="pgRatio">1.0×</div></div>
+        <div class="pg-stat"><div class="k">Space saved</div><div class="v wa" id="pgSaved">0%</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=110;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const colors={A:"#38bdf8",B:"#34d399",C:"#fbbf24",D:"#f472b6",E:"#a78bfa",F:"#fb923c",G:"#22d3ee"};
+  let store={},logical=0,files=0;
+  function draw(){svg.innerHTML="";
+    svg.appendChild(TX(20,16,"unique chunk store (each stored once):",{fill:"#8b8b93","font-size":10}));
+    const keys=Object.keys(store);
+    keys.forEach((k,i)=>{const x=20+(i%12)*44,y=26+Math.floor(i/12)*40;const c=colors[k]||"#8b8b93";
+      svg.appendChild(S("rect",{x,y,width:36,height:28,rx:5,fill:c+"33",stroke:c}));
+      svg.appendChild(TX(x+18,y+15,k,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+      svg.appendChild(TX(x+18,y+25,"×"+store[k],{fill:"#8b8b93","font-size":7,"text-anchor":"middle"}));});
+    if(!keys.length)svg.appendChild(TX(W/2,60,"empty — store a file",{fill:"#5b5b63","font-size":12,"text-anchor":"middle"}));}
+  function stats(){const phys=Object.keys(store).length;$("pgLog2").textContent=logical;$("pgPhys").textContent=phys;
+    const ratio=phys?logical/phys:1;$("pgRatio").textContent=ratio.toFixed(2)+"×";$("pgSaved").textContent=(logical?Math.round((1-phys/logical)*100):0)+"%";draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function add(str){const chunks=(str||"").toUpperCase().replace(/[^A-G]/g,"").split("");if(!chunks.length){log("enter chunks using letters A–G","wa");return;}
+    files++;let neu=0,dup=0;chunks.forEach(c=>{logical++;if(store[c]){store[c]++;dup++;}else{store[c]=1;neu++;}});
+    log("file #"+files+" ["+chunks.join("")+"] → "+neu+" new chunk(s) written, "+dup+" deduped (referenced)",dup>0?"ok":"ac");stats();}
+  $("pgAdd").onclick=()=>add($("pgIn").value);
+  $("pgBk").onclick=()=>{const base="ABCDEF";const mut=base.split("");if(Math.random()<0.7){const i=Math.floor(Math.random()*mut.length);mut[i]="G";}add(mut.join(""));log("   (daily backup: mostly unchanged → almost all chunks dedup)","ac");};
+  $("pgReset").onclick=()=>{store={};logical=0;files=0;log("store reset","ac");stats();};
+  stats();log("store a file, then store it again or run daily backups to watch dedup rise","ac");
+}
+
+const DATA={
+  badge:"♻️",title:"Deduplication",category:"Storage",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Store Identical Data Only Once",
+  tagline:"Deduplication eliminates <b>redundant copies</b> of data by storing each unique piece once and replacing duplicates with lightweight <b>references</b>. By fingerprinting <b>chunks</b> with a hash, systems achieve dramatic savings on backups, VM images, and file storage — where the same data recurs over and over.",
+  pills:["Store unique data <b>once</b>","<b>Hash</b>-based chunk fingerprints","<b>Block</b> vs <b>file</b> level","Huge wins for <b>backups</b>"],
+  overview:"<b>Deduplication</b> (dedup) reduces storage by ensuring that <b>identical data is stored only once</b>, regardless of how many times it appears. Instead of writing the same bytes repeatedly, the system keeps a single physical copy and points all logical occurrences at it via references. The mechanism: data is divided into <b>chunks</b>, each chunk is run through a strong <b>hash</b> (fingerprint, e.g. SHA-256), and the hash is looked up in an index. If the fingerprint already exists, the chunk is a <b>duplicate</b> — store just a reference (increment a refcount); if not, write the chunk and record its hash. Dedup operates at different <b>granularities</b>: <b>file-level</b> (whole-file dedup / single-instance storage — simple but misses partial overlaps), and <b>block/chunk-level</b> (far more effective, catching duplicates <em>within</em> and <em>across</em> files). Chunking can use <b>fixed-size</b> blocks (simple, but a single inserted byte shifts everything and defeats matching) or <b>content-defined / variable-size</b> chunking (a rolling hash places boundaries based on content, so inserts only affect nearby chunks — the <b>boundary-shift</b> resistance that makes dedup robust). Timing also varies: <b>inline</b> dedup happens as data is written (saves space immediately, costs write latency) vs <b>post-process</b> dedup runs afterward (full write speed, needs scratch space). The payoff is enormous for workloads with heavy repetition: daily <b>backups</b> (99% of today's data is identical to yesterday's), <b>VM/container images</b> (shared base layers), email attachments, and file shares can see 10–50× reductions. Dedup is <b>complementary to compression</b>: dedup removes duplicate chunks across the dataset, then compression shrinks the unique chunks that remain.",
+  problem:"Many storage workloads contain massive redundancy: successive backups differ by a tiny fraction, hundreds of VMs share the same OS files, users email the same attachment around. Storing every copy verbatim wastes enormous space and cost. Deduplication detects and collapses that redundancy so you pay for each unique piece of data only once, while still logically preserving every copy.",
+  diagram,diagramCaption:"Chunks are fingerprinted; identical chunks are stored once and files become lists of references.",
+  how:[
+    "Split incoming data into chunks (fixed-size or content-defined variable-size).",
+    "Compute a strong hash fingerprint for each chunk.",
+    "Look the fingerprint up in an index; if present, it's a duplicate → store a reference (refcount++).",
+    "If absent, write the chunk to the store and record its hash.",
+    "Reconstruct files/objects from their ordered lists of chunk references; garbage-collect chunks at refcount 0."
+  ],
+  complexity:[["Lookup","O(1) hash index"],["Granularity","file vs block/chunk"],["Chunking","fixed vs content-defined"],["Backups","often 10–50× savings"]],
+  advantages:["Massive savings on repetitive data (backups, VMs, images)","Complements compression (dedup then compress)","Content-defined chunking resists boundary shifts","Cross-file and cross-dataset duplicate detection","Reduces bandwidth too (send only new chunks)"],
+  disadvantages:["Index/metadata overhead (can be large, memory-hungry)","Hashing costs CPU on the write path (inline dedup latency)","Fragmentation: reads scatter across many chunks","Hash-collision risk (mitigated by strong hashes / verify)","Little benefit on unique/encrypted/compressed data"],
+  tradeoffs:"Dedup trades <b>CPU, memory, and read locality for space</b>, with several knobs. <b>Granularity</b>: whole-file dedup is cheap and simple but only catches exact-file duplicates; <b>block/chunk-level</b> dedup catches partial overlaps within and across files for far higher ratios, at the cost of a much larger <b>fingerprint index</b> — and that index (mapping hashes → chunk locations) can grow huge and often must be kept in RAM for fast lookups, making memory a real constraint at scale. <b>Chunking strategy</b> is a classic trade-off: <b>fixed-size</b> blocks are fast and simple but suffer the <b>boundary-shift problem</b> — insert one byte at the start and every subsequent block changes, destroying matches; <b>content-defined chunking</b> (rolling hash boundaries) is robust to insertions/shifts and yields much better dedup on edited data, but costs more CPU to compute boundaries. <b>Inline vs post-process</b>: inline dedup saves space immediately and reduces write bandwidth (you never write the duplicate) but adds hashing/lookup latency to every write; post-process dedup preserves full write speed but temporarily stores duplicates and needs scratch capacity plus a background pass. A subtle cost is <b>read fragmentation</b>: a heavily deduped file is scattered as references to chunks stored all over the device, hurting sequential-read performance (mitigated by caching/locality-aware layout). There's also the theoretical <b>hash-collision</b> concern — with a strong cryptographic hash the probability is astronomically low, but conservative systems do a byte-verify on match. Finally, dedup gives <b>little or nothing</b> on already-unique, compressed, or encrypted data (which looks random), so it should be applied where redundancy actually exists — and combined with compression, not instead of it.",
+  whenNot:"Dedup adds overhead without payoff on data that's already unique or high-entropy — encrypted blobs, already-compressed media (video, JPEGs), and random data won't dedup, so the index and hashing cost are wasted. Avoid inline dedup on latency-critical write paths where the hashing/lookup cost hurts (use post-process or none). For small datasets the metadata overhead can exceed the savings. And because dedup fragments reads, it's a poor fit for workloads needing high sequential-read throughput unless locality is managed. It shines specifically where the same data genuinely recurs (backups, VM fleets, shared file stores).",
+  sim,
+  code:{
+"Chunk-level dedup (write path)":`# Split into chunks, fingerprint each, store unique chunks once.\nindex = {}          # hash -> (location, refcount)\n\ndef store(data):\n    refs = []\n    for chunk in chunker(data):            # fixed or content-defined chunks\n        h = sha256(chunk)                  # strong fingerprint\n        if h in index:\n            index[h].refcount += 1         # DUPLICATE -> just a reference\n        else:\n            loc = disk.write(chunk)         # NEW -> write once\n            index[h] = Entry(loc, refcount=1)\n        refs.append(h)\n    return refs                             # file = ordered list of chunk hashes\n\n# Read: reconstruct by fetching chunks for each hash in refs.\n# Delete: decrement refcounts; GC chunks that reach 0.`,
+"Content-defined chunking (anti boundary-shift)":`# Fixed-size chunking breaks when a byte is inserted (everything shifts).\n# Content-defined chunking sets boundaries based on a ROLLING HASH of a window,\n# so an edit only affects the chunks near it -> dedup survives inserts.\ndef cdc(data, avg=8192):\n    boundaries, h = [], RollingHash()\n    for i, b in enumerate(data):\n        h.roll(b)\n        if h.value % avg == 0:             # content-triggered cut point\n            boundaries.append(i)\n    return split(data, boundaries)\n# Insert 1 byte -> only the local chunk changes; the rest still match.`,
+"Dedup + compression together":`// They're complementary: dedup removes cross-dataset duplicate CHUNKS,\n// then compression shrinks the UNIQUE chunks that remain.\nfor (const chunk of chunks) {\n  const h = sha256(chunk);\n  if (!store.has(h)) store.put(h, zstd(chunk));   // compress unique chunks\n  refs.push(h);                                    // duplicates cost only a ref\n}\n// Typical pipeline (e.g. backup appliances):\n//   chunk -> dedup -> compress -> (encrypt)      // order matters!`
+  },
+  realWorld:[
+    ["Backup appliances (Data Domain, Veeam)","Chunk-level dedup gives 10–50× on repetitive backups."],
+    ["ZFS / Btrfs","Optional block-level dedup in the filesystem."],
+    ["Docker / OCI images","Shared layers dedup common base filesystems."],
+    ["Git","Content-addressed objects dedup identical blobs/trees."],
+    ["Cloud object storage / Dropbox","Chunk dedup to store and transfer only new data."]
+  ],
+  interview:[
+    ["basic","What is data deduplication?","A technique that stores identical data only once. Data is split into chunks, each chunk is hashed, and if a chunk's fingerprint has been seen before it's stored as a lightweight reference instead of a duplicate copy. Files or objects become ordered lists of chunk references. It dramatically reduces storage for repetitive workloads like backups and VM images, where the same content recurs many times."],
+    ["basic","Where does deduplication provide the biggest wins?","Workloads with heavy redundancy: successive backups (each day differs only slightly from the last), fleets of VM or container images that share the same base OS/layers, email systems where the same attachment is sent many times, and shared file stores. These can see 10–50× reductions because the vast majority of data is duplicated. It provides little benefit on already-unique, compressed, or encrypted data."],
+    ["inter","What is the difference between file-level and block-level dedup?","File-level (single-instance storage) dedups whole identical files — simple, but misses partial overlaps, so two nearly-identical files are stored in full. Block/chunk-level dedup splits data into smaller chunks and dedups those, catching duplicates within and across files (e.g. two documents sharing a large common section). Block-level achieves far higher ratios but needs a much larger fingerprint index and more CPU."],
+    ["inter","What is the boundary-shift problem and how does content-defined chunking solve it?","With fixed-size chunking, inserting or deleting a few bytes near the start shifts all subsequent chunk boundaries, so every following chunk changes and no longer matches previously stored chunks — dedup collapses. Content-defined chunking uses a rolling hash over a sliding window to place chunk boundaries based on content, not position. An edit only alters the chunk(s) around it; the rest keep the same boundaries and still dedup. It costs more CPU but makes dedup robust to insertions."],
+    ["adv","What is the risk of hash collisions in dedup, and how is it handled?","If two different chunks hashed to the same fingerprint, the system would wrongly treat one as a duplicate of the other and corrupt data. With a strong cryptographic hash (SHA-256), the collision probability is astronomically small — far below hardware error rates — so many systems rely on the hash alone. More conservative systems do a byte-for-byte verification when a fingerprint matches before deduping, trading a little extra read for absolute safety. Weak hashes (MD5) are avoided for this reason."],
+    ["adv","Inline vs post-process dedup — what's the trade-off, and how does dedup interact with compression and encryption?","Inline dedup fingerprints and deduplicates as data is written: it saves space immediately and avoids writing duplicates (saving bandwidth), but adds hashing/lookup latency to the write path. Post-process dedup writes everything first at full speed, then a background job deduplicates — preserving write performance but needing scratch space to hold duplicates temporarily. Dedup complements compression (dedup removes duplicate chunks, compression shrinks the unique ones), so the pipeline is chunk → dedup → compress. Encryption must come last, because encrypted data looks random and can't be deduped or compressed — encrypting before dedup destroys the savings."],
+    ["sd","Design a deduplicating backup system.","Split each backup stream into variable-size chunks via content-defined chunking (rolling hash) to resist boundary shifts. Fingerprint chunks with SHA-256 and look them up in an index (kept largely in memory or with a cache + on-disk structure) mapping hash → location + refcount. Store only new chunks (compress them with zstd), and represent each backup as an ordered list of chunk references — so a daily backup mostly references existing chunks and adds little physical data. Use inline dedup to save write bandwidth, garbage-collect chunks whose refcount hits zero, verify on match if paranoid about collisions, and encrypt after dedup+compress. Monitor dedup ratio, index size/memory, and read fragmentation, adding locality-aware layout/caching for restore performance."]
+  ],
+  mistakes:["Fixed-size chunking on editable data (boundary shift kills dedup).","Encrypting before dedup/compress (destroys all savings).","Underestimating the fingerprint index's memory footprint.","Inline dedup on latency-critical write paths.","Expecting dedup to help on unique/compressed/encrypted data."],
+  best:["Use content-defined (variable-size) chunking for robustness to edits.","Fingerprint with a strong hash (SHA-256); verify on match if paranoid.","Combine dedup with compression; encrypt last.","Choose inline vs post-process by write-latency needs.","Manage index memory and read locality; GC zero-refcount chunks."],
+  related:[["Data Compression","🗜️","Complementary space saving","compression.html"],["Chunking","🧩","Splitting data into chunks","chunking.html"],["Merkle Tree","🌳","Content-addressed verification","merkle-tree.html"],["Block vs File vs Object","🧱","Where deduped data lives","block-storage.html"],["Cloud File Storage","☁️","Dedup in file sync","system-designed.html"],["Bloom Filter","🌸","Fast 'seen this hash?' checks","bloom-filter.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

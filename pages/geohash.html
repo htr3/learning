@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Geohash — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+const B32="0123456789bcdefghjkmnpqrstuvwxyz";
+function geohash(lat,lng,prec){
+  let latR=[-90,90],lngR=[-180,180],hash="",bit=0,ch=0,even=true;
+  while(hash.length<prec){
+    if(even){const mid=(lngR[0]+lngR[1])/2;if(lng>=mid){ch=(ch<<1)|1;lngR[0]=mid;}else{ch=ch<<1;lngR[1]=mid;}}
+    else{const mid=(latR[0]+latR[1])/2;if(lat>=mid){ch=(ch<<1)|1;latR[0]=mid;}else{ch=ch<<1;latR[1]=mid;}}
+    even=!even;if(++bit===5){hash+=B32[ch];bit=0;ch=0;}}
+  return {hash,latR,lngR};
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,22,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,185,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const cells=[];const cw=26,x0=150;
+  for(let i=0;i<12;i++){const r=S("rect",{x:x0+i*cw,y:70,width:cw-3,height:30,rx:4,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    const t=TX(x0+i*cw+(cw-3)/2,90,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(t);cells.push({r,t});}
+  svg.appendChild(TX(x0-8,90,"bits",{fill:"#8b8b93","font-size":10,"text-anchor":"end"}));
+  const bits="0110111110110";let phase=0,timer=0,running=false,raf,last;
+  function step(){phase=(phase+1)%3;timer=2;
+    cells.forEach((c,i)=>{c.t.textContent="";c.r.setAttribute("fill","#161619");c.r.setAttribute("stroke","#2a2a32");});
+    if(phase===0){lbl.textContent="a point's (lat, lng) is bit-interleaved";lbl.setAttribute("fill","#c4a2ff");sub.textContent="odd bits split longitude, even bits split latitude";
+      cells.forEach((c,i)=>{c.t.textContent=bits[i]||"";c.r.setAttribute("fill",i%2?"rgba(56,189,248,.2)":"rgba(52,211,153,.2)");c.r.setAttribute("stroke",i%2?"#38bdf8":"#34d399");});}
+    else if(phase===1){lbl.textContent="every 5 bits → 1 base32 char";sub.textContent="'01101' → 'd', '11110' → 'z' …";
+      cells.forEach((c,i)=>{c.t.textContent=bits[i]||"";if(i<5){c.r.setAttribute("fill","rgba(124,58,237,.25)");c.r.setAttribute("stroke","#7C3AED");}});}
+    else{lbl.textContent="geohash = 'dqcjq…' — a short string";lbl.setAttribute("fill","#34d399");sub.textContent="nearby points share a prefix → prefix match = proximity search";}}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);step();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Drag the marker across the world. As you move, its geohash is computed live and the matching cell is drawn. Increase precision to shrink the cell; points in the same cell share a geohash prefix — the basis of "find things near me" queries.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Precision (chars) <b id="pgPV">6</b></label><input id="pgP" type="range" min="1" max="9" value="6"></div>
+      <div class="pg-field"><label>Geohash</label><input id="pgHash" type="text" readonly style="font-family:monospace;color:var(--accent)"></div>
+      <div class="pg-btns"><button id="pgSF" class="go">📍 San Francisco</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgTokyo">Tokyo</button><button id="pgLondon">London</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Cell size roughly halves in alternating dimensions per character: 1 char ≈ 5000 km, 6 ≈ 1.2 km, 9 ≈ 5 m.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Latitude</div><div class="v ac" id="pgLat">0</div></div>
+        <div class="pg-stat"><div class="k">Longitude</div><div class="v ac" id="pgLng">0</div></div>
+        <div class="pg-stat"><div class="k">Cell width</div><div class="v wa" id="pgW">—</div></div>
+        <div class="pg-stat"><div class="k">Precision</div><div class="v ok" id="pgPr">6</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=600,H=300;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});svg.style.cursor="crosshair";$("pgViz").appendChild(svg);
+  // map background: simple graticule
+  const bg=S("rect",{x:0,y:0,width:W,height:H,fill:"#0e1116",stroke:"#2a2a32",rx:8});svg.appendChild(bg);
+  for(let i=1;i<8;i++)svg.appendChild(S("line",{x1:i*W/8,y1:0,x2:i*W/8,y2:H,stroke:"#1a1f27","stroke-width":1}));
+  for(let i=1;i<4;i++)svg.appendChild(S("line",{x1:0,y1:i*H/4,x2:W,y2:i*H/4,stroke:"#1a1f27","stroke-width":1}));
+  svg.appendChild(S("line",{x1:W/2,y1:0,x2:W/2,y2:H,stroke:"#2f3742","stroke-width":1.5}));
+  svg.appendChild(S("line",{x1:0,y1:H/2,x2:W,y2:H/2,stroke:"#2f3742","stroke-width":1.5}));
+  const cell=S("rect",{x:0,y:0,width:0,height:0,fill:"rgba(124,58,237,.22)",stroke:"#7C3AED","stroke-width":2,rx:2});svg.appendChild(cell);
+  const dot=S("circle",{r:6,cx:W/2,cy:H/2,fill:"#fff",stroke:"#7C3AED","stroke-width":2,filter:"drop-shadow(0 0 6px #7C3AED)"});svg.appendChild(dot);
+
+  const toXY=(lat,lng)=>[ (lng+180)/360*W, (90-lat)/180*H ];
+  const toLL=(x,y)=>[ 90-(y/H)*180, (x/W)*360-180 ];
+  let prec=6;
+  function update(lat,lng){lat=clamp(lat,-90,90);lng=clamp(lng,-180,180);
+    const g=geohash(lat,lng,prec);const[cx,cy]=toXY(lat,lng);dot.setAttribute("cx",cx);dot.setAttribute("cy",cy);
+    const[x1,y1]=toXY(g.latR[1],g.lngR[0]);const[x2,y2]=toXY(g.latR[0],g.lngR[1]);
+    cell.setAttribute("x",Math.min(x1,x2));cell.setAttribute("y",Math.min(y1,y2));cell.setAttribute("width",Math.abs(x2-x1));cell.setAttribute("height",Math.abs(y2-y1));
+    $("pgHash").value=g.hash;$("pgLat").textContent=lat.toFixed(3);$("pgLng").textContent=lng.toFixed(3);$("pgPr").textContent=prec;
+    const km=(g.lngR[1]-g.lngR[0])/360*40075;$("pgW").textContent=km>1?km.toFixed(1)+" km":(km*1000).toFixed(0)+" m";}
+  function setLL(lat,lng,name){update(lat,lng);log((name?name+": ":"")+"geohash "+$("pgHash").value,"ok");}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>20)l.removeChild(l.lastChild);}
+
+  let dragging=false;
+  function evt(e){const rect=svg.getBoundingClientRect();const px=(e.clientX-rect.left)/rect.width*W,py=(e.clientY-rect.top)/rect.height*H;const[lat,lng]=toLL(clamp(px,0,W),clamp(py,0,H));update(lat,lng);}
+  svg.addEventListener("mousedown",e=>{dragging=true;evt(e);});
+  window.addEventListener("mousemove",e=>{if(dragging)evt(e);});
+  window.addEventListener("mouseup",()=>{if(dragging){dragging=false;log("moved → "+$("pgHash").value,"ac");}});
+  $("pgP").addEventListener("input",()=>{prec=+$("pgP").value;$("pgPV").textContent=prec;update(+$("pgLat").textContent,+$("pgLng").textContent);});
+  $("pgSF").onclick=()=>setLL(37.7749,-122.4194,"San Francisco");
+  $("pgTokyo").onclick=()=>setLL(35.6762,139.6503,"Tokyo");
+  $("pgLondon").onclick=()=>setLL(51.5074,-0.1278,"London");
+  update(37.7749,-122.4194);log("drag the marker or pick a city","ac");
+}
+
+const DATA={
+  badge:"🌐",title:"Geohash",category:"Algorithms",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Geospatial Indexing",
+  tagline:"Encode a (latitude, longitude) into a short base32 string where <b>shared prefixes mean spatial proximity</b> — turning 'find points near me' into a fast string prefix lookup on any ordinary database.",
+  pills:["<b>1-D</b> from 2-D","<b>Prefix</b> = proximity","<b>Indexable</b> as a string","<b>Tunable</b> precision"],
+  overview:"Geohash maps a 2-D coordinate to a 1-D string by recursively bisecting the world. It interleaves bits: odd bits halve the longitude range, even bits halve the latitude range, so each bit narrows the bounding box. Every 5 bits become one base32 character, so a longer geohash means a smaller, more precise cell. The magic property: nearby locations usually share a long common prefix, so you can find neighbors with a prefix range scan on a plain B-tree index — no special spatial database required.",
+  problem:"Databases index single sortable columns well, but 'find all drivers within 2 km' is a 2-D range query that a normal B-tree can't serve efficiently. Geohash flattens 2-D space into a 1-D string that preserves locality, so proximity search becomes an indexed prefix/range query you can run in Redis, Postgres, or any key-value store.",
+  diagram,diagramCaption:"Interleave lat/lng bits, group every 5 bits into a base32 char — nearby points share a prefix.",
+  how:[
+    "Start with the full ranges: latitude [−90,90], longitude [−180,180].",
+    "Alternate bits: for each longitude bit, pick the half containing the point (1 = upper); same for latitude.",
+    "Each bit halves one dimension, shrinking the bounding cell.",
+    "Group every 5 bits into one base32 character (0-9, b-z minus a,i,l,o).",
+    "More characters → smaller cell. Query neighbors by matching a shared prefix."
+  ],
+  complexity:[["Encode","O(precision)"],["Proximity query","prefix range scan"],["Cell @ 6 chars","≈ 1.2 km"],["Cell @ 9 chars","≈ 5 m"]],
+  advantages:["Works on any string/B-tree index (no GIS needed)","Proximity = cheap prefix match","Compact, human-shareable strings","Tunable precision per use case"],
+  disadvantages:["Edge/boundary problem: close points can differ in prefix","Non-uniform cell sizes near poles","Rectangular cells distort distance","Must query neighbor cells to be correct"],
+  tradeoffs:"Geohash is dead simple and index-friendly but has the boundary problem: two points a meter apart can straddle a cell edge and share no prefix, so correct nearest-neighbor queries must also scan the 8 neighboring cells. Cells are rectangular and distort with latitude. H3 (hexagons) gives uniform neighbor distances and no edge ambiguity; quadtrees adapt cell size to density. Choose geohash when you want zero-dependency proximity search on existing infrastructure.",
+  whenNot:"Avoid plain geohash when you need exact nearest-neighbor without edge artifacts (use H3 or query neighbors), when point density is highly skewed (a quadtree adapts better), or when you need true geodesic distance/polygon operations (use PostGIS/spatial types).",
+  sim,
+  code:{
+"Java":`// encode lat/lng to a geohash string\nstatic final String B32 = "0123456789bcdefghjkmnpqrstuvwxyz";\nString geohash(double lat, double lng, int precision){\n  double[] latR = {-90, 90}, lngR = {-180, 180};\n  StringBuilder gh = new StringBuilder();\n  boolean even = true; int bit = 0, ch = 0;\n  while (gh.length() < precision){\n    double mid;\n    if (even){ mid=(lngR[0]+lngR[1])/2; if(lng>=mid){ch=ch<<1|1;lngR[0]=mid;}else{ch<<=1;lngR[1]=mid;} }\n    else     { mid=(latR[0]+latR[1])/2; if(lat>=mid){ch=ch<<1|1;latR[0]=mid;}else{ch<<=1;latR[1]=mid;} }\n    even = !even;\n    if (++bit == 5){ gh.append(B32.charAt(ch)); bit=0; ch=0; }\n  }\n  return gh.toString();\n}`,
+"Redis":`# Redis GEO commands use a 52-bit geohash under the hood (sorted set)\nGEOADD drivers -122.4194 37.7749 "driver:1"\nGEOADD drivers -122.4083 37.7833 "driver:2"\n# find drivers within 2 km of a rider, nearest first\nGEOSEARCH drivers FROMLONLAT -122.4194 37.7749 \\\n  BYRADIUS 2 km ASC COUNT 10 WITHDIST\nGEOHASH drivers "driver:1"     # -> "9q8yyk8ytp"`,
+"SQL":`-- proximity via prefix range scan on a plain B-tree index\nCREATE INDEX idx_geo ON places(geohash);\n-- everything sharing the 6-char cell 'dr5ru7' and its neighbors\nSELECT id, name FROM places\nWHERE geohash BETWEEN 'dr5ru7' AND 'dr5ru7{'   -- prefix range\nUNION ALL  -- also scan the 8 neighbor cells to fix edge cases\nSELECT id, name FROM places WHERE geohash LIKE 'dr5ru8%';`
+  },
+  realWorld:[
+    ["Redis GEO","GEOADD/GEOSEARCH store a 52-bit geohash in a sorted set for radius queries."],
+    ["Uber / Lyft (early)","Geohash-style cells to bucket drivers for nearby matching before moving to H3."],
+    ["Elasticsearch","geohash_grid aggregation buckets documents into cells for heatmaps."],
+    ["Tinder / dating & delivery apps","Bucket users/restaurants by geohash prefix for 'near me' feeds."],
+    ["MongoDB / Cassandra","Store geohash as an indexed field to enable proximity queries without a GIS extension."]
+  ],
+  interview:[
+    ["basic","What is a geohash?","An encoding that turns a (lat, lng) pair into a short base32 string by recursively bisecting the globe and interleaving latitude/longitude bits. Longer strings mean smaller cells, and nearby locations tend to share a common prefix."],
+    ["basic","Why is the prefix property useful?","Because points that are close together usually share a long common prefix, you can answer 'what's near this location?' with a prefix/range scan on an ordinary sorted index — no specialized spatial database needed."],
+    ["inter","What is the edge/boundary problem?","Two points can be physically adjacent but fall on opposite sides of a cell boundary, so they share little or no prefix. A prefix-only query would miss such neighbors. The fix is to also query the 8 neighboring cells around the target cell."],
+    ["inter","How does precision relate to cell size?","Each base32 character adds 5 bits, halving the box alternately in longitude and latitude. Roughly: 1 char ≈ 5000 km, 5 ≈ 5 km, 6 ≈ 1.2 km, 7 ≈ 150 m, 9 ≈ 5 m. You pick precision to match your search radius."],
+    ["adv","Geohash vs H3 vs quadtree?","Geohash uses rectangular cells and is trivially indexable as a string but has edge artifacts and latitude distortion. H3 uses hexagons giving uniform neighbor distance and no ambiguous corners, ideal for movement/coverage. Quadtrees adapt cell size to point density, great for skewed distributions. Trade indexing simplicity (geohash) against geometric quality (H3) and adaptivity (quadtree)."],
+    ["adv","How do you do an accurate radius search with geohashes?","Compute the target cell at a precision matching the radius, generate its 8 neighbors, prefix-scan all 9 cells to get candidates, then filter candidates by true haversine distance ≤ radius and sort. This bounds the candidate set cheaply while remaining correct at boundaries."],
+    ["sd","How would you use geohash in a ride-sharing 'nearby drivers' feature?","Continuously encode each driver's location to a geohash (e.g., 6 chars) and store it in Redis/DB keyed by cell. To match a rider, compute their cell plus neighbors, fetch drivers in those cells, then rank by actual distance/ETA. It keeps the candidate set small and uses ordinary indexes; switch to H3 if you need uniform coverage."]
+  ],
+  mistakes:["Prefix-only queries that miss neighbors across cell boundaries.","Assuming equal-area cells — they distort with latitude.","Picking precision unrelated to the search radius.","Comparing geohash string distance to physical distance (not linear).","Forgetting to re-filter candidates by true haversine distance."],
+  best:["Query the target cell plus its 8 neighbors, then filter by real distance.","Choose precision to match your typical search radius.","Store geohash as an indexed column / Redis GEO for prefix scans.","For uniform coverage or moving objects, consider H3 instead.","Cache hot cells and update locations at a sensible cadence."],
+  related:[["QuadTree","🌳","Density-adaptive spatial index","quadtree.html"],["H3 Indexing","⬡","Hexagonal grid system","h3-indexing.html"],["Ride Sharing","🚗","Nearby-driver matching","ride-sharing.html"],["Consistent Hashing","🔁","Another hashing scheme","system-designed.html"],["Redis","🧠","GEO commands","system-designed.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

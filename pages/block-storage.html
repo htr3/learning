@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Block Storage — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  const types=[
+    ["#38bdf8","🧱 BLOCK storage","raw fixed-size blocks, no structure","attach as a disk (volume) → OS puts a filesystem on it","EBS · SAN · iSCSI — VMs, databases (lowest latency, random I/O)"],
+    ["#34d399","📁 FILE storage","hierarchy of files & folders","mount over the network (NFS/SMB) → shared filesystem","NAS · EFS — shared drives, home dirs, lift-and-shift apps"],
+    ["#fbbf24","🪣 OBJECT storage","flat namespace of objects + metadata","access via HTTP API (GET/PUT key) → not a filesystem","S3 · GCS — media, backups, data lakes (massive scale, cheap)"]
+  ];
+  function render(){g.innerHTML="";const t=types[phase];
+    g.appendChild(S("rect",{x:180,y:40,width:280,height:60,rx:12,fill:t[0]+"22",stroke:t[0],"stroke-width":2.4}));
+    g.appendChild(TX(320,68,t[1],{fill:"#e4e4e7","font-size":15,"text-anchor":"middle","font-weight":700}));
+    g.appendChild(TX(320,90,t[2],{fill:t[0],"font-size":11,"text-anchor":"middle"}));
+    if(phase===0){for(let i=0;i<8;i++)g.appendChild(S("rect",{x:210+i*30,y:120,width:24,height:24,rx:3,fill:t[0]+"33",stroke:t[0]}));}
+    else if(phase===1){g.appendChild(TX(320,130,"📂 /home  📂 /var  📄 report.pdf  📄 notes.txt",{fill:t[0],"font-size":11,"text-anchor":"middle"}));}
+    else{["obj: photo.jpg","obj: backup.tar","obj: video.mp4"].forEach((o,i)=>{g.appendChild(S("rect",{x:200+i*90,y:118,width:80,height:26,rx:6,fill:t[0]+"22",stroke:t[0]}));g.appendChild(TX(240+i*90,135,o.split(": ")[1],{fill:"#e4e4e7","font-size":8,"text-anchor":"middle"}));});}
+    g.appendChild(TX(320,168,t[3],{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    lbl.textContent=t[1];lbl.setAttribute("fill",t[0]);sub.textContent=t[4];}
+  function step(){phase=(phase+1)%3;timer=3.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Pick a workload and see which storage type fits best. The three types trade off <b>latency</b>, <b>sharing</b>, <b>scale</b>, and <b>cost</b>: <b>block</b> (raw disk, lowest latency), <b>file</b> (shared hierarchy over the network), and <b>object</b> (HTTP API, virtually unlimited & cheap). Choose a scenario and compare.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Workload</label><select id="pgW">
+        <option value="db">Database (random I/O, low latency)</option>
+        <option value="shared">Team shared drive (many clients, POSIX)</option>
+        <option value="media">User-uploaded media (huge scale, cheap)</option>
+        <option value="backup">Backups / archive (write once, rarely read)</option>
+        <option value="vm">VM boot volume (OS disk)</option>
+      </select></div>
+      <button class="pg-btn" id="pgGo">recommend storage</button>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">Rule of thumb: need a raw disk / lowest latency → block. Need a shared filesystem across machines → file. Need massive, cheap, HTTP-addressable blobs → object.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Recommended</div><div class="v ac" id="pgRec">—</div></div>
+        <div class="pg-stat"><div class="k">Access</div><div class="v" id="pgAcc">—</div></div>
+        <div class="pg-stat"><div class="k">Latency</div><div class="v ok" id="pgLat">—</div></div>
+        <div class="pg-stat"><div class="k">Cost / GB</div><div class="v wa" id="pgCost">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=110;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const T={block:{name:"🧱 Block",c:"#38bdf8",acc:"disk / volume",lat:"lowest (µs–ms)",cost:"highest"},
+           file:{name:"📁 File",c:"#34d399",acc:"NFS / SMB mount",lat:"low–medium",cost:"medium"},
+           object:{name:"🪣 Object",c:"#fbbf24",acc:"HTTP API (GET/PUT)",lat:"higher (ms–100s ms)",cost:"lowest"}};
+  const REC={db:["block","databases need low-latency random block I/O; a filesystem sits on the volume"],
+             shared:["file","many machines need a shared POSIX hierarchy → networked file storage (NFS/SMB)"],
+             media:["object","user media = huge # of blobs, HTTP-addressable, cheap, virtually unlimited"],
+             backup:["object","write-once, rarely-read archives → cheapest per GB, durable, scalable"],
+             vm:["block","a VM boots from a raw disk (volume) the OS formats with a filesystem"]};
+  function draw(sel){svg.innerHTML="";const order=["block","file","object"];
+    order.forEach((k,i)=>{const t=T[k];const x=20+i*185,on=sel===k;
+      svg.appendChild(S("rect",{x,y:20,width:170,height:70,rx:10,fill:t.c+(on?"33":"10"),stroke:t.c,"stroke-width":on?2.6:1.2}));
+      svg.appendChild(TX(x+12,y0(38),t.name+(on?"  ✓":""),{fill:t.c,"font-size":12,"font-weight":700}));
+      svg.appendChild(TX(x+12,y0(56),t.acc,{fill:"#8b8b93","font-size":9}));
+      svg.appendChild(TX(x+12,y0(72),"lat "+t.lat,{fill:"#8b8b93","font-size":8.5}));});
+    function y0(v){return 20+v;}}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function go(){const w=$("pgW").value;const[k,why]=REC[w];const t=T[k];
+    $("pgRec").textContent=t.name;$("pgAcc").textContent=t.acc;$("pgLat").textContent=t.lat;$("pgCost").textContent=t.cost;
+    log("→ "+t.name+" storage: "+why,"ok");draw(k);}
+  $("pgGo").onclick=go;
+  draw(null);log("pick a workload and get a storage recommendation with the reasoning","ac");
+}
+
+const DATA={
+  badge:"🧱",title:"Block vs File vs Object Storage",category:"Storage",difficulty:"Easy",readingTime:"9 min",
+  eyebrow:"The Three Storage Paradigms",
+  tagline:"<b>Block</b> storage exposes a raw disk of fixed-size blocks (lowest latency, for databases/VMs). <b>File</b> storage presents a shared hierarchy of files and folders over the network (NAS). <b>Object</b> storage keeps a flat namespace of blobs + metadata behind an HTTP API (S3-style, massive scale & cheap). Choosing correctly shapes performance, sharing, and cost.",
+  pills:["<b>Block</b>: raw disk, lowest latency","<b>File</b>: shared POSIX hierarchy","<b>Object</b>: HTTP blobs at scale","Different <b>access</b> & <b>cost</b>"],
+  overview:"Storage comes in three fundamental paradigms, distinguished by how data is <b>addressed and accessed</b>. <b>Block storage</b> presents storage as raw, fixed-size <b>blocks</b> with no inherent structure — like a bare hard drive. The operating system attaches it as a <b>volume</b> and lays a filesystem (or a database's own format) on top. It offers the <b>lowest latency</b> and efficient <b>random read/write</b>, making it the choice for databases, transactional systems, and VM boot disks. Examples: AWS EBS, SAN, iSCSI. A block volume is typically attached to <b>one</b> instance at a time. <b>File storage</b> organizes data as a <b>hierarchy of files and directories</b> and exposes it as a mountable, shared filesystem over network protocols like <b>NFS</b> or <b>SMB</b>. Multiple clients can mount the same share simultaneously with POSIX-like semantics (permissions, locking), which suits shared drives, home directories, and lift-and-shift apps that expect a filesystem. Examples: NAS, AWS EFS, Azure Files. <b>Object storage</b> stores data as immutable <b>objects</b> — a blob of bytes plus rich <b>metadata</b> and a unique key — in a <b>flat namespace</b> (buckets), accessed via an <b>HTTP API</b> (GET/PUT by key), not a filesystem. It sacrifices low latency and in-place edits but delivers virtually <b>unlimited scale</b>, high <b>durability</b> (replicated across zones), and the <b>lowest cost per GB</b>, ideal for media, backups, logs, and data lakes. Examples: Amazon S3, Google Cloud Storage. Rule of thumb: need a raw disk/lowest latency → block; need a shared filesystem across machines → file; need massive, cheap, HTTP-addressable blobs → object.",
+  problem:"Different workloads have fundamentally different storage needs: a database demands low-latency random I/O on a private disk; a team needs a shared filesystem multiple machines can mount; a photo service needs to store billions of blobs cheaply and durably at web scale. No single paradigm serves all three well, so systems must pick the right storage type (or combine them) based on access pattern, sharing, scale, latency, and cost.",
+  diagram,diagramCaption:"Block (raw blocks → disk), File (files/folders over NFS/SMB), Object (HTTP blobs + metadata at scale).",
+  how:[
+    "Block: storage is split into fixed-size blocks; the OS attaches a volume and formats it (filesystem/DB).",
+    "File: a filesystem hierarchy is exported over NFS/SMB and mounted by one or many clients.",
+    "Object: data is written as immutable objects (bytes + metadata) to a bucket, addressed by key via HTTP.",
+    "Match the workload: random low-latency I/O → block; shared POSIX access → file; massive cheap blobs → object.",
+    "Combine as needed (e.g. DB on block, uploads on object, shared config on file)."
+  ],
+  complexity:[["Block","lowest latency, random I/O"],["File","shared, POSIX, medium"],["Object","HTTP, high latency, cheapest"],["Scale","object ≫ file ≫ block"]],
+  advantages:["Block: fastest, ideal for databases/VMs","File: shared access with familiar filesystem semantics","Object: near-infinite scale, high durability, low cost","Object: rich metadata, versioning, lifecycle policies","Clear fit per workload avoids over/under-provisioning"],
+  disadvantages:["Block: usually single-attach, limited size, priciest","File: network filesystem overhead; scaling limits","Object: higher latency, no in-place edits (replace whole object)","Object: eventual consistency historically (now often strong)","Mismatched choice hurts performance or cost badly"],
+  tradeoffs:"The three paradigms trade <b>latency, sharing, scale, and cost</b> against each other, and the right pick is workload-driven. <b>Block</b> wins on <b>latency and random-I/O</b> performance because there's no filesystem-over-network indirection — the OS talks to blocks directly — which is why databases and boot disks use it; the price is that it's the <b>most expensive per GB</b>, usually attachable to only one host, and capped in size, so it doesn't scale out for bulk data. <b>File</b> buys <b>shared, concurrent access</b> with familiar POSIX semantics (permissions, locking, in-place edits) that legacy apps expect — but the network filesystem adds overhead and has practical scaling ceilings, sitting in the middle on both cost and performance. <b>Object</b> makes the opposite bet: it drops the filesystem and in-place editing entirely (objects are immutable — to 'edit' you replace the whole object) and accepts <b>higher, HTTP-level latency</b>, and in exchange gets <b>essentially unlimited horizontal scale</b>, very high durability via cross-zone replication, rich metadata/versioning/lifecycle rules, and the <b>lowest cost per GB</b> — the reason it underpins media storage, backups, and data lakes. A common mistake is forcing the wrong paradigm (e.g. treating S3 like a filesystem for a database, or storing millions of tiny files on a block volume), which tanks performance or explodes cost. Mature systems mix all three: databases on block, shared config on file, and user uploads/backups on object.",
+  whenNot:"Don't use object storage where you need low-latency random access or in-place mutation (databases, live transactional state) — that's block's job. Don't use block storage for data that must be shared across many hosts (use file) or for web-scale blob collections (use object; block volumes are expensive and size-limited). Don't use file storage where extreme scale and cost efficiency dominate (object) or where a single host needs maximum raw disk performance (block). And avoid emulating a filesystem on object storage for workloads that do many small random reads/writes — the latency and per-request cost make it a poor fit.",
+  sim,
+  code:{
+"Block storage (attach a volume)":`# Cloud block volume attached to ONE instance, then formatted like a disk.\naws ec2 create-volume --size 100 --volume-type gp3 --az us-east-1a\naws ec2 attach-volume --volume-id vol-123 --instance-id i-abc --device /dev/xvdf\n\n# The OS treats it as a raw disk — you put a filesystem on it (or a DB uses it raw):\nsudo mkfs.ext4 /dev/xvdf\nsudo mount /dev/xvdf /mnt/data      # low-latency random I/O -> great for databases`,
+"File storage (mount a share)":`# Networked filesystem multiple clients can mount concurrently (NFS/SMB).\nsudo mount -t nfs fs-123.efs.us-east-1.amazonaws.com:/ /mnt/shared\n\n# Familiar POSIX operations — hierarchy, permissions, in-place edits, locking:\necho "hello" > /mnt/shared/team/report.txt\nchmod 640 /mnt/shared/team/report.txt\n# Many app servers see the same files -> shared drives, home dirs, legacy apps.`,
+"Object storage (HTTP API)":`# Flat namespace of immutable objects addressed by key; accessed over HTTP.\naws s3 cp photo.jpg s3://my-bucket/users/42/photo.jpg   # PUT\naws s3 cp s3://my-bucket/users/42/photo.jpg .           # GET\n\n# SDK: objects carry rich metadata; "editing" = replace the whole object.\ns3.put_object(Bucket="my-bucket", Key="users/42/photo.jpg",\n              Body=data, Metadata={"owner":"42"}, ContentType="image/jpeg")\n# Virtually unlimited, cheap, durable (multi-AZ) -> media, backups, data lakes.\n# Lifecycle rules can auto-tier old objects to cold storage.`
+  },
+  realWorld:[
+    ["AWS EBS / SAN / iSCSI","Block volumes for databases and VM boot disks."],
+    ["AWS EFS / Azure Files / NAS","File storage: shared network filesystems (NFS/SMB)."],
+    ["Amazon S3 / Google Cloud Storage","Object storage for media, backups, and data lakes."],
+    ["Databases","Run on block storage for low-latency random I/O."],
+    ["CDNs / data lakes","Serve and analyze data stored as objects at massive scale."]
+  ],
+  interview:[
+    ["basic","What are the three main types of storage?","Block, file, and object. Block storage exposes raw fixed-size blocks the OS mounts as a disk/volume (lowest latency, for databases and VMs). File storage presents a shared hierarchy of files and folders over NFS/SMB (for shared drives). Object storage keeps a flat namespace of immutable blobs plus metadata behind an HTTP API (S3-style, for massive, cheap, durable blob storage). They differ mainly in how data is addressed and accessed."],
+    ["basic","When would you use object storage?","For large volumes of unstructured blobs that are written once and read occasionally: user-uploaded media, backups, archives, logs, and data-lake data. Object storage gives virtually unlimited scale, high durability (multi-zone replication), rich metadata, versioning, lifecycle tiering, and the lowest cost per GB. You access it via HTTP (GET/PUT by key) rather than a filesystem, and you replace whole objects rather than editing in place."],
+    ["inter","Why do databases use block storage instead of object storage?","Databases need low-latency, high-IOPS random reads and writes and the ability to modify data in place (updating specific pages/records). Block storage provides direct, disk-like access with microsecond-to-millisecond latency, which the database's storage engine relies on. Object storage has much higher, HTTP-level latency, is optimized for whole-object writes (no in-place edits), and would cripple a transactional database's performance."],
+    ["inter","What's the difference between file and object storage?","File storage organizes data as a nested hierarchy of directories and files with POSIX semantics (permissions, locking, in-place edits), mounted over NFS/SMB so multiple clients share the same filesystem. Object storage uses a flat namespace of immutable objects addressed by a unique key via an HTTP API, with rich metadata but no true directories, no in-place editing, and higher latency. File suits shared filesystems and legacy apps; object suits web-scale, cheap, durable blobs."],
+    ["adv","Why is object storage cheaper and more scalable than block or file?","It trades away low latency and in-place mutation for a simpler, massively parallel model: immutable objects in a flat namespace, accessed statelessly over HTTP and spread across many commodity nodes and availability zones. There's no need to maintain a POSIX filesystem, per-host attachment, or low-latency random-access guarantees, so it scales horizontally almost without limit and uses cheap storage with erasure coding/replication for durability. Features like lifecycle tiering push cold data to even cheaper cold storage, lowering cost further."],
+    ["adv","How would you architect storage for a photo-sharing application?","Store the photo blobs themselves in object storage (S3/GCS) — cheap, durable, virtually unlimited, and directly servable via CDN with signed URLs; use lifecycle rules to tier old photos to cold storage. Keep metadata (owner, timestamps, tags, the object key) in a database on block storage for low-latency queries and relationships. Optionally use file storage for any shared processing scratch space. This separates the large immutable blobs (object) from the frequently-queried structured metadata (block-backed DB), matching each to the right paradigm."],
+    ["sd","Design the storage tier for a service with a transactional database, shared app config, and large user uploads.","Put the transactional database on block storage (EBS/SSD volumes) for low-latency random I/O, with snapshots for backup. Store user uploads (images, videos, documents) in object storage for scale, durability, and cost, fronted by a CDN and accessed via signed URLs, with lifecycle policies to archive cold data. Use file storage (EFS/NAS) for shared configuration or artifacts that multiple app servers must mount as a common filesystem. Keep object keys/metadata in the database. This maps each workload to its ideal paradigm rather than forcing one type to do everything."]
+  ],
+  mistakes:["Treating object storage like a filesystem for random-I/O workloads.","Running a database on object storage (latency + no in-place edits).","Storing billions of tiny files on a single block volume (cost/limits).","Using expensive block storage for cheap, cold archival data.","Ignoring object lifecycle/tiering, overpaying for rarely-read data."],
+  best:["Match paradigm to access pattern: block=random I/O, file=shared FS, object=blobs.","Databases & VM disks on block; shared drives on file; media/backups on object.","Use object lifecycle rules to tier cold data cheaply.","Front object storage with a CDN + signed URLs for delivery.","Keep large blobs in object storage, structured metadata in a DB."],
+  related:[["Cloud File Storage","☁️","Object storage system design","system-designed.html"],["Chunking","🧩","Splitting large files for storage","chunking.html"],["Deduplication","♻️","Storing data once","deduplication.html"],["Data Compression","🗜️","Reduce storage footprint","compression.html"],["Versioning","🕰️","Keeping object versions","versioning.html"],["LSM-Tree","🗂️","Storage engine on block devices","lsm-tree.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SQL Injection — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function code(x,y,w,t,c){g.appendChild(S("rect",{x,y,width:w,height:26,rx:5,fill:c+"18",stroke:c}));g.appendChild(TX(x+8,y+17,t,{fill:"#e4e4e7","font-size":9.5,"font-family":"monospace"}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    if(phase===0){g.appendChild(TX(320,52,"string concatenation builds the query",{fill:"#f87171","font-size":12,"text-anchor":"middle","font-weight":700}));
+      code(120,72,400,'"SELECT * FROM users WHERE name=\'" + input + "\'"',"#38bdf8");
+      code(120,108,400,"input = anything'  OR  '1'='1","#f87171");
+      lbl.textContent="1 — user input is glued directly into SQL text";lbl.setAttribute("fill","#f87171");sub.textContent="the database can't tell your code from the attacker's input";}
+    else if(phase===1){g.appendChild(TX(320,52,"the input becomes executable SQL",{fill:"#fbbf24","font-size":12,"text-anchor":"middle","font-weight":700}));
+      code(70,80,500,"SELECT * FROM users WHERE name='' OR '1'='1'","#fbbf24");
+      g.appendChild(TX(320,124,"'1'='1'  is always true → returns EVERY row",{fill:"#f87171","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="2 — injected clause changes the query's meaning";lbl.setAttribute("fill","#fbbf24");sub.textContent="auth bypass, data dumps, even DROP TABLE via ; stacked queries";}
+    else{g.appendChild(TX(320,52,"parameterized query — data stays data",{fill:"#34d399","font-size":12,"text-anchor":"middle","font-weight":700}));
+      code(70,80,500,"SELECT * FROM users WHERE name = ?    ← bound param","#34d399");
+      code(70,116,500,"params: [\"' OR '1'='1\"]   treated as a literal string","#34d399");
+      lbl.textContent="defense — send code and data on separate channels";lbl.setAttribute("fill","#34d399");sub.textContent="the driver binds the value; it can never be parsed as SQL";}}
+  function step(){phase=(phase+1)%3;timer=phase===2?4:3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">A login form runs <code>SELECT * FROM users WHERE user='…' AND pass='…'</code>. Try the classic bypass in the username field: <code>' OR '1'='1</code> — or a stacked <code>'; DROP TABLE users; --</code>. Switch between <b>string concatenation</b> (vulnerable) and <b>parameterized queries</b> (safe) and watch the constructed SQL and the outcome.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Username</label><input id="pgU" type="text" value="admin' OR '1'='1" style="width:200px"></div>
+      <div class="pg-field"><label>Password</label><input id="pgP" type="text" value="whatever" style="width:200px"></div>
+      <div class="pg-field"><label>Query mode</label><select id="pgMode">
+        <option value="concat">string concatenation (vulnerable)</option>
+        <option value="param">parameterized / prepared (safe)</option>
+      </select></div>
+      <button class="pg-btn" id="pgGo">attempt login</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button class="pg-btn secondary" id="pgEx1" style="font-size:10px">' OR '1'='1</button>
+        <button class="pg-btn secondary" id="pgEx2" style="font-size:10px">'; DROP TABLE users; --</button>
+      </div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Mode</div><div class="v ac" id="pgMs">concat</div></div>
+        <div class="pg-stat"><div class="k">Rows returned</div><div class="v" id="pgRows">0</div></div>
+        <div class="pg-stat"><div class="k">Outcome</div><div class="v wa" id="pgOut">—</div></div>
+        <div class="pg-stat"><div class="k">Table exists</div><div class="v ok" id="pgTbl">yes</div></div>
+      </div>
+      <div id="pgSql" style="background:#0d0d0f;border:1px solid #242a33;border-radius:8px;padding:10px;margin:8px 0;font-family:monospace;font-size:11px;color:#e4e4e7;min-height:44px;white-space:pre-wrap;word-break:break-word"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const USERS=[{u:"admin",p:"s3cret"},{u:"alice",p:"pw1"},{u:"bob",p:"pw2"}];
+  let tableExists=true;
+  function stats(rows,out){$("pgMs").textContent=$("pgMode").value==="param"?"param":"concat";$("pgRows").textContent=rows;$("pgOut").textContent=out;$("pgTbl").textContent=tableExists?"yes":"DROPPED";
+    $("pgTbl").className="v "+(tableExists?"ok":"bad");}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function go(){const u=$("pgU").value||"",p=$("pgP").value||"",mode=$("pgMode").value||"concat";
+    if(!tableExists&&!/DROP/i.test(u)){$("pgSql").textContent="-- error: relation \"users\" does not exist";log("query failed — table was dropped by an earlier injection","bad");stats(0,"error");return;}
+    if(mode==="param"){
+      const sql="SELECT * FROM users WHERE user = ? AND pass = ?\n-- params: ["+JSON.stringify(u)+", "+JSON.stringify(p)+"]";
+      $("pgSql").textContent=sql;
+      const match=USERS.filter(r=>r.u===u&&r.p===p);
+      if(match.length){log("✓ login ok — value bound as literal, no injection possible","ok");stats(1,"login ok");}
+      else{log("✗ login denied — injection payload treated as a plain (wrong) username/password","ok");stats(0,"denied");}
+      return;}
+    // vulnerable concat mode
+    const sql="SELECT * FROM users WHERE user='"+u+"' AND pass='"+p+"'";
+    $("pgSql").textContent=sql;
+    if(/;\s*DROP\s+TABLE\s+users/i.test(u)){tableExists=false;log("💀 STACKED QUERY EXECUTED — DROP TABLE users; the table is gone!","bad");stats(0,"table dropped");return;}
+    if(/'\s*OR\s*'?1'?\s*=\s*'?1/i.test(u)||/'\s*OR\s*1\s*=\s*1/i.test(u)){
+      log("💀 AUTH BYPASS — injected OR '1'='1' makes the WHERE always true","bad");stats(USERS.length,"BYPASSED! logged in as "+USERS[0].u);return;}
+    const match=USERS.filter(r=>r.u===u&&r.p===p);
+    if(match.length){log("login ok (legit credentials)","ac");stats(1,"login ok");}
+    else{log("login denied — credentials don't match","ac");stats(0,"denied");}}
+  $("pgGo").onclick=go;
+  $("pgMode").onchange=()=>stats(0,"—");
+  $("pgEx1").onclick=()=>{$("pgU").value="admin' OR '1'='1";$("pgP").value="x";go();};
+  $("pgEx2").onclick=()=>{$("pgU").value="admin'; DROP TABLE users; --";$("pgP").value="x";go();};
+  stats(0,"—");log("try the payloads in concat mode, then switch to parameterized","ac");
+}
+
+const DATA={
+  badge:"🗄️",title:"SQL Injection",category:"Security",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"SQLi — Injecting Code via Data",
+  tagline:"SQL injection happens when user input is <b>concatenated into a query string</b>, letting an attacker rewrite the query's meaning — bypassing auth, dumping data, or dropping tables. The definitive fix is <b>parameterized queries</b>: send code and data on <b>separate channels</b> so input can never be parsed as SQL.",
+  pills:["Caused by <b>string concat</b>","<b>Parameterized queries</b> fix it","<b>Least-privilege</b> DB accounts","OWASP <b>#3 injection</b>"],
+  overview:"<b>SQL injection (SQLi)</b> is the classic injection flaw: an application builds a database query by <b>concatenating untrusted input into the SQL text</b>, so the database parses attacker-supplied characters as part of the command. With a login query like <code>SELECT * FROM users WHERE user='$u' AND pass='$p'</code>, an attacker who enters <code>' OR '1'='1</code> as the username turns the condition into something always true, bypassing authentication. Worse payloads use <b>UNION SELECT</b> to exfiltrate other tables, <b>stacked queries</b> (<code>; DROP TABLE ...</code>) to modify or destroy data, or <b>blind/time-based</b> techniques to extract data one bit at a time even with no visible output. The root cause is identical to XSS and command injection: <b>mixing code and data in the same string</b>. The definitive defense is <b>parameterized queries</b> (a.k.a. prepared statements / bind variables): the SQL structure is sent to the database with placeholders (<code>?</code> or <code>:name</code>), and the input values are sent separately and bound as literals — the driver guarantees they're never interpreted as SQL syntax. Complement this with <b>input validation/allowlisting</b> (especially for identifiers that can't be parameterized, like table/column names), <b>least-privilege database accounts</b>, using well-vetted <b>ORMs/query builders</b> correctly, and stored procedures written safely. Never rely on manual escaping or blocklists — they're brittle and repeatedly bypassed.",
+  problem:"Applications need to combine fixed query logic with dynamic user values. If they do so by string concatenation, there's no boundary between the developer's SQL and the user's data — so any input containing SQL metacharacters (quotes, semicolons, comments) can alter the query. This lets attackers authenticate as anyone, read or modify arbitrary data, and in severe cases execute administrative operations or reach the underlying OS.",
+  diagram,diagramCaption:"Concatenation lets input become SQL; parameterized queries bind it as an inert literal.",
+  how:[
+    "App constructs SQL by concatenating user input into the query string.",
+    "Attacker supplies input containing SQL metacharacters (quote, OR, UNION, ;, --).",
+    "The database parses the combined string, so the injected fragment changes the query's meaning.",
+    "Result: auth bypass, data exfiltration (UNION/blind), or data modification/destruction (stacked).",
+    "Defense: parameterized queries bind values separately; validate identifiers; least-privilege accounts."
+  ],
+  complexity:[["Root cause","code + data mixed"],["Fix","bind parameters"],["Blind SQLi","infer via booleans/time"],["Impact","full DB compromise"]],
+  advantages:["Parameterized queries eliminate the flaw by design","Also lets the DB cache/reuse the query plan (perf)","ORMs/query builders parameterize by default","Least-privilege limits blast radius if a bug slips through","Well-understood, universally supported across drivers"],
+  disadvantages:["Identifiers (table/column) can't be bound — need allowlisting","Dynamic-schema/reporting queries are harder to parameterize","Misused ORM raw() / string interpolation reintroduces SQLi","Stored procedures can still concatenate internally","Blind SQLi is exploitable even with no visible errors/output"],
+  tradeoffs:"The core trade-off is that <b>parameterization solves SQLi cleanly for values but not for structure</b>. You can bind a WHERE value with <code>?</code>, but you cannot bind a table name, column name, sort direction, or dynamic <code>IN (...)</code> list the same way — those require strict <b>allowlisting</b> (map user choices to known-safe identifiers) rather than escaping. Manual escaping is a false economy: quoting rules differ by database and encoding, and history is full of bypasses, so never hand-roll it. <b>ORMs and query builders</b> parameterize by default and are the pragmatic choice, but they offer raw-SQL escape hatches (<code>raw</code>, string interpolation into query methods) that silently reintroduce the vulnerability — so they shift the risk to disciplined usage and review. <b>Least-privilege</b> DB accounts and disabling stacked/multi-statements don't prevent SQLi but dramatically limit its impact (a read-only account can't <code>DROP TABLE</code>) — cheap defense in depth. Finally, <b>stored procedures</b> help only if they use bind variables internally; a procedure that concatenates is just as vulnerable. There's no way to safely 'clean' malicious input by filtering — the reliable design is separating code from data everywhere.",
+  whenNot:"There's no case where SQLi defense is optional for code that touches a database with any untrusted input. The nuance is where parameterization alone is insufficient — dynamic identifiers, ORDER BY columns, and schema-flexible reporting queries — where you must add allowlist validation. If a query is fully static with no user input, there's nothing to inject, and a pure key-value/NoSQL store has its own injection classes (e.g. NoSQL/operator injection) that need analogous care rather than SQL parameterization.",
+  sim,
+  code:{
+"Vulnerable concatenation":`# NEVER build SQL by string concatenation with user input:\nquery = "SELECT * FROM users WHERE user='" + username + "'" \\\n      + " AND pass='" + password + "'"\ndb.execute(query)\n\n# username = admin' OR '1'='1   turns the WHERE into:\n#   SELECT * FROM users WHERE user='admin' OR '1'='1' AND pass='...'\n# '1'='1' is always true -> returns rows -> auth bypass.\n# username = admin'; DROP TABLE users; --   -> stacked query destroys data.`,
+"Parameterized query (fix)":`# Send SQL structure and data on SEPARATE channels. Placeholders are bound\n# as literal values and can NEVER be parsed as SQL.\n\n# Python (DB-API):\ndb.execute(\n  "SELECT * FROM users WHERE user = %s AND pass = %s",\n  (username, password),          # values bound safely\n)\n\n# Node (pg):\nclient.query("SELECT * FROM users WHERE user = $1 AND pass = $2",\n             [username, password]);\n\n# Java (JDBC PreparedStatement):\nPreparedStatement ps = conn.prepareStatement(\n  "SELECT * FROM users WHERE user = ? AND pass = ?");\nps.setString(1, username); ps.setString(2, password);`,
+"Identifiers + least privilege":`// Table/column names and ORDER BY can't be bound -> ALLOWLIST them.\nconst SORTABLE = { name: "name", date: "created_at" };   // map -> safe column\nconst col = SORTABLE[req.query.sort] || "name";          // reject unknowns\ndb.query(\`SELECT * FROM posts ORDER BY \${col} LIMIT $1\`, [limit]);\n\n-- Defense in depth: the app's DB user should have the least privilege it needs.\nCREATE USER app WITH PASSWORD '...';\nGRANT SELECT, INSERT, UPDATE ON app_tables TO app;   -- no DROP / DDL / superuser`
+  },
+  realWorld:[
+    ["ORMs (Hibernate, Django, Prisma)","Parameterize queries by default; raw escape hatches need care."],
+    ["Prepared statements (JDBC, PDO, pg)","Native driver support for bound parameters across languages."],
+    ["OWASP Top 10","Injection (incl. SQLi) is a perennial top web risk."],
+    ["WAFs","Provide a partial, bypassable safety net — not a real fix."],
+    ["Major breaches","SQLi has caused numerous large-scale data breaches historically."]
+  ],
+  interview:[
+    ["basic","What is SQL injection?","A vulnerability where untrusted input is concatenated into a SQL query so the database interprets it as part of the command. An attacker can inject SQL metacharacters to change the query's meaning — bypassing authentication, reading data from other tables, or modifying/destroying data. It's the database instance of the general injection flaw: mixing code and data."],
+    ["basic","Give a classic SQLi example.","With a login query SELECT * FROM users WHERE user='$u' AND pass='$p', entering ' OR '1'='1 as the username produces ...WHERE user='' OR '1'='1' AND pass='...'. Since '1'='1' is always true, the WHERE matches rows and the attacker logs in without valid credentials. A stacked variant like '; DROP TABLE users; -- can even destroy data."],
+    ["inter","How do parameterized queries prevent SQLi?","They separate code from data: the SQL text with placeholders (? or :name) is sent to the database first and parsed as the fixed structure, then the input values are sent separately and bound as literal values. Because the values never participate in parsing, no metacharacters in them can alter the query. This is a structural guarantee, not filtering — which is why it's the definitive fix."],
+    ["inter","Why isn't escaping or a blocklist a reliable defense?","Escaping rules vary by database, driver, character set, and context, so hand-rolled escaping is easy to get subtly wrong and has been bypassed countless times. Blocklists that strip keywords like 'DROP' or quotes miss encodings, comments, and alternate syntaxes. Both try to sanitize data that's still being concatenated into code — the wrong layer. Parameterization removes the mixing entirely."],
+    ["adv","What is blind SQL injection?","SQLi where the app doesn't return query results or errors, so the attacker infers data indirectly. Boolean-based blind: craft conditions that change the response (page differs when the condition is true). Time-based blind: inject something like AND SLEEP(5) so a true condition delays the response. By asking many yes/no questions, the attacker extracts data one bit at a time — proving the vulnerability is exploitable even without visible output."],
+    ["adv","Parameterization can't bind table/column names — how do you handle dynamic identifiers safely?","Use strict allowlisting: map the user's choice to a known-safe set of identifiers server-side (e.g. sort=date -> 'created_at'), rejecting anything not in the map, then interpolate only the vetted value. Never pass raw user input as an identifier. Combine with least-privilege DB accounts so even a mistake has limited impact. This applies to ORDER BY columns, table names, and dynamic sort directions."],
+    ["sd","How would you protect an application from SQLi end-to-end?","Use parameterized queries / prepared statements everywhere for values; prefer a well-vetted ORM/query builder and forbid raw string interpolation into queries via lint/review. Allowlist dynamic identifiers (columns, sort). Validate and constrain input types. Run the app under a least-privilege DB account (no DDL/superuser), disable multi-statement execution where possible. Add a WAF as a bypassable extra layer, log/alert on anomalies, and cover it with security testing (SAST/DAST) in CI."]
+  ],
+  mistakes:["Building queries with string concatenation / interpolation of user input.","Trusting client-side validation to stop injection.","Manual escaping or keyword blocklists instead of binding parameters.","Using an ORM's raw()/interpolation and reintroducing SQLi.","Running the app with an over-privileged DB user (can DROP/alter schema)."],
+  best:["Always use parameterized queries / prepared statements for values.","Allowlist dynamic identifiers (table/column/sort), never interpolate raw.","Use a vetted ORM/query builder; ban raw string SQL in reviews.","Grant the app DB account least privilege; disable stacked queries.","Add SAST/DAST tests and a WAF as defense in depth (not the fix)."],
+  related:[["XSS","💉","Sibling injection flaw (client-side)","xss.html"],["Secrets Management","🔐","Protect DB credentials","secrets-management.html"],["Session Management","🎫","Auth that SQLi bypasses","session-management.html"],["REST API","🌐","Where inputs enter the system","rest.html"],["B-Tree","🌲","How the DB indexes queries","b-tree.html"],["CSRF","🎭","Another common web attack","csrf.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

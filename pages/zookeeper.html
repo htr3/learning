@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZooKeeper — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 210"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function node(x,y,txt,fill,stroke){g.appendChild(S("rect",{x:x-52,y:y-15,width:104,height:30,rx:6,fill:fill||"#161619",stroke:stroke||"#3a3a42","stroke-width":1.6}));
+    const t=S("text",{x:x,y:y+4,fill:"#e4e4e7","font-size":10.5,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  function line(x1,y1,x2,y2,c){g.appendChild(S("line",{x1,y1,x2,y2,stroke:c||"#2f3742","stroke-width":1.4}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    node(310,50,"/  (root)","rgba(124,58,237,.2)","#7C3AED");
+    line(310,65,180,95);line(310,65,310,95);line(310,65,440,95);
+    node(180,110,"/config","rgba(56,189,248,.12)","#38bdf8");
+    node(310,110,"/election","rgba(52,211,153,.12)","#34d399");
+    node(440,110,"/locks","rgba(251,191,36,.12)","#fbbf24");
+    line(310,125,250,160);line(310,125,370,160);
+    const leaderNode=phase>=1?1:0;
+    node(250,175,"n_0001 "+(leaderNode===0?"👑":""),leaderNode===0?"rgba(52,211,153,.25)":"#161619",leaderNode===0?"#34d399":"#3a3a42");
+    node(370,175,"n_0002 "+(leaderNode===1?"👑":""),leaderNode===1?"rgba(52,211,153,.25)":"#161619",leaderNode===1?"#34d399":"#3a3a42");
+    if(phase===0){lbl.textContent="hierarchical znodes (like a filesystem)";lbl.setAttribute("fill","#c4a2ff");sub.textContent="ephemeral sequential znodes under /election — smallest is leader";}
+    else{lbl.textContent="leader's session dies → its ephemeral znode vanishes";lbl.setAttribute("fill","#f87171");sub.textContent="the next-smallest (n_0002) is notified by its watch → becomes leader";}}
+  function step(){phase=(phase+1)%2;timer=2.4;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">The classic ZooKeeper leader-election recipe. Each client creates a <b>sequential ephemeral</b> znode under <code>/election</code>; the one with the <b>smallest sequence number is the leader</b>. Each waiter watches only its <b>immediate predecessor</b> (avoiding the herd effect). Kill the leader and its ephemeral node vanishes — the next in line is promoted.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-btns"><button id="pgAdd" class="go">+ Client joins</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgKillL">Kill leader</button><button id="pgKillR">Kill random</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Ephemeral = tied to the client's session, so a crash auto-deletes the znode. Sequential = ZooKeeper appends a monotonically increasing counter. Together they give fair, self-healing leader election.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Clients</div><div class="v ac" id="pgCount">0</div></div>
+        <div class="pg-stat"><div class="k">Leader</div><div class="v ok" id="pgLeader">none</div></div>
+        <div class="pg-stat"><div class="k">Next seq</div><div class="v wa" id="pgSeq">0</div></div>
+        <div class="pg-stat"><div class="k">Watches</div><div class="v" id="pgWatch">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=250;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let znodes,seq,cid;
+  function reset(){znodes=[];seq=1;cid=1;draw();stats();$("pgLog").innerHTML="";log("/election created — clients may join","ac");}
+  function pad(n){return ("000"+n).slice(-4);}
+  function add(){const z={seq:seq,client:cid,name:"n_"+pad(seq)};znodes.push(z);
+    log("client C"+cid+" created ephemeral-sequential znode /election/"+z.name+(znodes.length===1?" → smallest → LEADER":" → watches predecessor "+znodes[znodes.length-2].name),znodes.length===1?"ok":"ac");
+    seq++;cid++;draw();stats();}
+  function removeIdx(i){const z=znodes[i];const wasLeader=(i===0);znodes.splice(i,1);
+    if(wasLeader){log("💀 leader "+z.name+" (C"+z.client+") session died → ephemeral znode deleted → "+(znodes.length?znodes[0].name+" promoted to LEADER":"no clients left"),"bad");}
+    else{log("client C"+z.client+" ("+z.name+") died → its watcher ("+(znodes[i]?znodes[i].name:"none")+") now watches a new predecessor","wa");}
+    draw();stats();}
+  function killLeader(){if(!znodes.length){log("no clients","wa");return;}removeIdx(0);}
+  function killRandom(){if(!znodes.length){log("no clients","wa");return;}removeIdx(Math.floor(Math.random()*znodes.length));}
+  function draw(){svg.innerHTML="";
+    // root
+    svg.appendChild(S("rect",{x:W/2-58,y:12,width:116,height:30,rx:6,fill:"rgba(52,211,153,.12)",stroke:"#34d399"}));
+    svg.appendChild(TX(W/2,32,"/election",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    if(!znodes.length){svg.appendChild(TX(W/2,120,"(no znodes — click 'Client joins')",{fill:"#6b6b73","font-size":12,"text-anchor":"middle"}));return;}
+    const n=znodes.length;const gap=Math.min(120,(W-80)/n);const startX=W/2-(n-1)*gap/2;
+    znodes.forEach((z,i)=>{const x=startX+i*gap,y=110;const isL=i===0;
+      svg.appendChild(S("line",{x1:W/2,y1:42,x2:x,y2:y-18,stroke:"#2f3742","stroke-width":1.2}));
+      // watch predecessor arrow
+      if(i>0){const px=startX+(i-1)*gap;svg.appendChild(S("line",{x1:x,y1:y+20,x2:px,y2:y+20,stroke:"#fbbf24","stroke-width":1.4,"stroke-dasharray":"4 3"}));}
+      svg.appendChild(S("circle",{cx:x,cy:y,r:26,fill:isL?"rgba(52,211,153,.25)":"rgba(56,189,248,.1)",stroke:isL?"#34d399":"#38bdf8","stroke-width":2}));
+      svg.appendChild(TX(x,y-3,z.name,{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));
+      svg.appendChild(TX(x,y+9,"C"+z.client,{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+      if(isL)svg.appendChild(TX(x,y+40,"👑 LEADER",{fill:"#fbbf24","font-size":9,"text-anchor":"middle"}));
+      else svg.appendChild(TX(x,y+40,"⌚ watches "+znodes[i-1].name,{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));});}
+  function stats(){$("pgCount").textContent=znodes.length;$("pgLeader").textContent=znodes.length?("C"+znodes[0].client):"none";$("pgSeq").textContent=pad(seq);$("pgWatch").textContent=Math.max(0,znodes.length-1);}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgAdd").onclick=add;$("pgKillL").onclick=killLeader;$("pgKillR").onclick=killRandom;$("pgReset").onclick=reset;
+  reset();add();add();add();
+}
+
+const DATA={
+  badge:"🐘",title:"ZooKeeper",category:"Distributed Systems",difficulty:"Medium",readingTime:"10 min",
+  eyebrow:"Distributed Coordination Service",
+  tagline:"A highly-available, strongly-consistent coordination kernel: a tiny hierarchical key-value store (<b>znodes</b>) with <b>ephemeral</b> nodes, <b>sequential</b> counters, and <b>watches</b> — the primitives that make locks, leader election, config, and membership easy to build correctly.",
+  pills:["<b>znode</b> tree","<b>Ephemeral</b> + <b>sequential</b>","<b>Watches</b>","<b>ZAB</b> consensus"],
+  overview:"Apache ZooKeeper is a service that other distributed systems use to coordinate. It exposes a filesystem-like tree of small nodes called <b>znodes</b>, each holding a little data. Three primitives make it powerful: <b>ephemeral</b> znodes that automatically disappear when the client's session ends (perfect for liveness/membership), <b>sequential</b> znodes that get a monotonically increasing suffix (perfect for ordering and fair locks), and <b>watches</b> — one-shot notifications a client sets to be told when a znode changes. Internally an ensemble of 3 or 5 servers keeps state consistent via the <b>ZAB</b> (ZooKeeper Atomic Broadcast) protocol, giving linearizable writes through a leader and fast local reads from any follower. Systems like Kafka (pre-KRaft), HBase, and Hadoop use it for leader election, configuration, and membership.",
+  problem:"Building locks, leader election, membership, and config distribution correctly is hard: you must handle crashes, partitions, and races. ZooKeeper centralizes the tricky consensus in one battle-tested service and exposes simple primitives, so applications get correct coordination without implementing Paxos/Raft themselves.",
+  diagram,diagramCaption:"Ephemeral sequential znodes under /election: the smallest is leader; when it dies, its node vanishes and the next takes over.",
+  how:[
+    "Clients connect to the ensemble and keep a session with periodic heartbeats.",
+    "They create znodes: persistent (survive), ephemeral (deleted when the session ends), and/or sequential (auto-numbered suffix).",
+    "Reads are served locally by any server (fast); writes go through the ZAB leader and are committed by a quorum (linearizable).",
+    "Clients set watches on znodes to receive a one-time notification when data or children change, then re-read and re-arm.",
+    "Recipes compose these: lock = smallest sequential ephemeral child; leader election = same, watching your predecessor; membership = ephemeral node per member."
+  ],
+  complexity:[["Ensemble size","3 or 5 (odd)"],["Fault tolerance","⌊n/2⌋ servers"],["Writes","quorum (linearizable)"],["Reads","local (fast, may lag)"]],
+  advantages:["Correct, ready-made coordination primitives","Ephemeral nodes give automatic failure detection","Sequential nodes enable fair ordering/locks","Strong consistency for writes; fast reads","Mature, widely battle-tested"],
+  disadvantages:["Another cluster to run and operate","Not a general datastore (small data, write-limited)","Watches are one-shot (must re-arm; can miss intermediate changes)","Write throughput bounded by the leader/quorum","Session/GC pauses can cause surprise expirations"],
+  tradeoffs:"ZooKeeper is CP: it favors consistency and will refuse writes on a minority partition rather than diverge. Reads are fast because they're local, but that means a follower can serve slightly stale data unless you issue a sync (linearizable reads cost a round trip). It's optimized for coordination metadata, not bulk data — keep znodes small and write rates modest. Ensemble sizing trades fault tolerance against write latency (5 servers tolerate 2 failures but need a larger quorum). Newer systems (etcd/Raft, Kafka KRaft) offer similar guarantees with different operational trade-offs.",
+  whenNot:"Don't use ZooKeeper as a database, message queue, or for high-volume/large-value storage. Avoid it when a lighter option fits (etcd, Consul, or a Raft library), or when you can design coordination away (idempotency, partitioned single-owner work). For pure service discovery with heavy churn, a gossip/DNS-based approach may scale better.",
+  sim,
+  code:{
+"Java (Curator)":`// Leader election with Apache Curator (the recommended ZK client lib)\nLeaderSelector selector = new LeaderSelector(client, "/election",\n    new LeaderSelectorListenerAdapter() {\n        public void takeLeadership(CuratorFramework c) throws Exception {\n            // Called when WE become leader. Hold leadership by NOT returning.\n            runLeaderWork();       // relinquish by returning from this method\n        }\n    });\nselector.autoRequeue();            // re-enter election after losing leadership\nselector.start();`,
+"Lock recipe":`# ZooKeeper distributed lock (the algorithm the sim shows)\ncreate -e -s /lock/req-        # ephemeral + sequential -> /lock/req-0000000012\nchildren = getChildren("/lock")\nmy = "req-0000000012"\nif my == min(children):\n    # smallest sequence number -> we hold the lock\nelse:\n    pred = largest child smaller than mine\n    exists("/lock/" + pred, watch=True)   # watch ONLY predecessor\n    # when the watch fires (pred deleted), re-check if we're now smallest\n# ephemeral => if our session dies, our znode vanishes and lock frees`,
+"CLI":`# Explore znodes with the ZooKeeper CLI\nzkCli.sh -server localhost:2181\ncreate /config ""                 # persistent znode\ncreate -e /workers/w1 "alive"     # ephemeral: gone when this session ends\ncreate -s /queue/task- "job"      # sequential: -> /queue/task-0000000003\nget -w /config                    # read AND set a one-shot watch\nls /workers                       # list live members (ephemeral children)\nstat /config                      # version, czxid, ephemeralOwner, etc.`
+  },
+  realWorld:[
+    ["Apache Kafka (pre-KRaft)","Used ZooKeeper for controller election, broker membership, and topic/partition metadata."],
+    ["Apache HBase","Master election, region server membership, and root region location via ZooKeeper."],
+    ["Hadoop HDFS/YARN HA","Automatic failover of active/standby NameNode and ResourceManager."],
+    ["Apache SolrCloud","Cluster state, shard leadership, and configuration coordination."],
+    ["Many microservice stacks","Service discovery, dynamic config, and distributed locks (often via Curator recipes)."]
+  ],
+  interview:[
+    ["basic","What is ZooKeeper and what problem does it solve?","A distributed coordination service that gives other systems correct, ready-made primitives — locks, leader election, membership, configuration — backed by a strongly-consistent, replicated store. It centralizes the hard consensus logic so applications don't reimplement Paxos/Raft themselves."],
+    ["basic","What are ephemeral and sequential znodes?","Ephemeral znodes exist only while the creating client's session is alive; when the client disconnects or crashes, they're automatically deleted — ideal for liveness and membership. Sequential znodes get an automatically-appended, monotonically increasing counter, giving a global order — ideal for fair locks and queues. They can be combined (ephemeral + sequential)."],
+    ["inter","How do you implement leader election in ZooKeeper?","Each candidate creates an ephemeral sequential znode under an election path. The candidate with the smallest sequence number is the leader. Others don't watch the leader directly; each watches only its immediate predecessor. When a node is deleted, only its successor is notified, so it re-checks whether it's now smallest — this avoids the herd effect and gives fair, ordered failover."],
+    ["inter","What is the herd effect and how does ZooKeeper avoid it?","If every waiter watches the same node (e.g., the current leader), then when it dies all waiters wake and stampede the server simultaneously. ZooKeeper recipes avoid this by having each waiter watch only its immediate predecessor in the sequential ordering, so exactly one client is notified per change."],
+    ["adv","What consistency does ZooKeeper provide, and what's the read caveat?","Writes are linearizable and totally ordered via the ZAB protocol (a leader + quorum). Reads are served locally by any server for speed, which means a follower may return slightly stale data. To get an up-to-date read you issue a sync() before the read, which costs a round trip. So it's strong for writes, sequentially consistent for reads by default."],
+    ["adv","How does ephemeral-node failure detection work, and what's the risk?","A client maintains a session with heartbeats; if the server doesn't hear from it within the session timeout, the session expires and all its ephemeral znodes are deleted, signaling failure. The risk: a long GC pause or network stall can expire a session even though the process is alive, causing it to lose locks/leadership unexpectedly — so downstream actions should be fenced and idempotent."],
+    ["sd","ZooKeeper vs etcd vs Consul — when would you pick each?","All are CP coordination stores. ZooKeeper (ZAB) is mature and dominant in the Hadoop/Kafka ecosystem. etcd (Raft) is the Kubernetes standard with a simple gRPC/HTTP API and lease-based primitives. Consul adds service discovery, health checks, and DNS out of the box. Pick based on ecosystem fit and needed features; for new systems many teams prefer etcd or a built-in Raft (e.g., Kafka KRaft) to avoid running ZooKeeper."]
+  ],
+  mistakes:["Treating ZooKeeper as a general database or message queue.","Assuming reads are always fresh (they can be stale without sync()).","Forgetting watches are one-shot — you must re-arm after each fire.","Having all waiters watch the same node (herd effect) instead of the predecessor.","Ignoring session-expiry due to GC/network, then acting on a lost lock without fencing."],
+  best:["Run an odd ensemble (3 or 5) across failure domains.","Keep znodes tiny; store bulk data elsewhere and reference it.","Use a proven client/recipe library (Curator) instead of raw APIs.","Watch predecessors, not the leader, to avoid herd effects.","Handle session expiry explicitly; fence and make leader work idempotent."],
+  related:[["Leader Election","👑","The core recipe","leader-election.html"],["Distributed Locking","🔒","Sequential ephemeral locks","distributed-lock.html"],["Consensus / Raft","🧭","etcd's alternative","consensus-raft.html"],["Paxos","📜","ZAB is Paxos-like","paxos.html"],["Quorum","🗳️","Writes need a majority","quorum.html"],["Service Discovery","🧭","Membership use case","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Paxos — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 210"});host.appendChild(svg);
+  const lbl=TX(310,22,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const prop={x:70,y:100};const accs=[0,1,2,3,4].map(i=>({x:250+ (i%3)*120,y:60+Math.floor(i/3)*90}));
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("g,line,circle,rect,text.n").forEach(n=>n.remove());
+    svg.appendChild(S("rect",{x:prop.x-34,y:prop.y-16,width:68,height:32,rx:7,fill:"rgba(124,58,237,.25)",stroke:"#7C3AED"}));
+    svg.appendChild(TX(prop.x,prop.y+4,"proposer",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+    accs.forEach((a,i)=>{const on=phase>=1&&i<3;
+      svg.appendChild(S("circle",{cx:a.x,cy:a.y,r:20,fill:on?"rgba(52,211,153,.2)":"#161619",stroke:on?"#34d399":"#3a3a42","stroke-width":1.8}));
+      svg.appendChild(TX(a.x,a.y+4,"A"+i,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+      if(phase>=1&&i<3)svg.appendChild(S("line",{x1:prop.x+34,y1:prop.y,x2:a.x-20,y2:a.y,stroke:phase===2?"#34d399":"#7C3AED","stroke-width":1.4}));});
+    if(phase===0){lbl.textContent="Phase 1 — Prepare(n)";lbl.setAttribute("fill","#c4a2ff");sub.textContent="proposer asks acceptors to promise not to accept anything older than n";}
+    else if(phase===1){lbl.textContent="Promise from a majority (3 of 5)";sub.textContent="acceptors promise, returning any value they've already accepted";}
+    else{lbl.textContent="Phase 2 — Accept(n, v) → Chosen";lbl.setAttribute("fill","#34d399");sub.textContent="majority accept the value → it is permanently chosen";}}
+  function step(){phase=(phase+1)%3;timer=2.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Two proposers compete to get a value chosen across 5 acceptors. Run each phase and watch the safety rule in action: once a value is accepted by a majority, any later proposal is <b>forced to adopt that same value</b> — so all proposers converge and only one value is ever chosen.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Proposer A wants</label><input id="pgVA" type="text" value="red" spellcheck="false"></div>
+      <div class="pg-btns"><button id="pgA1" class="go">A: Prepare</button><button id="pgA2">A: Accept</button></div>
+      <div class="pg-field" style="margin-top:14px"><label>Proposer B wants</label><input id="pgVB" type="text" value="blue" spellcheck="false"></div>
+      <div class="pg-btns"><button id="pgB1" class="go">B: Prepare</button><button id="pgB2">B: Accept</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Try: A Prepare → A Accept (chosen "red"). Then B Prepare (higher ballot) → B Accept — B is forced to propose "red", not "blue".</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Highest ballot</div><div class="v ac" id="pgBallot">0</div></div>
+        <div class="pg-stat"><div class="k">Promises</div><div class="v" id="pgProm">0/5</div></div>
+        <div class="pg-stat"><div class="k">Accepts</div><div class="v wa" id="pgAcc">0/5</div></div>
+        <div class="pg-stat"><div class="k">Chosen value</div><div class="v ok" id="pgChosen">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=5,W=560,H=210;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let acc,ballotA,ballotB,globalBallot,chosen,pending;
+  function reset(){acc=[];for(let i=0;i<N;i++)acc.push({promised:0,acceptedN:0,acceptedV:null});
+    ballotA=0;ballotB=0;globalBallot=0;chosen=null;pending={};draw();stats();$("pgLog").innerHTML="";log("5 acceptors ready — run Prepare then Accept","ac");}
+  function nextBallot(who){globalBallot++;const n=globalBallot;if(who==="A")ballotA=n;else ballotB=n;return n;}
+  function prepare(who){const n=nextBallot(who);
+    let promises=0,highV=null,highN=0;
+    acc.forEach(a=>{if(n>a.promised){a.promised=n;promises++;if(a.acceptedN>highN){highN=a.acceptedN;highV=a.acceptedV;}}});
+    pending[who]={n,promises,adopt:highV};
+    if(promises>=Math.floor(N/2)+1){
+      const want=highV!=null?highV:$("pg"+"V"+who).value.trim();
+      log("Proposer "+who+" Prepare(n="+n+") → "+promises+" promises"+(highV!=null?" · must adopt already-accepted '"+highV+"'":" · free to propose '"+want+"'"),"ok");
+    } else log("Proposer "+who+" Prepare(n="+n+") → only "+promises+" promises (no majority) — retry with higher n","wa");
+    draw(who,"prepare");stats();}
+  function accept(who){const p=pending[who];if(!p){log("Proposer "+who+": run Prepare first","wa");return;}
+    if(p.promises<Math.floor(N/2)+1){log("Proposer "+who+": Prepare didn't get a majority — cannot Accept","bad");return;}
+    const v=p.adopt!=null?p.adopt:$("pgV"+who).value.trim();
+    let accepts=0;
+    acc.forEach(a=>{if(p.n>=a.promised){a.promised=p.n;a.acceptedN=p.n;a.acceptedV=v;accepts++;}});
+    if(accepts>=Math.floor(N/2)+1){chosen=v;log("Proposer "+who+" Accept(n="+p.n+", '"+v+"') → "+accepts+" accepts → CHOSEN: '"+v+"'","ok");}
+    else log("Proposer "+who+" Accept(n="+p.n+") → only "+accepts+" accepts — a higher ballot preempted it","bad");
+    draw(who,"accept");stats();}
+  function draw(who,kind){svg.innerHTML="";
+    const px=60,py=H/2;svg.appendChild(S("rect",{x:px-38,y:py-18,width:76,height:36,rx:8,fill:"rgba(124,58,237,.25)",stroke:"#7C3AED"}));
+    svg.appendChild(TX(px,py-2,"Proposer",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+    svg.appendChild(TX(px,py+12,who?who:"",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-weight":700}));
+    for(let i=0;i<N;i++){const x=200+ (i%3)*130,y=45+Math.floor(i/3)*90;const a=acc[i];
+      const has=a.acceptedV!=null;
+      svg.appendChild(S("line",{x1:px+38,y1:py,x2:x-22,y2:y,stroke:"#242a33","stroke-width":1}));
+      svg.appendChild(S("circle",{cx:x,cy:y,r:24,fill:has?"rgba(52,211,153,.16)":"#161619",stroke:has?"#34d399":"#3a3a42","stroke-width":2}));
+      svg.appendChild(TX(x,y-4,"A"+i,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+      svg.appendChild(TX(x,y+9,has?("'"+a.acceptedV+"' @"+a.acceptedN):("prom "+a.promised),{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));}
+    if(chosen)svg.appendChild(TX(W/2,H-6,"CHOSEN: '"+chosen+"' (immutable)",{fill:"#34d399","font-size":12,"text-anchor":"middle","font-weight":700}));}
+  function stats(){$("pgBallot").textContent=globalBallot;
+    const proms=acc.filter(a=>a.promised>0).length;$("pgProm").textContent=proms+"/"+N;
+    const accs=acc.filter(a=>a.acceptedV!=null).length;$("pgAcc").textContent=accs+"/"+N;
+    $("pgChosen").textContent=chosen||"—";}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgA1").onclick=()=>prepare("A");$("pgA2").onclick=()=>accept("A");
+  $("pgB1").onclick=()=>prepare("B");$("pgB2").onclick=()=>accept("B");
+  $("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"📜",title:"Paxos",category:"Distributed Systems",difficulty:"Hard",readingTime:"11 min",
+  eyebrow:"The Original Consensus Protocol",
+  tagline:"Leslie Lamport's protocol for reaching agreement among unreliable nodes. A two-phase (prepare/accept) majority-voting scheme that guarantees <b>at most one value is ever chosen</b> — the theoretical foundation most consensus systems build on.",
+  pills:["<b>Two phases</b>","<b>Majority</b> quorum","<b>Safety</b> always","<b>Foundational</b>"],
+  overview:"Paxos solves consensus: how independent nodes agree on a single value despite crashes and message loss. Nodes play roles — <b>proposers</b> suggest values, <b>acceptors</b> vote, and <b>learners</b> observe the outcome. It runs in two phases using monotonically increasing <b>ballot/proposal numbers</b>. In <b>Phase 1 (Prepare)</b> a proposer picks a number n and asks a majority of acceptors to promise not to accept anything numbered below n (and to report any value they've already accepted). In <b>Phase 2 (Accept)</b> the proposer asks them to accept value v for n — but crucially, if any acceptor already accepted a value, the proposer must reuse the highest-numbered one. This rule is what guarantees that once a value is chosen by a majority, every future round converges on that same value.",
+  problem:"Distributed systems need to agree on one value (a config, a log entry, a leader) even when nodes fail and networks drop or reorder messages. Naïve voting can choose conflicting values or deadlock. Paxos provides a provably safe algorithm: it never chooses two different values, and it makes progress whenever a majority is reachable.",
+  diagram,diagramCaption:"Prepare gathers promises from a majority; Accept commits a value once a majority accepts it.",
+  how:[
+    "A proposer picks a unique, increasing proposal number n.",
+    "Phase 1 (Prepare): send n to acceptors; each promises to ignore anything < n and returns any value it already accepted.",
+    "If a majority promise, the proposer picks the value: the highest-numbered previously-accepted value, or its own if none exists.",
+    "Phase 2 (Accept): send (n, v); acceptors accept unless they've since promised a higher number.",
+    "When a majority accept (n, v), v is chosen; learners are notified. Higher ballots can't change it because they're forced to adopt v."
+  ],
+  complexity:[["Message delays","2 round trips"],["Fault tolerance","⌊n/2⌋ acceptors"],["Nodes for f failures","2f + 1"],["Guarantee","≤ 1 value chosen"]],
+  advantages:["Provably safe (never two values)","Tolerates minority crashes & message loss","No single point of failure (any node can propose)","Foundation for Multi-Paxos, Raft, ZAB"],
+  disadvantages:["Notoriously hard to understand & implement","Dueling proposers can livelock (no progress)","Basic Paxos decides one value → need Multi-Paxos for logs","Latency of two phases per decision"],
+  tradeoffs:"Paxos guarantees safety unconditionally but only guarantees liveness when contention is controlled: two proposers repeatedly out-bidding each other can livelock, which is why practical systems elect a distinguished leader (Multi-Paxos) so Phase 1 is amortized and only Phase 2 runs per entry — essentially what Raft formalizes. You trade the elegance/generality of leaderless Paxos for the throughput and clarity of a leader-based variant. Like all majority consensus, it's CP: a minority partition can't make progress.",
+  whenNot:"Don't implement basic single-decree Paxos directly for a replicated log — use Multi-Paxos or Raft. Avoid consensus entirely for high-throughput data that doesn't need a total order (use eventual consistency/CRDTs), and don't use crash-tolerant Paxos where Byzantine faults are possible (use BFT protocols).",
+  sim,
+  code:{
+"Python":`# Acceptor: the two Paxos RPCs (safety is all in these checks)\nclass Acceptor:\n    def __init__(self):\n        self.promised = 0        # highest n promised\n        self.accepted_n = 0      # highest n accepted\n        self.accepted_v = None   # its value\n    def prepare(self, n):                       # Phase 1b\n        if n > self.promised:\n            self.promised = n\n            return ('promise', self.accepted_n, self.accepted_v)\n        return ('reject', self.promised, None)\n    def accept(self, n, v):                      # Phase 2b\n        if n >= self.promised:\n            self.promised = self.accepted_n = n\n            self.accepted_v = v\n            return ('accepted', n)\n        return ('reject', self.promised)`,
+"Proposer":`def propose(self, value):\n    n = self.next_ballot()\n    # Phase 1: collect promises from a majority\n    promises = [a.prepare(n) for a in self.acceptors]\n    oks = [p for p in promises if p[0] == 'promise']\n    if len(oks) <= len(self.acceptors) // 2:\n        return None                       # no majority, retry with higher n\n    # SAFETY RULE: if any acceptor already accepted a value, reuse the\n    # highest-numbered one instead of our own\n    prior = max(oks, key=lambda p: p[1])\n    v = prior[2] if prior[2] is not None else value\n    # Phase 2: ask the majority to accept (n, v)\n    accepts = [a.accept(n, v) for a in self.acceptors]\n    if sum(1 for r in accepts if r[0]=='accepted') > len(self.acceptors)//2:\n        return v                           # chosen!\n    return None`,
+"Multi-Paxos":`// Multi-Paxos: elect a stable leader so Phase 1 runs once, then just\n// Phase 2 (Accept) per log slot -> ~1 round trip per committed entry.\n// This is essentially what Raft standardizes with a clearer spec.\nleader = electLeader();          // amortized Prepare for a range of slots\nfor each clientCommand:\n    slot = nextSlot();\n    if (majorityAccept(slot, ballot, command))\n        commit(slot, command);   // one round trip in the common case`
+  },
+  realWorld:[
+    ["Google Chubby","A Paxos-based lock service; Google's canonical production Paxos, underpinning GFS/Bigtable metadata."],
+    ["Google Spanner","Uses Paxos groups (with TrueTime) to replicate data for globally-consistent transactions."],
+    ["Apache ZooKeeper (ZAB)","Its atomic broadcast protocol is Paxos-inspired for ordered, consistent updates."],
+    ["Microsoft Azure Storage","Uses Paxos for its stream/partition layer metadata consistency."],
+    ["Cassandra lightweight transactions","'IF NOT EXISTS' / CAS uses Paxos for linearizable conditional updates."]
+  ],
+  interview:[
+    ["basic","What does Paxos guarantee?","Safety: at most one value is ever chosen, and once chosen it never changes; nodes only learn values that were actually chosen. It provides consensus despite crashes and lost/reordered messages, as long as a majority of acceptors are reachable."],
+    ["basic","What are the roles in Paxos?","Proposers propose values, acceptors vote on proposals (their votes form the decision), and learners find out which value was chosen. A single process often plays multiple roles."],
+    ["inter","Walk through the two phases.","Phase 1 (Prepare/Promise): a proposer sends a proposal number n; acceptors that haven't promised a higher number promise to ignore lower ones and return any value they already accepted. Phase 2 (Accept/Accepted): if a majority promised, the proposer sends (n, v) — where v is the highest previously-accepted value, or its own if none — and acceptors accept if they haven't promised a higher n. A majority of accepts means v is chosen."],
+    ["inter","Why must a proposer adopt a previously-accepted value?","That rule is the heart of Paxos safety. If some value might already be chosen (accepted by a majority), any new majority overlaps the old one by at least one acceptor, which reports that value; forcing the proposer to reuse the highest-numbered accepted value ensures no second, different value can be chosen."],
+    ["adv","What is the dueling-proposers problem?","Two proposers can keep preempting each other: A prepares n1, B prepares n2>n1 (invalidating A), A prepares n3>n2, and so on, so neither ever completes Phase 2. Paxos stays safe but makes no progress. The fix is to elect a single distinguished proposer (leader), i.e., Multi-Paxos."],
+    ["adv","Basic Paxos vs Multi-Paxos vs Raft?","Basic Paxos agrees on one value. Multi-Paxos runs a sequence of instances for a replicated log and elects a stable leader so Phase 1 is amortized, giving ~one round trip per entry. Raft targets the same log-replication goal with an understandable, prescriptive design (strong leader, terms, log-matching); performance is comparable, but Raft is far easier to implement correctly."],
+    ["sd","When would Paxos/consensus appear in a design?","For strongly-consistent coordination: metadata/config stores, distributed locks and leader election, linearizable conditional writes (Cassandra LWT), and replicating a control plane or per-shard state (Spanner, Chubby). Keep the group small (3–5), use a leader-based variant for throughput, and keep bulk high-volume data off the consensus path."]
+  ],
+  mistakes:["Trying to implement basic Paxos for a log instead of Multi-Paxos/Raft.","Reusing proposal numbers across proposers (they must be unique and increasing).","Forgetting the adopt-highest-accepted-value rule, breaking safety.","Ignoring livelock — no leader means dueling proposers can stall forever.","Assuming Paxos handles malicious nodes (it's crash-tolerant, not Byzantine)."],
+  best:["Use a leader-based variant (Multi-Paxos) or Raft in practice.","Generate globally-unique, monotonically increasing ballot numbers (e.g., (counter, nodeId)).","Run an odd number of acceptors (3/5) across failure domains.","Batch and pipeline Phase 2 under a stable leader for throughput.","Prefer a well-tested library/system (etcd, ZooKeeper, Spanner) over rolling your own."],
+  related:[["Consensus / Raft","🧭","Understandable consensus","consensus-raft.html"],["Leader Election","👑","Avoids dueling proposers","leader-election.html"],["Quorum","🗳️","Majority intersection","quorum.html"],["ZooKeeper","🐘","ZAB atomic broadcast","zookeeper.html"],["Split Brain","🧠","What quorum prevents","split-brain.html"],["CAP Theorem","🔺","Consensus is CP","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vector Clocks — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const rows=[70,120];
+  function dot(x,y,v,hot){g.appendChild(S("circle",{cx:x,cy:y,r:6,fill:hot?"#a06bff":"#34d399"}));
+    const t=S("text",{x:x,y:y-12,fill:"#8b8b93","font-size":9.5,"text-anchor":"middle"});t.textContent=v;g.appendChild(t);}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    rows.forEach((y,i)=>{g.appendChild(S("line",{x1:60,y1:y,x2:560,y2:y,stroke:"#2f3742","stroke-width":1.5}));
+      const t=S("text",{x:30,y:y+4,fill:"#c4a2ff","font-size":11});t.textContent="P"+i;g.appendChild(t);});
+    dot(140,70,"[1,0]");dot(240,70,"[2,0]",phase>=1);
+    dot(180,120,"[0,1]");
+    if(phase>=1){g.appendChild(S("line",{x1:240,y1:70,x2:360,y2:120,stroke:"#a06bff","stroke-width":1.6,"marker-end":"url(#a)"}));dot(360,120,"[2,2]",true);}
+    if(phase===0){lbl.textContent="each event increments the process's own entry";lbl.setAttribute("fill","#c4a2ff");sub.textContent="P0: [1,0]→[2,0]   P1: [0,1]  (so far, concurrent)";}
+    else{lbl.textContent="on receive: take element-wise max, then +1 self";lbl.setAttribute("fill","#34d399");sub.textContent="P1 gets P0's [2,0] → max([0,1],[2,0])=[2,1] then +1 → [2,2]: now causally after P0";}}
+  function step(){phase=(phase+1)%2;timer=2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Three processes, each with a vector clock <code>[P0,P1,P2]</code>. A local event bumps a process's own entry; sending a message carries the sender's vector; on receive the process takes the element-wise <b>max</b> then increments itself. Compare any two events to see whether one <b>happened-before</b> the other, or they're truly <b>concurrent</b>.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-btns"><button id="pgE0" class="go">P0 event</button><button id="pgE1" class="go">P1 event</button><button id="pgE2" class="go">P2 event</button></div>
+      <div class="pg-field" style="margin-top:12px"><label>Send message</label>
+        <div style="display:flex;gap:6px">
+          <select id="pgFrom"><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option></select>
+          <span style="align-self:center;color:var(--muted)">→</span>
+          <select id="pgTo"><option value="1">P1</option><option value="2">P2</option><option value="0">P0</option></select>
+        </div></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgSend">Send / receive</button></div>
+      <div class="pg-field" style="margin-top:12px"><label>Compare events (click two dots)</label>
+        <div class="v ac" id="pgCmp" style="font-size:12px;padding:8px 0">pick two events on the timeline</div></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgReset">↺ Reset</button></div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">P0 clock</div><div class="v ac" id="pgC0">[0,0,0]</div></div>
+        <div class="pg-stat"><div class="k">P1 clock</div><div class="v ok" id="pgC1">[0,0,0]</div></div>
+        <div class="pg-stat"><div class="k">P2 clock</div><div class="v wa" id="pgC2">[0,0,0]</div></div>
+        <div class="pg-stat"><div class="k">Events</div><div class="v" id="pgN">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const P=3,W=560,H=230;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const rowY=[55,120,185];const colors=["#c4a2ff","#34d399","#fbbf24"];
+  let clocks,events,step,pendingSend,sel;
+  function reset(){clocks=[[0,0,0],[0,0,0],[0,0,0]];events=[];step=0;pendingSend=null;sel=[];
+    draw();stats();$("pgCmp").textContent="pick two events on the timeline";$("pgLog").innerHTML="";log("all clocks [0,0,0] — generate events","ac");}
+  function vstr(v){return "["+v.join(",")+"]";}
+  function localEvent(p){clocks[p][p]++;step++;events.push({p,clock:clocks[p].slice(),step,type:"e"});
+    log("P"+p+" local event → "+vstr(clocks[p]),"ac");draw();stats();}
+  function send(){const from=+$("pgFrom").value,to=+$("pgTo").value;
+    if(from===to){log("choose two different processes","wa");return;}
+    clocks[from][from]++;step++;const msg=clocks[from].slice();const sendEv={p:from,clock:clocks[from].slice(),step,type:"s"};events.push(sendEv);
+    // receive
+    clocks[to][to]++;for(let i=0;i<P;i++)clocks[to][i]=Math.max(clocks[to][i],msg[i]);step++;
+    const recvEv={p:to,clock:clocks[to].slice(),step,type:"r",fromStep:sendEv.step};events.push(recvEv);
+    log("P"+from+" send "+vstr(msg)+" → P"+to+" receives, max+1 → "+vstr(clocks[to]),"ok");draw();stats();}
+  function cmp(a,b){ // returns relation
+    let le=true,ge=true,eq=true;
+    for(let i=0;i<P;i++){if(a.clock[i]<b.clock[i])ge=false;if(a.clock[i]>b.clock[i])le=false;if(a.clock[i]!==b.clock[i])eq=false;}
+    if(eq)return "identical";if(le)return "A → B (A happened-before B)";if(ge)return "B → A (B happened-before A)";return "concurrent ‖ (no causal order)";}
+  function draw(){svg.innerHTML="";
+    for(let p=0;p<P;p++){svg.appendChild(S("line",{x1:60,y1:rowY[p],x2:W-20,y2:rowY[p],stroke:"#2f3742","stroke-width":1.5}));
+      svg.appendChild(TX(28,rowY[p]+4,"P"+p,{fill:colors[p],"font-size":12,"font-weight":700}));}
+    const maxStep=Math.max(6,step);const sx=s=>70+(s-0.5)*((W-100)/(maxStep+1));
+    // message arrows
+    events.forEach(ev=>{if(ev.type==="r"){const src=events.find(e=>e.step===ev.fromStep);if(src)svg.appendChild(S("line",{x1:sx(src.step),y1:rowY[src.p],x2:sx(ev.step),y2:rowY[ev.p],stroke:"#a06bff","stroke-width":1.5}));}});
+    events.forEach((ev,idx)=>{const x=sx(ev.step),y=rowY[ev.p];const isSel=sel.includes(idx);
+      const c=S("circle",{cx:x,cy:y,r:isSel?9:7,fill:isSel?"#f87171":colors[ev.p],stroke:"#0d0d0f","stroke-width":1.5,style:"cursor:pointer"});
+      c.addEventListener("click",()=>pick(idx));svg.appendChild(c);
+      svg.appendChild(TX(x,y-14,vstr(ev.clock),{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+      svg.appendChild(TX(x,y+20,ev.type==="s"?"snd":ev.type==="r"?"rcv":"evt",{fill:"#5b5b63","font-size":7.5,"text-anchor":"middle"}));});
+    svg.appendChild(TX(W/2,H-4,"click two dots to compare causality",{fill:"#5b5b63","font-size":10,"text-anchor":"middle"}));}
+  function pick(idx){if(sel.includes(idx)){sel=sel.filter(i=>i!==idx);}else{sel.push(idx);if(sel.length>2)sel.shift();}
+    if(sel.length===2){const a=events[sel[0]],b=events[sel[1]];const rel=cmp(a,b);
+      $("pgCmp").textContent=vstr(a.clock)+" vs "+vstr(b.clock)+" → "+rel;
+      $("pgCmp").className="v "+(rel.startsWith("concurrent")?"bad":"ok");
+      log("compare "+vstr(a.clock)+" & "+vstr(b.clock)+" → "+rel,rel.startsWith("concurrent")?"wa":"ok");}
+    else $("pgCmp").textContent="pick one more event";
+    draw();}
+  function stats(){$("pgC0").textContent=vstr(clocks[0]);$("pgC1").textContent=vstr(clocks[1]);$("pgC2").textContent=vstr(clocks[2]);$("pgN").textContent=events.length;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgE0").onclick=()=>localEvent(0);$("pgE1").onclick=()=>localEvent(1);$("pgE2").onclick=()=>localEvent(2);
+  $("pgSend").onclick=send;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🕰️",title:"Vector Clocks",category:"Distributed Systems",difficulty:"Hard",readingTime:"9 min",
+  eyebrow:"Causality Tracking",
+  tagline:"A per-process vector of counters that captures the <b>happened-before</b> relationship exactly — letting distributed nodes tell whether one event <b>caused</b> another or the two are genuinely <b>concurrent</b>, which timestamps alone can't.",
+  pills:["<b>Detects concurrency</b>","<b>Captures causality</b>","<b>O(n)</b> per event","<b>Powers Dynamo/Riak</b>"],
+  overview:"A vector clock is an array of counters, one entry per process. Each process keeps its own vector: it increments its <b>own</b> entry on every local event, attaches the whole vector to messages it sends, and on receiving a message takes the element-wise <b>maximum</b> of its vector and the message's, then increments its own entry. Comparing two vectors reveals their relationship precisely: if every entry of A is ≤ B (and at least one is strictly less), then A <b>happened-before</b> B (A → B, a causal ancestor); if neither dominates the other, the events are <b>concurrent</b> (no causal relationship). This is strictly more powerful than Lamport clocks, which can order events but cannot detect concurrency. Vector clocks are the mechanism Dynamo-style stores use to detect conflicting writes.",
+  problem:"In a distributed system there's no global clock, and wall-clock timestamps are unreliable (skew, non-monotonicity). Yet you constantly need to know 'did this update happen before that one, or at the same time?' — to resolve conflicting replica writes, order events, or build causal consistency. Vector clocks answer this without synchronized clocks by tracking causality directly.",
+  diagram,diagramCaption:"Local events bump a process's own entry; a receive merges via element-wise max, establishing causality.",
+  how:[
+    "Each process i keeps a vector V of length n (number of processes), all zero initially.",
+    "On a local event, process i increments V[i].",
+    "When sending a message, process i first increments V[i], then attaches a copy of V.",
+    "On receiving a message with vector M, process j sets V[k] = max(V[k], M[k]) for all k, then increments V[j].",
+    "Compare A,B: A→B iff A[k] ≤ B[k] ∀k and A≠B; if neither ≤ the other, they're concurrent."
+  ],
+  complexity:[["Per event","O(n)"],["Message overhead","O(n) entries"],["Compare","O(n)"],["n","= number of processes"]],
+  advantages:["Detects concurrency exactly (not just order)","Captures full causal (happened-before) relation","No synchronized clocks needed","Foundation for conflict detection & causal consistency"],
+  disadvantages:["Size grows with number of processes/nodes","Churn (nodes joining/leaving) complicates entries","More overhead than a scalar Lamport clock","Doesn't give a single total order by itself"],
+  tradeoffs:"Vector clocks trade space for precision: unlike a scalar Lamport timestamp (O(1)), they carry O(n) data per event and per message, which becomes costly with many nodes or clients. Dynamo mitigates this by keeping one entry per replica (not per client) and pruning old entries with timestamps. They detect concurrency but don't resolve it — the application still needs a merge policy (return siblings, CRDT merge, or last-writer-wins). If you only need a consistent total order and not concurrency detection, a cheaper Lamport clock suffices.",
+  whenNot:"Don't use vector clocks when a single-leader system already serializes writes (order is trivial), when you only need a total order for tie-breaking (use Lamport clocks — O(1)), or when the node/client count is huge and unbounded (the vector grows unmanageably — consider dotted version vectors, server-side entries, or CRDTs). They also don't help if you can't tolerate storing/merging conflicting siblings.",
+  sim,
+  code:{
+"Python":`class VectorClock:\n    def __init__(self, n, i): self.v = [0]*n; self.i = i   # n procs, my index\n    def local_event(self):\n        self.v[self.i] += 1                 # bump my own entry\n    def send(self):\n        self.v[self.i] += 1\n        return list(self.v)                 # piggyback a copy on the message\n    def receive(self, msg):\n        for k in range(len(self.v)):\n            self.v[k] = max(self.v[k], msg[k])   # element-wise max\n        self.v[self.i] += 1\n\ndef happens_before(a, b):\n    return all(x <= y for x, y in zip(a, b)) and a != b\ndef concurrent(a, b):\n    return not happens_before(a, b) and not happens_before(b, a) and a != b`,
+"Dynamo":`# Amazon Dynamo attaches a vector clock (version) to each object.\n# GET returns the value(s) + their vector clock context.\nvalue, context = store.get("cart:42")\nvalue = add_item(value, "book")\nstore.put("cart:42", value, context)     # context = the vector clock read\n\n# If two clients write concurrently (neither clock dominates), Dynamo keeps\n# BOTH versions as "siblings" and returns them on the next GET so the\n# application (or a CRDT) can merge them — e.g. union the shopping carts.`,
+"Compare":`// Relationship between two vector clocks A and B:\n//   A == B           -> same event / duplicate\n//   A <= B (A != B)  -> A happened-before B  (A is a causal ancestor)\n//   B <= A (B != A)  -> B happened-before A\n//   otherwise        -> A ‖ B  (CONCURRENT: a real conflict to resolve)\nfunction relation(A, B){\n  let le=true, ge=true;\n  for(let k=0;k<A.length;k++){ if(A[k]>B[k]) le=false; if(A[k]<B[k]) ge=false; }\n  if(le && ge) return "equal";\n  if(le) return "A->B"; if(ge) return "B->A";\n  return "concurrent";\n}`
+  },
+  realWorld:[
+    ["Amazon Dynamo / DynamoDB","Uses vector clocks to detect concurrent writes and surface siblings for merge."],
+    ["Riak","Exposes vector clocks (and dotted version vectors) for conflict detection."],
+    ["Voldemort","LinkedIn's Dynamo-style store uses vector clocks for versioning."],
+    ["Causal-consistency systems (COPS)","Track causal dependencies to enforce causal+ consistency."],
+    ["Collaborative editors / CRDTs","Version vectors underpin causal delivery and conflict-free merges."]
+  ],
+  interview:[
+    ["basic","What is a vector clock and what does it track?","An array of counters with one entry per process. It tracks the happened-before (causal) relationship between events: by comparing two vectors you can tell whether one event causally preceded another or whether they are concurrent — something a single scalar timestamp can't reveal."],
+    ["basic","How is a vector clock updated?","On a local event, a process increments its own entry. When sending, it increments its own entry and attaches the whole vector. On receiving, it sets each entry to the max of its own and the message's, then increments its own entry. This propagation of maxima is what encodes causality."],
+    ["inter","How do you tell if two events are concurrent?","Compare their vectors element-wise. If every entry of A is ≤ the corresponding entry of B (and they differ), then A happened-before B. If every entry of B ≤ A, then B happened-before A. If neither dominates — some entries larger in A, some larger in B — the events are concurrent (no causal order), which typically signals a conflict."],
+    ["inter","Vector clocks vs Lamport clocks?","Lamport clocks are a single integer; they guarantee that if A→B then L(A)<L(B), giving a consistent total order, but the converse isn't true — a smaller timestamp doesn't imply causality, so they can't detect concurrency. Vector clocks capture the full partial order and can definitively distinguish causal from concurrent events, at O(n) space per event instead of O(1)."],
+    ["adv","How does Dynamo use vector clocks, and what's the scaling issue?","Each object carries a vector clock; a write includes the clock context read earlier. If two writes are concurrent (neither clock dominates), Dynamo stores both as siblings and returns them for application merge. The scaling issue is vector growth: naively one entry per client is unbounded, so Dynamo keeps entries per server/replica and prunes old ones by timestamp, accepting rare false conflicts."],
+    ["adv","What are dotted version vectors and why do they exist?","Plain vector clocks with per-client entries grow without bound and can create false concurrency when the same client's writes interleave. Dotted version vectors (DVVs) attach a precise 'dot' (a single event id) alongside the vector, letting the system represent exactly which versions a value descends from. This bounds size to the number of replicas and eliminates spurious siblings from sequential client writes."],
+    ["sd","Design conflict handling for a multi-master key-value store.","Attach a vector clock (one entry per replica) to each value. On write, the client sends back the clock it read; the coordinator increments the replica's entry and stores it. On read across replicas, compare clocks: return the dominating version if one exists, otherwise return all concurrent siblings. Resolve siblings with a CRDT merge (e.g., set-union for carts) or last-writer-wins where acceptable. Prune clock entries by replica and timestamp to bound size."]
+  ],
+  mistakes:["Using wall-clock timestamps and assuming they imply causality.","Confusing Lamport order with causality (small timestamp ≠ causal ancestor).","Keeping one vector entry per client, letting the vector grow unbounded.","Detecting concurrency but having no merge policy for siblings.","Forgetting to increment the local entry on send/receive, corrupting causality."],
+  best:["Track entries per replica/server, not per client, to bound growth.","Prune stale entries with timestamps; consider dotted version vectors.","Pair concurrency detection with a concrete merge (CRDT/LWW/app merge).","Use Lamport clocks instead when you only need a total order.","Always increment the local entry on local events, sends, and receives."],
+  related:[["Lamport Clocks","⏱️","Scalar logical time","lamport-clocks.html"],["Quorum","🗳️","Where conflicts arise","quorum.html"],["Gossip Protocol","🗣️","Anti-entropy merges","gossip.html"],["CAP Theorem","🔺","Why AP needs merges","system-designed.html"],["Split Brain","🧠","Reconcile divergence","split-brain.html"],["Consistent Hashing","🔵","Dynamo ring","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

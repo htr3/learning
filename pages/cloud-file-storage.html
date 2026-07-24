@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cloud File Storage — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:760px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:560px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+
+  /* FILE-STORAGE PLAYGROUND widget */
+  .fs-ta{width:100%;min-height:96px;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:12px;padding:12px 14px;font-size:13.5px;font-family:"JetBrains Mono",monospace;resize:vertical;outline:none;line-height:1.55}
+  .fs-ta:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .fs-label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:16px 0 8px;font-weight:600}
+  .fs-chunks{display:flex;flex-wrap:wrap;gap:5px}
+  .fs-chunk{border-radius:7px;padding:6px 9px;font-size:10px;font-family:"JetBrains Mono",monospace;border:1px solid;
+    display:flex;flex-direction:column;gap:2px;min-width:42px;transition:all .12s}
+  .fs-chunk.new{background:rgba(124,58,237,.16);border-color:var(--accent);color:#c4a2ff}
+  .fs-chunk.dup{background:rgba(52,211,153,.12);border-color:#2f7d5c;color:#7ee0b5}
+  .fs-chunk .h{opacity:.65;font-size:9px}
+  .fs-legend{display:flex;gap:18px;font-size:11.5px;color:var(--muted);margin-top:12px;flex-wrap:wrap}
+  .fs-legend .k{display:inline-flex;align-items:center;gap:6px}
+  .fs-dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .fs-store{margin-top:6px;background:var(--panel);border:1px solid var(--gray-border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted)}
+  .fs-store b{color:var(--line)}
+  .fs-root{margin-top:8px;font-size:11.5px;color:var(--muted);font-family:"JetBrains Mono",monospace}
+  .fs-root b{color:#38bdf8}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">☁️</span> Cloud File Storage</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Cloud File Storage</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Chunking</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Dedup Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Cloud File Storage</h1>
+      <p class="tagline">How Dropbox / Google Drive store and sync files at scale — a file is split into
+        content-defined <b>chunks</b>, each <b>hashed</b> into a Merkle tree, identical chunks are stored once
+        (<b>deduplication</b>) in <b>blob storage</b>, lightweight <b>metadata</b> maps files → chunks, and a
+        <b>sync</b> protocol ships only the changed chunks while keeping full <b>version history</b>. Explore each
+        with live visualizations and a real dedup engine you can type into.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>Content-defined</b>&nbsp;chunking</span>
+        <span class="hpill"><b>Merkle</b>&nbsp;hashing</span>
+        <span class="hpill"><b>Dedup</b>&nbsp;+ blob store</span>
+        <span class="hpill"><b>Live</b>&nbsp;dedup engine</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Design Choices</div><h2>Chunking Strategies</h2></div></div>
+      <div class="card">
+        <div class="block-title">Fixed vs Content-Defined vs Whole-file vs Delta</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>The boundary-shift problem —</b> with fixed-size chunks, inserting one byte at the start shifts every later boundary, so <i>every</i> chunk changes and nothing dedups. <b>Content-defined chunking (CDC)</b> places boundaries based on content (a rolling hash), so an insert only changes the local chunk — everything else still dedups. That's why Dropbox-style systems use CDC.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The core pieces — the pipeline, content-defined chunking, Merkle hashing, the dedup store, version manifests and delta sync.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Deduplication Engine</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Avg chunk size <b id="pgSizeV">~32 B</b></label><input id="pgSize" type="range" min="3" max="7" step="1" value="5"></div>
+            <div class="pg-btns"><button id="pgDup" class="go">⧉ Duplicate content</button></div>
+            <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset store</button></div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Edit the text — each pause is a new "save". It's chunked by content, each chunk is hashed, and chunks already in the store are <b>deduplicated</b> (green) instead of re-uploaded (purple). Change one word and watch only one chunk turn purple.</p>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Versions</div><div class="v ac" id="pgVersions">0</div></div>
+              <div class="pg-stat"><div class="k">Unique chunks</div><div class="v" id="pgUnique">0</div></div>
+              <div class="pg-stat"><div class="k">Dedup ratio</div><div class="v ok" id="pgRatio">1.0×</div></div>
+              <div class="pg-stat"><div class="k">Uploaded</div><div class="v wa" id="pgUploaded">0 B</div></div>
+              <div class="pg-stat"><div class="k">Saved</div><div class="v ok" id="pgSaved">0 B</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   CLOUD FILE STORAGE — modular vanilla JS (SVG, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const bytes=n=>n<1024?n+" B":n<1048576?(n/1024).toFixed(1)+" KB":(n/1048576).toFixed(1)+" MB";
+
+/* NAVIGATION */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* SIDEBAR */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* CODE VIEWER */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally "+
+    "function const let var await async of in typeof this export default throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None while not and or true false null val "+
+    "String List Map Set Node byte char").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(#[^\n]*|\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* ANIMATION ENGINE */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* VIZ base */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":10.5,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.defs=[["👤","User"],["🚪","API GW"],["🗂️","Metadata"],["🧩","Chunk Svc"],["♻️","Dedup"],["🗄️","Blob"],["🔄","Sync"],["🕐","Version"]];
+    this.w=72; const gap=6; this.xs=[]; let x=4;
+    this.defs.forEach((d,i)=>{ this.xs.push(x);
+      const col=i===2?"#38bdf8":i===4?"#34d399":i===5?"#fbbf24":i===6?"#7C3AED":"#3a3a42";
+      this.box(x,84,this.w,44,d[1],col,d[0]);
+      if(i<this.defs.length-1) this.arrow(x+this.w,106,x+this.w+gap,106);
+      x+=this.w+gap; });
+    this.centers=this.xs.map(x=>x+this.w/2);
+    this.packets=[]; this.spawn=0;
+    this.cap("A file is split by the Chunk Service, deduplicated against existing chunks, and the unique blobs are stored once. Metadata maps files → chunk lists; sync ships only changed chunks; versioning keeps every save's manifest.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.8); this.packets.push({prog:0,dead:false,el:this.dot(this.centers[0],106,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.9;
+      if(p.prog>=this.centers.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog),f=p.prog-seg; p.el.setAttribute("cx",this.centers[seg]+(this.centers[seg+1]-this.centers[seg])*f);
+      p.el.setAttribute("fill",p.prog>=6?"#7C3AED":p.prog>=5?"#fbbf24":p.prog>=4?"#34d399":p.prog>=2?"#38bdf8":"#c4a2ff"); });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. File Upload ---- */
+class UploadViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.box(24,72,92,52,"report.pdf","#3a3a42","source file");
+    this.box(486,72,110,52,"Blob Store","#fbbf24","chunks");
+    this.svg.appendChild(T(300,36,"split → hash → upload only missing chunks",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.svg.appendChild(S("rect",{x:170,y:150,width:300,height:14,rx:7,fill:"#141416",stroke:"#26262e"}));
+    this.pbar=S("rect",{x:170,y:150,width:0,height:14,rx:7,fill:"#7C3AED"}); this.svg.appendChild(this.pbar);
+    this.plabel=T(320,142,"0%",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.plabel);
+    this.parts=[]; this.spawn=0; this.progress=0;
+    this.cap("The client splits the file into chunks, hashes each, and asks the server which it already has. Only missing chunks are uploaded (in parallel, resumable) — so re-uploading a lightly-edited file transfers almost nothing.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0 && this.progress<1){ this.spawn=rand(.16,.32);
+      const dup=Math.random()<0.4; const y=rand(86,110);
+      this.parts.push({prog:0,dead:false,y,dup,el:this.dot(116,y,dup?"#34d399":"#c4a2ff",4)}); }
+    this.parts.forEach(p=>{ if(p.dead)return; p.prog+=dt*(p.dup?2.2:1.3);
+      p.el.setAttribute("cx",116+(486-116)*p.prog); p.el.setAttribute("cy",p.y);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); this.progress=Math.min(1,this.progress+0.03); } });
+    this.parts=this.parts.filter(p=>!p.dead);
+    if(this.progress>=1){ this.progress=0; }
+    this.pbar.setAttribute("width",this.progress*300);
+    this.plabel.textContent=Math.round(this.progress*100)+"% (green = already stored, skipped)";
+  }
+}
+
+/* ---- 3. Chunking: fixed vs content-defined ---- */
+class ChunkingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.x0=40; this.w=560;
+    this.svg.appendChild(T(40,24,"Fixed-size chunking — insert 1 byte → all boundaries shift → everything changes",{fill:"#f87171","font-size":10.5}));
+    this.svg.appendChild(T(40,120,"Content-defined chunking — boundaries follow content → only local chunk changes",{fill:"#34d399","font-size":10.5}));
+    this.fixed=this.mkRow(36); this.cdc=this.mkRow(132);
+    this.state=0; this.timer=0;
+    this.cap("Fixed-size chunking is fragile: inserting a byte near the start shifts every subsequent boundary, so no chunk matches and nothing dedups. Content-defined chunking sets boundaries from a rolling hash of the bytes, so an edit only disturbs the local chunk.");
+  }
+  mkRow(y){ const widths=[]; return {y,blocks:[]}; }
+  drawRow(row,cuts,changed,inserted){ row.blocks.forEach(b=>b.remove()); row.blocks=[];
+    let x=this.x0; cuts.forEach((wd,i)=>{ const w=wd;
+      const r=S("rect",{x:x+1,y:row.y,width:w-2,height:44,rx:5,
+        fill:changed.includes(i)?"rgba(248,113,113,.28)":"rgba(52,211,153,.16)",
+        stroke:changed.includes(i)?"#f87171":"#2f7d5c","stroke-width":1.3});
+      this.svg.appendChild(r); row.blocks.push(r);
+      const t=T(x+w/2,row.y+27,"c"+i,{fill:"#d4d4d8","font-size":10,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(t); row.blocks.push(t);
+      x+=w; });
+    if(inserted!=null){ const m=S("rect",{x:inserted,y:row.y-6,width:3,height:56,rx:1,fill:"#fbbf24"}); this.svg.appendChild(m); row.blocks.push(m); }
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=2.6; this.state^=1;
+    const fixW=this.w/6; const fixed=[fixW,fixW,fixW,fixW,fixW,fixW];
+    const cdc=[70,120,95,140,80,55];
+    if(this.state===0){ this.drawRow(this.fixed,fixed,[],null); this.drawRow(this.cdc,cdc,[],null); }
+    else { const ins=this.x0+30;
+      this.drawRow(this.fixed,fixed,[0,1,2,3,4,5],ins);   // all shift → all changed
+      this.drawRow(this.cdc,[78,120,95,140,80,47],[0],ins); } // only first chunk changed, rest resync
+  }
+}
+
+/* ---- 4. Hashing / Merkle tree ---- */
+class HashingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.hex=()=>Math.floor(rand(0,65535)).toString(16).padStart(4,"0");
+    this.leaves=[[110,175],[250,175],[390,175],[530,175]];
+    this.mids=[[180,105],[460,105]];
+    this.root=[320,34];
+    this.edges=[[this.root,this.mids[0]],[this.root,this.mids[1]],[this.mids[0],this.leaves[0]],[this.mids[0],this.leaves[1]],[this.mids[1],this.leaves[2]],[this.mids[1],this.leaves[3]]];
+    this.edges.forEach(([a,b])=>this.arrow(a[0],a[1]+12,b[0],b[1]-12,"#2a2a32"));
+    const mk=(p,label,w)=>{ const g=S("g"); const rr=S("rect",{x:p[0]-w/2,y:p[1]-14,width:w,height:28,rx:7,fill:"#161619",stroke:"#3a3a42","stroke-width":1.5}); g.appendChild(rr);
+      const tt=T(p[0],p[1]+4,label,{fill:"#d4d4d8","font-size":10,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); g.appendChild(tt);
+      this.svg.appendChild(g); return {g,rr,tt}; };
+    this.leafEls=this.leaves.map((p,i)=>mk(p,"—",58));
+    this.leafLbl=this.leaves.map((p,i)=>{ const t=T(p[0],p[1]+30,"chunk "+i,{fill:"#5b5b66","font-size":8.5,"text-anchor":"middle"}); this.svg.appendChild(t); return t; });
+    this.midEls=this.mids.map(p=>mk(p,"—",66));
+    this.rootEl=mk(this.root,"root —",90);
+    this.phase=0; this.timer=0; this.built=false;
+    this.cap("Chunk hashes are the leaves of a Merkle tree; each parent hashes its children up to a single root that fingerprints the whole file. Changing one chunk only recomputes the hashes on its path to the root — O(log n) — which is how sync detects exactly what changed.");
+  }
+  setHash(elm,pre){ elm.tt.textContent=(pre||"")+this.hex(); }
+  reset(){ this.leafEls.forEach(e=>{e.tt.textContent="—";e.rr.setAttribute("stroke","#3a3a42");});
+    this.midEls.forEach(e=>{e.tt.textContent="—";e.rr.setAttribute("stroke","#3a3a42");});
+    this.rootEl.tt.textContent="root —"; this.rootEl.rr.setAttribute("stroke","#3a3a42"); }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=.6;
+    if(this.phase===0){ this.reset(); this.phase=1; this.timer=.5; }
+    else if(this.phase<=4){ const i=this.phase-1; this.setHash(this.leafEls[i]); this.leafEls[i].rr.setAttribute("stroke","#38bdf8"); this.phase++; }
+    else if(this.phase===5){ this.setHash(this.midEls[0]); this.setHash(this.midEls[1]); this.midEls.forEach(e=>e.rr.setAttribute("stroke","#38bdf8")); this.phase++; }
+    else if(this.phase===6){ this.setHash(this.rootEl,"root "); this.rootEl.rr.setAttribute("stroke","#38bdf8"); this.phase++; this.timer=1.4; }
+    else if(this.phase===7){ // one chunk changes -> recompute path
+      this.leafEls[2].rr.setAttribute("stroke","#f87171"); this.setHash(this.leafEls[2]);
+      this.midEls[1].rr.setAttribute("stroke","#f87171"); this.setHash(this.midEls[1]);
+      this.rootEl.rr.setAttribute("stroke","#f87171"); this.setHash(this.rootEl,"root ");
+      this.phase=0; this.timer=1.8; }
+  }
+}
+
+/* ---- 5. Deduplication ---- */
+class DedupViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(20,20,86,40,"File A","#7C3AED","c1 c2 c3");
+    this.box(20,150,86,40,"File B","#38bdf8","c2 c3 c4");
+    // store
+    this.svg.appendChild(S("rect",{x:250,y:24,width:220,height:170,rx:12,fill:"#0e0e11",stroke:"#26262e"}));
+    this.svg.appendChild(T(360,44,"Dedup store (unique chunks)",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.chunks={};
+    ["c1","c2","c3","c4"].forEach((c,i)=>{ const y=60+i*32;
+      const rr=S("rect",{x:270,y,width:180,height:24,rx:6,fill:"#1a1a1c",stroke:"#3a3a42"}); this.svg.appendChild(rr);
+      this.svg.appendChild(T(284,y+16,c,{fill:"#d4d4d8","font-size":10.5,"font-family":"JetBrains Mono,monospace"}));
+      const rc=T(436,y+16,"refs 0",{fill:"#8b8b93","font-size":9.5,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(rc);
+      this.chunks[c]={rr,rc,y:y+12,refs:0}; });
+    this.stat=T(555,110,"",{fill:"#34d399","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.svg.appendChild(T(555,92,"stored:",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.seq=[["c1",30,"#7C3AED"],["c2",30,"#7C3AED"],["c3",30,"#7C3AED"],["c2",170,"#38bdf8"],["c3",170,"#38bdf8"],["c4",170,"#38bdf8"]];
+    this.i=0; this.timer=0; this.stored=0; this.saved=0;
+    this.cap("Identical chunks are stored exactly once and reference-counted. File B shares c2 and c3 with File A, so uploading B only stores the genuinely new chunk (c4) — the shared chunks just bump their ref count. This is how dedup slashes storage.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=.9;
+    if(this.i>=this.seq.length){ this.timer=1.6; this.i=0;
+      Object.values(this.chunks).forEach(c=>{ c.refs=0; c.rc.textContent="refs 0"; c.rr.setAttribute("stroke","#3a3a42"); c.rr.setAttribute("fill","#1a1a1c"); });
+      this.stored=0; this.saved=0; return; }
+    const [c,sy,col]=this.seq[this.i]; const ch=this.chunks[c];
+    const isNew=ch.refs===0; ch.refs++; ch.rc.textContent="refs "+ch.refs;
+    if(isNew){ this.stored++; ch.rr.setAttribute("stroke","#fbbf24"); ch.rr.setAttribute("fill","rgba(251,191,36,.14)"); }
+    else { this.saved++; ch.rr.setAttribute("stroke","#34d399"); ch.rr.setAttribute("fill","rgba(52,211,153,.16)"); }
+    const p=this.dot(106,sy+40,col,5);
+    this.stat.textContent=this.stored+" · saved "+this.saved;
+    this.i++;
+  }
+}
+
+/* ---- 6. Version History ---- */
+class VersioningViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.versions=[
+      {v:"v1",chunks:["a","b","c","d"],newIdx:[0,1,2,3]},
+      {v:"v2",chunks:["a","b","e","d"],newIdx:[2]},
+      {v:"v3",chunks:["a","f","e","d"],newIdx:[1]},
+      {v:"v4",chunks:["a","f","e","g"],newIdx:[3]}
+    ];
+    this.rowY=[24,72,120,168]; this.cellW=70; this.x0=90;
+    this.versions.forEach((ver,r)=>{ const y=this.rowY[r];
+      this.box(10,y,64,32,ver.v,"#7C3AED",r===0?"initial":"save");
+    });
+    this.cells=[];
+    this.versions.forEach((ver,r)=>{ const y=this.rowY[r]; const row=[];
+      ver.chunks.forEach((c,i)=>{ const x=this.x0+i*this.cellW;
+        const isNew=ver.newIdx.includes(i);
+        const rr=S("rect",{x,y,width:this.cellW-8,height:32,rx:6,fill:isNew?"rgba(124,58,237,.2)":"rgba(52,211,153,.1)",stroke:isNew?"#7C3AED":"#2f7d5c"}); this.svg.appendChild(rr);
+        this.svg.appendChild(T(x+(this.cellW-8)/2,y+20,"chunk "+c,{fill:"#d4d4d8","font-size":9.5,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}));
+        row.push(rr); });
+      this.cells.push(row); });
+    this.svg.appendChild(T(470,210,"purple = new chunk stored · green = reused from a prior version",{fill:"#5b5b66","font-size":9,"text-anchor":"end"}));
+    this.pulse=0;
+    this.cap("Each save writes a new version = a manifest (an ordered list of chunk hashes), not a full copy. Unchanged chunks are shared across versions, so history is cheap: v2 changing one chunk only stores that one new chunk and references the rest.");
+  }
+  frame(dt){ this.pulse+=dt; const a=0.5+0.5*Math.sin(this.pulse*2.4);
+    // gently pulse the newest chunk in each version
+    this.versions.forEach((ver,r)=>{ ver.newIdx.forEach(i=>{ this.cells[r][i].setAttribute("opacity",0.65+0.35*a); }); });
+  }
+}
+
+/* ---- 7. Conflict Resolution ---- */
+class ConflictViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(272,14,96,36,"base v1","#3a3a42","synced");
+    this.box(60,90,120,40,"Device A","#7C3AED","edit → v2a");
+    this.box(460,90,120,40,"Device B","#38bdf8","edit → v2b");
+    this.box(250,170,140,40,"Server","#fbbf24","detect divergence");
+    this.arrow(300,50,150,90,"#2a2a32"); this.arrow(340,50,510,90,"#2a2a32");
+    this.a1=this.arrow(120,130,300,170,"#7C3AED"); this.a2=this.arrow(520,130,340,170,"#38bdf8");
+    this.res=T(320,208,"",{fill:"#34d399","font-size":11.5,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.res);
+    this.pA=null; this.pB=null; this.step=0; this.timer=0;
+    this.cap("Two devices edit the same base version offline, then both sync. The server sees both derive from v1 (via version vectors) and can't linearly order them → a conflict. Resolution: last-writer-wins, a merge, or preserving both as a 'conflicted copy'.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return;
+    this.step=(this.step+1)%4; this.timer=1.4;
+    if(this.step===1){ this.res.textContent="both edited v1 offline…"; this.res.setAttribute("fill","#8b8b93");
+      this.pA=this.dot(120,130,"#7C3AED",5); this.pB=this.dot(520,130,"#38bdf8",5); }
+    else if(this.step===2){ this.res.textContent="⚠ conflict — v2a and v2b both derive from v1"; this.res.setAttribute("fill","#fbbf24");
+      if(this.pA){this.pA.setAttribute("cx",300);this.pA.setAttribute("cy",170);} if(this.pB){this.pB.setAttribute("cx",340);this.pB.setAttribute("cy",170);} }
+    else if(this.step===3){ this.res.textContent="✓ resolved → keep 'report (conflicted copy).doc' + notify both"; this.res.setAttribute("fill","#34d399"); }
+    else { this.res.textContent=""; if(this.pA)this.pA.remove(); if(this.pB)this.pB.remove(); this.pA=this.pB=null; }
+  }
+}
+
+/* ---- 8. Sync Protocol ---- */
+class SyncViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(20,84,110,44,"Device A","#7C3AED","edits file");
+    this.box(266,84,110,44,"Sync Server","#fbbf24","metadata");
+    this.box(500,24,120,40,"Device B","#38bdf8","pulls delta");
+    this.box(500,146,120,40,"Device C","#38bdf8","pulls delta");
+    this.arrow(130,106,266,106); this.arrow(376,100,500,60); this.arrow(376,112,500,166);
+    this.stat=T(320,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.packets=[]; this.spawn=0; this.phase=0;
+    this.cap("A device watches for local changes, computes which chunks changed, and uploads only that delta. The server updates the file's metadata/version and pushes a notification; other devices pull just the changed chunks — not the whole file.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=1.4;
+      this.packets.push({leg:0,prog:0,dead:false,el:this.dot(130,106,"#c4a2ff",5)}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.5;
+      if(p.leg===0){ p.el.setAttribute("cx",130+(320-130)*p.prog); p.el.setAttribute("cy",106);
+        if(p.prog>=1){ p.leg=1; p.prog=0; p.el.setAttribute("fill","#34d399");
+          this.packets.push({leg:2,prog:0,dead:false,el:this.dot(376,106,"#34d399",5)}); } }
+      else if(p.leg===1){ p.el.setAttribute("cx",376+(560-376)*p.prog); p.el.setAttribute("cy",106+(44-106)*p.prog);
+        if(p.prog>=1){ p.dead=true; p.el.remove(); } }
+      else { p.el.setAttribute("cx",376+(560-376)*p.prog); p.el.setAttribute("cy",106+(166-106)*p.prog);
+        if(p.prog>=1){ p.dead=true; p.el.remove(); } } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    this.stat.textContent="upload changed chunks → update metadata → push → devices pull delta";
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS)
+   ===================================================================== */
+const CODE_flow =
+"upload(file):\n" +
+"  chunks   = contentDefinedChunk(file)      # variable-size, content boundaries\n" +
+"  manifest = []\n" +
+"  for chunk in chunks:\n" +
+"    h = sha256(chunk)                        # content hash\n" +
+"    manifest.append(h)\n" +
+"    if not blobStore.exists(h):              # DEDUP: skip if we have it\n" +
+"      blobStore.put(h, chunk)                # store unique blob once\n" +
+"    else:\n" +
+"      blobStore.incRef(h)\n" +
+"  metadata.saveVersion(fileId, manifest)     # version = list of chunk hashes\n" +
+"  notify(otherDevices, fileId)               # sync";
+
+const CODE_chunk =
+"// content-defined chunking with a rolling hash (Rabin-style)\n" +
+"function chunk(bytes, minSize, maxSize, mask){\n" +
+"  const out = []; let start = 0, h = 0;\n" +
+"  for (let i = 0; i < bytes.length; i++){\n" +
+"    h = ((h << 1) + bytes[i]) >>> 0;         // roll the hash forward\n" +
+"    const len = i - start + 1;\n" +
+"    // cut a boundary when the low bits hit the pattern, or at maxSize\n" +
+"    if ((len >= minSize && (h & mask) === 0) || len >= maxSize){\n" +
+"      out.push(bytes.slice(start, i + 1));\n" +
+"      start = i + 1; h = 0;\n" +
+"    }\n" +
+"  }\n" +
+"  if (start < bytes.length) out.push(bytes.slice(start));\n" +
+"  return out;                                 // boundaries move WITH content\n" +
+"}";
+
+const CODE_hash =
+"// Merkle tree: leaves = chunk hashes, root fingerprints the file\n" +
+"String buildMerkleRoot(List<byte[]> chunks){\n" +
+"  List<String> level = new ArrayList<>();\n" +
+"  for (byte[] c : chunks) level.add(sha256(c));   // leaf hashes\n" +
+"  while (level.size() > 1){\n" +
+"    List<String> next = new ArrayList<>();\n" +
+"    for (int i = 0; i < level.size(); i += 2){\n" +
+"      String l = level.get(i);\n" +
+"      String r = (i + 1 < level.size()) ? level.get(i + 1) : l;\n" +
+"      next.add(sha256(l + r));                     // parent = H(children)\n" +
+"    }\n" +
+"    level = next;\n" +
+"  }\n" +
+"  return level.get(0);        // changing 1 chunk changes only its path to root\n" +
+"}";
+
+const CODE_dedup =
+"// content-addressed blob store with reference counting\n" +
+"class BlobStore {\n" +
+"  Map<String, byte[]> blobs = new HashMap<>();   // key = content hash\n" +
+"  Map<String, Integer> refs = new HashMap<>();\n" +
+"  void put(String hash, byte[] data){\n" +
+"    if (blobs.containsKey(hash)){ refs.merge(hash, 1, Integer::sum); return; }\n" +
+"    blobs.put(hash, data); refs.put(hash, 1);     // store once\n" +
+"  }\n" +
+"  void release(String hash){\n" +
+"    if (refs.merge(hash, -1, Integer::sum) == 0){ // GC when no file uses it\n" +
+"      blobs.remove(hash); refs.remove(hash);\n" +
+"    }\n" +
+"  }\n" +
+"}";
+
+const CODE_version =
+"// a version is just a manifest — an ordered list of chunk hashes\n" +
+"{\n" +
+"  \"fileId\": \"f_92a1\",\n" +
+"  \"versions\": [\n" +
+"    { \"v\": 1, \"ts\": 1700000000, \"chunks\": [\"a1\",\"b2\",\"c3\",\"d4\"] },\n" +
+"    { \"v\": 2, \"ts\": 1700000500, \"chunks\": [\"a1\",\"b2\",\"e9\",\"d4\"] }\n" +
+"  ]\n" +
+"}\n" +
+"// v2 changed one chunk (c3 -> e9); only e9 is newly stored,\n" +
+"// the other three are shared with v1 (cheap history).";
+
+const CODE_sync =
+"// delta sync: ship only the chunks the server is missing\n" +
+"async function sync(fileId, localManifest){\n" +
+"  const remote = await api.getManifest(fileId);   // server's chunk list\n" +
+"  const need   = await api.whichMissing(localManifest); // set difference\n" +
+"  for (const h of need)\n" +
+"    await api.uploadChunk(h, localChunks[h]);      // upload delta only\n" +
+"  await api.commit(fileId, localManifest);         // new version\n" +
+"}\n" +
+"// downloading works the same way: fetch only chunks you don't already have.";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A cloud file store separates <b>metadata</b> (small, transactional: files, folders, versions, chunk lists) from <b>data</b> (large, immutable chunk blobs). Files are chunked, deduplicated, and stored once in blob storage; metadata maps files to chunk manifests; sync and versioning are built on top.",
+    problem:"Store and sync billions of files across many devices with minimal storage cost and minimal data transfer — while keeping full history and resolving concurrent edits.",
+    how:["Client chunks the file and hashes each chunk.","API Gateway routes to metadata + chunk services.","Chunk service dedups against existing content.","Unique blobs are written to blob storage.","Metadata records the version's chunk manifest; sync notifies devices."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Metadata/data split scales each independently","Dedup + delta sync cut storage & bandwidth","Immutable chunks are trivially cacheable/replicable"],
+    disadvantages:["Metadata is the consistency-critical hot path","Chunk GC / ref-counting complexity","Many services to coordinate"],
+    interview:[["Design a cloud storage / file sync service (Dropbox).","Split metadata from data. Chunk files (content-defined), hash each chunk, and store unique blobs once in a content-addressed blob store (dedup + ref counts). Keep small, strongly-consistent metadata (files, folders, versions as chunk manifests) in a database. Sync ships only changed chunks (delta sync) and notifies other devices; versioning is cheap because versions share unchanged chunks. Resolve concurrent edits with version vectors → conflicted copies/merge."]] },
+
+  { id:"upload", num:2, icon:"⬆️", tag:"Ingest", title:"File Upload", viz:UploadViz,
+    definition:"Uploads are <b>chunk-level</b>, not file-level. The client splits the file, hashes each chunk, and asks the server which hashes it's missing — then uploads only those, in parallel and resumably. Editing a large file re-uploads only the changed chunks.",
+    problem:"Re-uploading an entire multi-GB file after a tiny edit wastes bandwidth and time, and naive uploads can't resume after a failure.",
+    how:["Split the file into content-defined chunks.","Hash each chunk (content address).","Ask the server which hashes are missing.","Upload only missing chunks (parallel, resumable).","Commit the manifest as a new version."],
+    code:{ "Flow":CODE_flow, "Delta sync":CODE_sync },
+    advantages:["Transfers only new data","Resumable & parallel","Instant 'upload' for already-stored files"],
+    disadvantages:["Client-side chunking/hashing cost","Extra round-trip to check missing chunks","Small-file overhead"],
+    interview:[["How do you make re-uploading an edited file cheap?","Chunk and hash the file client-side, then send the list of hashes and ask the server which it already has (a set difference). Upload only the missing chunks. Since most of a lightly-edited file's chunks are unchanged and already stored (from this or another user), you transfer almost nothing — and if every chunk already exists, the 'upload' is instant."]] },
+
+  { id:"chunking", num:3, icon:"🧩", tag:"Splitting", title:"Chunking", viz:ChunkingViz,
+    definition:"Files are split into chunks so dedup and sync work at sub-file granularity. <b>Content-defined chunking (CDC)</b> places boundaries using a rolling hash of the bytes — so boundaries move <i>with</i> the content, and inserting/removing bytes only affects the local chunk, not everything after it.",
+    problem:"Fixed-size chunks break on insertion: adding one byte at the front shifts every boundary, changing every chunk's hash, so nothing dedups against the previous version.",
+    how:["Slide a rolling hash across the byte stream.","Cut a boundary when the hash matches a pattern (or at max size).","Enforce min/max chunk sizes to bound variance.","Boundaries depend on content, not absolute offset.","Edits therefore disturb only nearby chunks."],
+    code:{ "Content-defined chunking":CODE_chunk },
+    advantages:["Insert/delete only changes local chunks","Great dedup across versions & files","Tunable average chunk size"],
+    disadvantages:["More CPU than fixed slicing","Variable sizes complicate storage","Boundary tuning matters"],
+    interview:[["Fixed-size vs content-defined chunking — why does it matter?","With fixed-size chunks, inserting a byte shifts all following boundaries, so every subsequent chunk hash changes and dedup fails. Content-defined chunking sets boundaries from a rolling hash of the data, so the boundaries realign right after the edit — only the chunk(s) around the change differ, and the rest still dedup. It's the key to efficient dedup and delta sync."]] },
+
+  { id:"hashing", num:4, icon:"🔑", tag:"Integrity", title:"Hashing", viz:HashingViz,
+    definition:"Each chunk is identified by the <b>hash of its content</b> (e.g. SHA-256) — content addressing. Chunk hashes form the leaves of a <b>Merkle tree</b> whose root fingerprints the whole file, so two files/versions can be compared and their differences located in O(log n).",
+    problem:"You need a stable, collision-resistant identity for each chunk (for dedup and integrity) and a fast way to tell whether — and where — two versions differ.",
+    how:["Hash each chunk to get its content address.","Use the hash as the dedup key and integrity check.","Build a Merkle tree: parents hash their children.","The root uniquely fingerprints the file/tree.","Compare roots; descend only where subtrees differ."],
+    code:{ "Merkle tree":CODE_hash },
+    advantages:["Content addressing enables dedup","Built-in integrity verification","O(log n) diff via Merkle trees"],
+    disadvantages:["Hashing CPU cost","(Astronomically rare) collision risk","Tree maintenance on updates"],
+    interview:[["What is a Merkle tree and why is it used in storage/sync?","A Merkle tree hashes data chunks into leaves, then hashes pairs of hashes up to a single root. The root is a fingerprint of all the data. Because changing any chunk changes only the hashes along its path to the root, you can compare two trees by their roots and, when they differ, descend to find exactly which chunks changed — O(log n). It's used for dedup keys, integrity, and efficient sync (and in Git, blockchains, etc.)."]] },
+
+  { id:"dedup", num:5, icon:"♻️", tag:"Efficiency", title:"Deduplication", viz:DedupViz,
+    definition:"<b>Deduplication</b> stores each unique chunk exactly once. Because chunks are content-addressed, any file (or version, or user) referencing the same content just points to the existing blob and bumps a <b>reference count</b> — enormous savings when data is shared or barely changed.",
+    problem:"Users store the same attachments, copies, and near-identical versions constantly. Storing every copy in full is hugely wasteful.",
+    how:["Key blobs by content hash (content-addressed).","On write, check if the hash already exists.","If yes → increment ref count, skip the upload/store.","If no → store the blob once.","On delete → decrement; garbage-collect at zero refs."],
+    code:{ "Blob store + refs":CODE_dedup },
+    advantages:["Massive storage savings","Cross-file & cross-user dedup","Cheap copies and versions"],
+    disadvantages:["Ref-counting & GC complexity","Security: hash 'existence' side-channels","Hot popular chunks need care"],
+    interview:[["How does deduplication work and where can it be applied?","Chunks are addressed by content hash, so identical content maps to the same key and is stored once, with a reference count tracking how many files use it. Writes that hit an existing hash just increment the count; deletes decrement and GC at zero. Dedup can be global (across all users), per-user, or per-file, and inline (at write) or post-process. Global dedup saves the most but raises privacy considerations."]] },
+
+  { id:"versioning", num:6, icon:"🕐", tag:"History", title:"Version History", viz:VersioningViz,
+    definition:"A <b>version</b> is a manifest — an ordered list of chunk hashes — not a full copy. Because unchanged chunks are shared across versions, keeping complete history is cheap: a save that changes one chunk stores just that chunk and references the rest.",
+    problem:"Users expect to restore any previous version, but storing a full copy per save would explode storage.",
+    how:["Each save records a new manifest (chunk-hash list).","Unchanged chunks are reused from prior versions.","Only newly-introduced chunks are stored.","Restore = fetch the chunks a version's manifest lists.","Prune/expire old versions per retention policy."],
+    code:{ "Version manifest":CODE_version },
+    advantages:["Full history at tiny incremental cost","Instant restore to any version","Natural with content addressing"],
+    disadvantages:["Manifest/metadata growth over time","GC must respect all referencing versions","Retention policy decisions"],
+    interview:[["How do you store file version history efficiently?","Store each version as a manifest of chunk hashes rather than a full copy. Unchanged chunks are shared across versions (content-addressed), so a new version only stores the chunks that actually changed and references the rest. Restoring a version just reassembles the chunks its manifest lists. Garbage collection must keep any chunk still referenced by any live version."]] },
+
+  { id:"conflict", num:7, icon:"⚔️", tag:"Consistency", title:"Conflict Resolution", viz:ConflictViz,
+    definition:"When two devices edit the same file from the same base version offline and both sync, the server detects that neither is a descendant of the other (via <b>version vectors</b>) — a <b>conflict</b>. It resolves with last-writer-wins, a merge, or by preserving both as a 'conflicted copy'.",
+    problem:"Concurrent, offline edits can't be linearly ordered. Silently overwriting one loses data; you must detect divergence and resolve it predictably.",
+    how:["Track each file's version vector / causal history.","On sync, check if one version descends from the other.","If neither descends → conflict.","Resolve: last-writer-wins, auto-merge (if mergeable), or keep both.","Notify devices; converge everyone to the resolution."],
+    code:{ "Version manifest":CODE_version },
+    advantages:["No silent data loss","Deterministic convergence","Users can recover both edits"],
+    disadvantages:["Version-vector bookkeeping","Auto-merge only works for some formats","'Conflicted copy' UX friction"],
+    interview:[["How do you handle two devices editing the same file offline?","Track causal history with version vectors (or a base-version pointer). On sync, if one version is a descendant of the other, fast-forward. If neither descends from the other, it's a conflict — resolve by last-writer-wins, an automatic merge for mergeable formats, or by keeping both as a 'conflicted copy' so no edit is lost. Then propagate the agreed state to all devices so they converge."]] },
+
+  { id:"sync", num:8, icon:"🔄", tag:"Delivery", title:"Sync Protocol", viz:SyncViz,
+    definition:"Sync keeps every device consistent by shipping <b>only changed chunks</b>. A client watches for local changes, computes the delta (which chunks differ), uploads just those, and the server updates metadata and <b>notifies</b> other devices, which pull the same small delta.",
+    problem:"Re-transferring whole files on every change would be far too slow and expensive across many devices and large files.",
+    how:["Watch the filesystem for local changes.","Re-chunk changed files; diff against the last manifest.","Upload only the missing/changed chunks (delta).","Server commits a new version and pushes a notification.","Other devices pull only the chunks they lack."],
+    code:{ "Delta sync":CODE_sync },
+    advantages:["Minimal bandwidth (delta only)","Near-real-time propagation","Works with dedup & versioning"],
+    disadvantages:["Change detection & diffing cost","Notification/fan-out infrastructure","Handling offline & conflicts"],
+    interview:[["Describe an efficient file sync protocol.","Each client watches for changes, re-chunks modified files, and diffs the new chunk-hash manifest against the last known one to find the delta. It uploads only missing chunks and commits a new version in metadata. The server then pushes a lightweight notification (long-poll/WebSocket) to the user's other devices, which pull just the chunks they don't already have. Combined with dedup, this transfers the bare minimum and propagates changes quickly."]] }
+];
+
+/* SECTION RENDERER */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ tabs[k]=s.code[k]; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* INTERVIEW TOPICS */
+const TOPICS=[
+  ["🧩","Chunk Storage","Files are split into chunks so dedup, sync and versioning work at sub-file granularity — the unit of storage and transfer."],
+  ["🌳","Merkle Tree","Chunk hashes form a tree whose root fingerprints the file; enables O(log n) diffing, integrity and efficient sync."],
+  ["♻️","Deduplication","Content-addressed chunks are stored once with ref counts, so shared/duplicate/near-identical data costs almost nothing."],
+  ["🗄️","Blob Storage","Immutable, content-addressed object store for chunk data — cheap, replicated, and trivially cacheable."],
+  ["🗂️","Metadata","Small, strongly-consistent DB mapping files/folders/versions → chunk manifests; the transactional hot path."],
+  ["✂️","Content-Defined Chunking","Rolling-hash boundaries move with content so edits only change local chunks — the key to good dedup."],
+  ["🔄","Delta Sync","Transfer only changed chunks between device and server, propagated via change notifications."],
+  ["⚔️","Consistency","Version vectors detect concurrent edits; resolution keeps both / merges / last-writer-wins."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* COMPARISON */
+const CMP=[
+  ["Fixed-size","Poor","Breaks everything","Lowest","Simple, non-editing workloads"],
+  ["Content-defined (CDC)","Excellent","Local only","Higher (rolling hash)","Dropbox-style sync + dedup"],
+  ["Whole-file","None (per file)","N/A","None","Tiny files, simple stores"],
+  ["Delta / diff","Excellent (vs base)","N/A","Medium","Known base version (rsync)"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Strategy</th><th>Dedup quality</th><th>On insert</th><th>CPU</th><th>Best for</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* INTERVIEW Q&A */
+const QA=[
+  ["Design a cloud file storage / sync service (Dropbox, Drive).","Separate metadata from data. Chunk files with content-defined chunking, hash each chunk, and store unique blobs once in a content-addressed blob store with reference counts (dedup). Keep small, strongly-consistent metadata (files, folders, versions as chunk manifests) in a DB. Uploads/downloads and sync transfer only missing chunks (delta sync); versions share unchanged chunks. Notify devices on change; resolve concurrent offline edits with version vectors."],
+  ["Why chunk files, and how big should chunks be?","Chunking enables sub-file dedup, delta sync and cheap versioning — you store/transfer only changed chunks. Chunk size is a trade-off: smaller chunks dedup better and sync finer but add metadata/overhead and hashing cost; larger chunks reduce overhead but dedup worse. A few hundred KB to a few MB average (content-defined) is typical."],
+  ["Fixed-size vs content-defined chunking?","Fixed-size chunks shift on insertion — one added byte changes every later boundary, so dedup fails. Content-defined chunking sets boundaries via a rolling hash of the content, so boundaries realign right after an edit and only the local chunk changes. That preserves dedup and makes delta sync efficient."],
+  ["What is content addressing and how does it enable dedup?","Each chunk is identified by the hash of its bytes, so identical content always maps to the same key. Storing by that key means duplicates collapse to one blob (with a ref count), and integrity is verifiable (rehash and compare). It's the foundation of dedup, versioning and sync here (and of Git, IPFS, etc.)."],
+  ["How does a Merkle tree help sync?","Chunk hashes are leaves; parents hash children up to a root that fingerprints the file. Comparing two roots tells you instantly if anything changed; if so, you descend into differing subtrees to locate exactly which chunks changed in O(log n) — so you transfer only the real delta rather than scanning the whole file."],
+  ["How do you store versions without exploding storage?","A version is a manifest of chunk hashes, not a full copy. Unchanged chunks are shared across versions, so a save only stores newly-introduced chunks and references the rest. History becomes cheap and restore is just reassembling a manifest's chunks. GC keeps any chunk referenced by a live version."],
+  ["How do you resolve concurrent edits / conflicts?","Track causal history with version vectors. On sync, if one version descends from the other, fast-forward. If neither does, it's a conflict: resolve by last-writer-wins, auto-merge (for mergeable formats), or keep both as a 'conflicted copy' so nothing is lost — then converge all devices to the result."],
+  ["How do you keep metadata consistent and scalable?","Metadata (files, folders, versions, chunk lists) is small but consistency-critical, so it lives in a strongly-consistent, transactional store (often sharded by user/namespace). Data (chunk blobs) is large but immutable, so it goes in eventually-consistent, cheap, replicated blob storage. Splitting them lets each scale on its own axis."],
+  ["How do you garbage-collect unreferenced chunks?","Because chunks are shared via reference counts (or reachability from live version manifests), you can't delete a chunk until no version references it. Use ref counting with careful concurrency, or periodic mark-and-sweep over all manifests. Deletes/version pruning decrement references and only physically remove blobs that hit zero."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* GLOBAL CODE */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Flow":CODE_flow, "Chunking":CODE_chunk, "Merkle hash":CODE_hash,
+  "Dedup store":CODE_dedup, "Version manifest":CODE_version, "Delta sync":CODE_sync
+}); }
+
+/* RELATED */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Video Streaming","🎬","Chunks + CDN","video-streaming.html"],
+    ["Typeahead Search","🔍","Trie + ranking","typeahead-search.html"],
+    ["Web Crawler","🕷️","Bloom + dedup","web-crawler.html"],
+    ["Notification System","🔔","Sync notify","notification-system.html"],
+    ["Twitter News Feed","🐦","Fan-out + Redis","news-feed.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — real content-defined chunking + dedup engine over text
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.host=$("pgViz"); this.build(); this.bind();
+    this.reset(true);
+  }
+  reset(seed){
+    this.store=new Map();            // hash -> {size, refs}
+    this.versions=0; this.logical=0; this.physical=0;
+    this.uploaded=0; this.saved=0; this.lastUploaded=0; this.lastSaved=0;
+    if(seed){ this.ta.value=
+      "The quick brown fox jumps over the lazy dog. "+
+      "Cloud storage splits files into content-defined chunks. "+
+      "Identical chunks are stored only once."; }
+    this.process(); 
+  }
+  build(){
+    const wrap=el("div");
+    const lbl=el("div","fs-label","Edit the file (each pause = a new save)");
+    this.ta=el("textarea","fs-ta"); this.ta.value="";
+    wrap.appendChild(lbl); wrap.appendChild(this.ta);
+    wrap.appendChild(el("div","fs-label","Chunks in current version"));
+    this.chunksEl=el("div","fs-chunks"); wrap.appendChild(this.chunksEl);
+    const legend=el("div","fs-legend",
+      '<span class="k"><span class="fs-dot" style="background:var(--accent)"></span> new (uploaded this save)</span>'+
+      '<span class="k"><span class="fs-dot" style="background:#34d399"></span> deduplicated (reused)</span>');
+    wrap.appendChild(legend);
+    this.storeEl=el("div","fs-store",""); wrap.appendChild(this.storeEl);
+    this.rootEl=el("div","fs-root",""); wrap.appendChild(this.rootEl);
+    this.host.appendChild(wrap);
+  }
+  bind(){
+    $("pgSize").addEventListener("input",()=>{ const bits=+$("pgSize").value; $("pgSizeV").textContent="~"+(1<<bits)+" B";
+      this.reset(false); });  // changing chunk size invalidates the store
+    $("pgReset").onclick=()=>this.reset(true);
+    $("pgDup").onclick=()=>{ this.ta.value=this.ta.value+" "+this.ta.value.slice(0, Math.min(80,this.ta.value.length)); this.process(); };
+    this.deb=null;
+    this.ta.addEventListener("input",()=>{ if(this.deb)clearTimeout(this.deb); this.deb=setTimeout(()=>this.process(),300); });
+  }
+  // FNV-1a 32-bit hash -> hex
+  hash(str){ let h=2166136261>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h.toString(16).padStart(8,"0"); }
+  // content-defined chunking via rolling hash
+  chunk(str){ const bits=+$("pgSize").value; const mask=(1<<bits)-1;
+    const min=Math.max(4,(1<<bits)>>1), max=(1<<bits)*4;
+    const out=[]; let start=0, h=0;
+    for(let i=0;i<str.length;i++){ h=((h<<1)+str.charCodeAt(i))>>>0; const len=i-start+1;
+      if((len>=min && (h&mask)===0) || len>=max){ out.push(str.slice(start,i+1)); start=i+1; h=0; } }
+    if(start<str.length) out.push(str.slice(start));
+    return out;
+  }
+  process(){
+    const text=this.ta.value||"";
+    const chunks=this.chunk(text);
+    this.versions++;
+    let up=0, sv=0; const view=[];
+    const rootParts=[];
+    chunks.forEach(c=>{ const h=this.hash(c); rootParts.push(h); const size=c.length;
+      this.logical+=size;
+      if(this.store.has(h)){ const e=this.store.get(h); e.refs++; this.saved+=size; sv+=size; view.push({c,h,size,dup:true}); }
+      else { this.store.set(h,{size,refs:1}); this.physical+=size; this.uploaded+=size; up+=size; view.push({c,h,size,dup:false}); }
+    });
+    this.lastUploaded=up; this.lastSaved=sv;
+    this.merkleRoot=this.hash(rootParts.join(""));
+    this.render(view);
+    this.updateStats();
+  }
+  render(view){
+    this.chunksEl.innerHTML="";
+    if(view.length===0){ this.chunksEl.appendChild(el("div","fs-label","(empty file — no chunks)")); }
+    view.forEach((v,i)=>{ const c=el("div","fs-chunk "+(v.dup?"dup":"new"));
+      c.innerHTML=`<span>c${i} · ${v.size}B</span><span class="h">${v.h.slice(0,6)}</span>`;
+      c.title=JSON.stringify(v.c);
+      this.chunksEl.appendChild(c); });
+    let physTotal=0; this.store.forEach(e=>physTotal+=e.size);
+    this.storeEl.innerHTML=`Blob store: <b>${this.store.size}</b> unique chunks · <b>${bytes(physTotal)}</b> physical `+
+      `(logical <b>${bytes(this.logical)}</b>) · last save uploaded <b>${bytes(this.lastUploaded)}</b>, deduped <b>${bytes(this.lastSaved)}</b>`;
+    this.rootEl.innerHTML=`Merkle root of current version: <b>${this.merkleRoot}</b>`;
+  }
+  updateStats(){
+    let physTotal=0; this.store.forEach(e=>physTotal+=e.size);
+    const ratio=physTotal>0? this.logical/physTotal : 1;
+    $("pgVersions").textContent=this.versions;
+    $("pgUnique").textContent=this.store.size;
+    $("pgRatio").textContent=ratio.toFixed(2)+"×";
+    $("pgUploaded").textContent=bytes(this.uploaded);
+    $("pgSaved").textContent=bytes(this.saved);
+  }
+}
+
+/* BOOT */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bloom Filter — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+/* ---------- animated diagram: add("cat") sets bits, query("dog") misses ---------- */
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 600 200"});host.appendChild(svg);
+  const M=20,cells=[],cw=560/M;
+  for(let i=0;i<M;i++){const x=20+i*cw;const r=S("rect",{x:x+1,y:90,width:cw-2,height:34,rx:4,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);cells.push(r);}
+  const lbl=TX(300,50,"",{fill:"#c4a2ff","font-size":14,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(300,160,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const catBits=[3,9,14],dogBits=[3,9,17];
+  let phase=0,timer=0,running=false,raf,last;
+  function step(){phase=(phase+1)%4;timer=1.7;
+    if(phase===0){cells.forEach(c=>{c.setAttribute("fill","#161619");c.setAttribute("stroke","#2a2a32");});lbl.textContent='add("cat")';lbl.setAttribute("fill","#c4a2ff");sub.textContent="hash 'cat' 3 ways → set those bits to 1";}
+    else if(phase===1){catBits.forEach(i=>{cells[i].setAttribute("fill","rgba(124,58,237,.55)");cells[i].setAttribute("stroke","#7C3AED");});sub.textContent="bits "+catBits.join(", ")+" are now 1";}
+    else if(phase===2){lbl.textContent='query("dog")';dogBits.forEach(i=>{const hit=catBits.includes(i);cells[i].setAttribute("stroke",hit?"#34d399":"#f87171");});sub.textContent="check bits "+dogBits.join(", ")+" — bit 17 is still 0";}
+    else{lbl.textContent='"dog" → DEFINITELY NOT present';lbl.setAttribute("fill","#f87171");sub.textContent="one 0 bit is enough to rule it out (no false negatives)";}}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);step();
+}
+
+/* ---------- interactive Bloom filter simulation ---------- */
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Add elements to set their k bits, then query anything. A query fails the instant it hits a 0 bit; if all k bits are 1 it's "probably present" — and you can trigger a <b>false positive</b> by querying an item that was never added but whose bits happen to already be set.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Hash functions (k) <b id="pgKV">3</b></label><input id="pgK" type="range" min="1" max="6" value="3"></div>
+      <div class="pg-field"><label>Element</label><input id="pgInput" type="text" placeholder="type a word…" spellcheck="false"></div>
+      <div class="pg-btns"><button id="pgAdd" class="go">+ Add</button><button id="pgQuery">Query</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgSeed">Seed 3</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Tip: add "apple", "banana", "cherry", then query "grape", "melon", "kiwi"… with high k / many items you'll eventually see a false positive.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Items</div><div class="v ac" id="pgItems">0</div></div>
+        <div class="pg-stat"><div class="k">Bits set</div><div class="v" id="pgBits">0/48</div></div>
+        <div class="pg-stat"><div class="k">Fill</div><div class="v wa" id="pgFill">0%</div></div>
+        <div class="pg-stat"><div class="k">Est. FP rate</div><div class="v wa" id="pgEps">0%</div></div>
+        <div class="pg-stat"><div class="k">False positives</div><div class="v bad" id="pgFP">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const M=48;let K=3;
+  const svg=S("svg",{viewBox:"0 0 600 120"});$("pgViz").appendChild(svg);
+  const cells=[],cw=600/M;
+  for(let i=0;i<M;i++){const x=i*cw;const r=S("rect",{x:x+1,y:34,width:cw-2,height:34,rx:3,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    if(i%6===0)svg.appendChild(TX(x+cw/2,84,String(i),{fill:"#5b5b66","font-size":7,"text-anchor":"middle"}));cells.push(r);}
+  svg.appendChild(TX(300,16,"bit array (m = 48 bits)",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+
+  let bitsSet,added,queries,fp,marks=[];
+  const fnv=(str,seed)=>{let h=(2166136261^seed)>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;};
+  const idx=str=>{const a=fnv(str,0x9e3779b9),b=fnv(str,0x85ebca6b),out=[];for(let i=0;i<K;i++)out.push(((a+i*b)>>>0)%M);return out;};
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>30)l.removeChild(l.lastChild);}
+  function stats(){const set=bitsSet.filter(Boolean).length,fill=set/M,eps=Math.pow(fill,K);
+    $("pgItems").textContent=added.size;$("pgBits").textContent=set+"/"+M;$("pgFill").textContent=Math.round(fill*100)+"%";
+    $("pgEps").textContent=Math.round(eps*100)+"%";$("pgFP").textContent=fp;}
+  function reset(){bitsSet=new Array(M).fill(false);added=new Set();queries=0;fp=0;
+    cells.forEach(c=>{c.setAttribute("fill","#161619");c.setAttribute("stroke","#2a2a32");});$("pgLog").innerHTML="";stats();log("filter reset — all bits 0","ac");}
+  function add(v){const ix=idx(v);ix.forEach(i=>{bitsSet[i]=true;cells[i].setAttribute("fill","rgba(124,58,237,.55)");cells[i].setAttribute("stroke","#7C3AED");});
+    added.add(v);log('add("'+v+'") → set bits ['+ix.join(", ")+"]","ok");stats();}
+  function flash(indices,color){marks.forEach(m=>m.remove?m.remove():0);marks=[];indices.forEach(i=>cells[i].setAttribute("stroke",color));}
+  function query(v){queries++;const ix=idx(v),all=ix.every(i=>bitsSet[i]);flash(ix,all?"#34d399":"#f87171");
+    if(!all)log('query("'+v+'") → DEFINITELY NOT present',"bad");
+    else{const real=added.has(v);if(real)log('query("'+v+'") → probably present ✓ (true positive)',"ok");
+      else{fp++;log('query("'+v+'") → probably present ⚠ FALSE POSITIVE',"wa");}}stats();}
+
+  $("pgK").addEventListener("input",()=>{K=+$("pgK").value;$("pgKV").textContent=K;reset();});
+  $("pgAdd").onclick=()=>{const v=($("pgInput").value||"").trim();if(v)add(v);$("pgInput").value="";};
+  $("pgQuery").onclick=()=>{const v=($("pgInput").value||"").trim();if(v)query(v);};
+  $("pgSeed").onclick=()=>["apple","banana","cherry"].forEach(add);
+  $("pgReset").onclick=reset;
+  $("pgInput").addEventListener("keydown",e=>{if(e.key==="Enter")$("pgAdd").click();});
+  reset();
+}
+
+/* ---------- content ---------- */
+const DATA={
+  badge:"🌸",title:"Bloom Filter",category:"Algorithms",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Probabilistic Data Structure",
+  tagline:"A space-efficient probabilistic set: it can tell you an element is <b>definitely not</b> in a set, or <b>probably is</b> — using a tiny bit array and a few hash functions, with a tunable false-positive rate and zero false negatives.",
+  pills:["<b>O(k)</b> add / query","<b>No false negatives</b>","<b>Tiny</b> memory","<b>Tunable</b> error"],
+  overview:"A Bloom filter is a bit array of <i>m</i> bits and <i>k</i> independent hash functions. To add an element you hash it <i>k</i> ways and set those bits to 1. To test membership you hash it and check those bits: if any is 0 the element is <b>definitely absent</b>; if all are 1 it's <b>probably present</b> (it could be a false positive from other elements' bits). It never stores the elements themselves, so it's extremely compact — perfect as a fast pre-check in front of an expensive lookup.",
+  problem:"You need to check 'have I seen this before?' billions of times (URLs crawled, cache keys, seen events) but keeping the full set in memory is too expensive. A Bloom filter answers in O(k) with a few bits per element, and only a small, tunable chance of a false positive.",
+  diagram,diagramCaption:"Adding an element sets k bits; a query is a miss the moment it finds any 0 bit.",
+  how:[
+    "Allocate a bit array of m bits, all 0, and pick k hash functions.",
+    "Add(x): compute k hashes of x, set bits h1(x)…hk(x) to 1.",
+    "Query(x): compute the same k hashes; if ANY bit is 0 → definitely not present.",
+    "If ALL k bits are 1 → probably present (could be a false positive).",
+    "You can never delete from a plain Bloom filter (bits are shared) — use a counting variant for deletes."
+  ],
+  complexity:[["Add","O(k)"],["Query","O(k)"],["Space","~1.44·log₂(1/ε) bits/elem"],["False negatives","0 (never)"]],
+  advantages:["Tiny memory (bits, not elements)","O(k) constant-time add & query","No false negatives (safe as a pre-filter)","Easy to distribute/merge (bitwise OR)"],
+  disadvantages:["False positives (tunable, never zero)","Can't delete (use counting Bloom filter)","Can't list/iterate the elements","Must size m,k up front for target error"],
+  tradeoffs:"More bits (m) and the optimal k lower the false-positive rate ε but cost memory. The optimal k = (m/n)·ln2, and ε ≈ (1−e^(−kn/m))^k. When you need deletes, a counting Bloom filter uses small counters instead of bits (more memory). When you need cardinality, use HyperLogLog instead.",
+  whenNot:"Don't use a Bloom filter when you need exact membership, deletions from a plain filter, enumeration of members, or associated values — use a hash set / hash map. Also skip it when the set is small enough to fit exactly in memory cheaply.",
+  simIntro:"",
+  sim,
+  code:{
+"Java":`// simple Bloom filter with k hashes derived from 2 base hashes\nclass BloomFilter {\n  final long[] bits; final int m, k;\n  BloomFilter(int m, int k){ this.m=m; this.k=k; bits=new long[(m+63)/64]; }\n  private void set(int i){ bits[i>>>6] |= (1L << (i & 63)); }\n  private boolean get(int i){ return (bits[i>>>6] & (1L << (i & 63))) != 0; }\n  void add(String x){\n    int h1=x.hashCode(), h2=Integer.rotateLeft(h1,16)^0x9e3779b9;\n    for(int i=0;i<k;i++) set(Math.floorMod(h1 + i*h2, m));\n  }\n  boolean mightContain(String x){\n    int h1=x.hashCode(), h2=Integer.rotateLeft(h1,16)^0x9e3779b9;\n    for(int i=0;i<k;i++) if(!get(Math.floorMod(h1 + i*h2, m))) return false;\n    return true;               // all bits set -> probably present\n  }\n}`,
+"Python":`class BloomFilter:\n    def __init__(self, m, k):\n        self.m, self.k = m, k\n        self.bits = bytearray((m + 7) // 8)\n    def _idx(self, x):\n        h1 = hash(x); h2 = hash((x, 'salt'))\n        for i in range(self.k):\n            yield (h1 + i * h2) % self.m\n    def add(self, x):\n        for i in self._idx(x):\n            self.bits[i >> 3] |= 1 << (i & 7)\n    def __contains__(self, x):        # 'x in filter'\n        return all(self.bits[i >> 3] >> (i & 7) & 1 for i in self._idx(x))`,
+"Sizing":`# choose m (bits) and k (hashes) for n items and target error e\n#   m = -(n * ln e) / (ln 2)^2\n#   k =  (m / n) * ln 2\nimport math\ndef size(n, e):\n    m = math.ceil(-(n * math.log(e)) / (math.log(2) ** 2))\n    k = max(1, round((m / n) * math.log(2)))\n    return m, k\nprint(size(1_000_000, 0.01))   # -> ~9.6M bits (~1.2 MB), k=7`,
+"Redis":`# Redis has native Bloom filters via the RedisBloom module\nBF.RESERVE seen 0.01 1000000     # error 1%, capacity 1M\nBF.ADD  seen  "https://a.com"\nBF.EXISTS seen "https://a.com"   # -> 1 (probably present)\nBF.EXISTS seen "https://b.com"   # -> 0 (definitely absent)\nBF.MADD seen url1 url2 url3       # batch add`
+  },
+  realWorld:[
+    ["Bigtable / Cassandra","Per-SSTable Bloom filters skip disk reads for keys that definitely aren't in that file."],
+    ["Web crawlers","Track 'URLs already seen' with a few bits each instead of storing billions of URLs."],
+    ["CDNs / caches","'One-hit-wonder' filters avoid caching objects requested only once."],
+    ["Chrome Safe Browsing","A local Bloom filter pre-checks malicious URLs before asking the server."],
+    ["Databases","Skip index/disk lookups for non-existent keys, cutting I/O dramatically."]
+  ],
+  interview:[
+    ["basic","What is a Bloom filter and what can it tell you?","A Bloom filter is a probabilistic set backed by a bit array and k hash functions. It answers membership with two possible outcomes: 'definitely not in the set' (a 0 bit was found) or 'probably in the set' (all bits were 1). It has no false negatives but does have false positives, and uses far less memory than storing the actual elements."],
+    ["basic","Why can't you get false negatives?","Because adding an element only ever sets bits to 1 and never clears them. So if an element was added, all its k bits are 1 forever; a query for it will always find them set. A 'not present' answer requires a 0 bit, which can only happen if the element was never added."],
+    ["inter","How do you choose m and k?","Given n expected items and target false-positive rate ε: m = −(n·ln ε)/(ln2)² bits, and the optimal number of hashes k = (m/n)·ln2. More bits per element lowers ε; too many or too few hashes both increase it. In practice you often use two base hashes and derive k indices as h1 + i·h2 (Kirsch–Mitzenmacher)."],
+    ["inter","Can you delete from a Bloom filter?","Not from a plain one — bits are shared across elements, so clearing bits for one element could produce false negatives for others. Use a Counting Bloom Filter (small counters instead of bits: increment on add, decrement on delete) at the cost of more memory, or a Cuckoo filter which supports deletion."],
+    ["adv","What causes the false-positive rate to rise over time?","As you insert more elements, more bits get set to 1, so the chance that all k bits of an unseen element are already set increases. Once the filter is 'full' (high fill ratio), ε climbs sharply. That's why you size it for the expected n; beyond that you need a bigger filter or a scalable Bloom filter."],
+    ["adv","How do you merge or scale Bloom filters?","Two filters with identical m, k and hash functions can be merged with a bitwise OR (union). For growing sets without knowing n up front, a Scalable Bloom Filter chains progressively larger filters with tighter error rates. To distribute, shard by key or replicate and OR partial filters."],
+    ["sd","Where would you use a Bloom filter in a system design?","As a cheap pre-filter in front of expensive operations: skip SSTable reads for absent keys (LSM databases), dedupe seen URLs in a crawler, avoid caching one-hit-wonders in a CDN, or reduce cache penetration by testing 'could this key exist?' before hitting the database. A false positive just means an occasional wasted lookup — never a wrong result if you verify on the positive path."]
+  ],
+  mistakes:["Treating 'probably present' as certain — always verify on the positive path if correctness matters.","Under-sizing m for the real n, so ε explodes as the filter fills.","Trying to delete from a plain filter (causes false negatives) — use a counting variant.","Using poor or correlated hash functions, which skews bit distribution and raises ε.","Forgetting the filter can't be resized — plan capacity or use a scalable variant."],
+  best:["Size m and k from your expected n and target ε up front.","Use double hashing (h1 + i·h2) instead of k independent hashes.","Verify positives against the source of truth when correctness is required.","Use RedisBloom / Guava BloomFilter rather than rolling your own.","Monitor fill ratio; rebuild or scale before ε degrades."],
+  related:[["Web Crawler","🕷️","Bloom dedup in action","web-crawler.html"],["HyperLogLog","🔢","Cardinality estimation","hyperloglog.html"],["Merkle Tree","🌳","Hashing structure","merkle-tree.html"],["Cloud File Storage","☁️","Dedup + chunking","cloud-file-storage.html"],["Consistent Hashing","🔁","Hash-ring routing","system-designed.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

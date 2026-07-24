@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fuzzy Search — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  const ops=[
+    ["kitten → sitten","substitute k→s","#f87171"],
+    ["sitten → sittin","substitute e→i","#f87171"],
+    ["sittin → sitting","insert g","#34d399"]];
+  function render(){g.innerHTML="";
+    g.appendChild(TX(310,50,'"kitten"  →  "sitting"',{fill:"#c4a2ff","font-size":14,"text-anchor":"middle","font-weight":700}));
+    g.appendChild(TX(310,74,"edit distance = 3 (min single-char edits)",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    ops.forEach(([t,d,c],i)=>{const y=100+i*28;const on=i<=phase;
+      g.appendChild(TX(150,y,t,{fill:on?c:"#3a3a42","font-size":11,"text-anchor":"start"}));
+      g.appendChild(TX(400,y,on?("← "+d):"",{fill:on?"#8b8b93":"#3a3a42","font-size":10,"text-anchor":"start"}));});
+    lbl.textContent="Levenshtein distance = insert + delete + substitute";lbl.setAttribute("fill","#c4a2ff");
+    sub.textContent="fuzzy search finds words within a small edit distance of the query — tolerating typos";}
+  function step(){phase=(phase+1)%3;timer=1.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Type a (possibly misspelled) word. Fuzzy search computes the <b>Levenshtein edit distance</b> — the minimum single-character inserts, deletes, and substitutions to turn one word into another — and returns dictionary words within a threshold. The heat-map shows the dynamic-programming matrix for the closest candidate.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Search (try a typo)</label><input id="pgQ" type="text" value="hte" style="width:150px"></div>
+      <div class="pg-field"><label>Max edit distance: <b id="pgTV">2</b></label><input id="pgT" type="range" min="1" max="4" value="2"></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgRun" class="go">≈ Fuzzy match</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Distance is computed with an O(m·n) DP. Real engines prune with tries + automata (Levenshtein automaton) or n-gram indexes so they don't compare against every word.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Query</div><div class="v ac" id="pgQs">—</div></div>
+        <div class="pg-stat"><div class="k">Best match</div><div class="v ok" id="pgBest">—</div></div>
+        <div class="pg-stat"><div class="k">Best distance</div><div class="v" id="pgDist">—</div></div>
+        <div class="pg-stat"><div class="k">Within threshold</div><div class="v wa" id="pgWithin">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const DICT=["the","then","there","them","cat","car","cart","hat","hate","host","the","those","that","dog","dot","code","cold","gold","word","world","hello","help"];
+  const uniq=[...new Set(DICT)];
+  const W=560,H=200;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function lev(a,b){const m=a.length,n=b.length;const dp=Array.from({length:m+1},(_,i)=>[i,...new Array(n).fill(0)]);
+    for(let j=0;j<=n;j++)dp[0][j]=j;
+    for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const cost=a[i-1]===b[j-1]?0:1;
+      dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+cost);}
+    return dp;}
+  function reset(){$("pgQ").value="hte";run();log("type a typo to see fuzzy matches","ac");}
+  function run(){const q=($("pgQ").value||"").toLowerCase().replace(/[^a-z]/g,"");const T=+$("pgT").value||2;$("pgQs").textContent=q||"—";
+    const scored=uniq.map(w=>({w,d:lev(q,w)[q.length][w.length]})).sort((a,b)=>a.d-b.d||a.w.localeCompare(b.w));
+    const within=scored.filter(s=>s.d<=T);
+    $("pgBest").textContent=scored[0]?scored[0].w:"—";$("pgDist").textContent=scored[0]?scored[0].d:"—";$("pgWithin").textContent=within.length;
+    drawMatrix(q,scored[0]?scored[0].w:"");
+    $("pgLog").innerHTML="";
+    within.slice(0,10).forEach(s=>log("\""+s.w+"\"  distance "+s.d+(s.d===0?" (exact)":""),s.d===0?"ok":s.d<=T?"ac":"wa"));
+    if(!within.length)log("no dictionary word within edit distance "+T+" of \""+q+"\"","bad");}
+  function drawMatrix(a,b){svg.innerHTML="";if(!a||!b){return;}
+    const dp=lev(a,b);const m=a.length,n=b.length;const cell=Math.min(26,(W-70)/(n+1),(H-50)/(m+1));const x0=50,y0=34;
+    svg.appendChild(TX(x0-6,y0-14,"",{}));
+    // column headers (b)
+    svg.appendChild(TX(x0+cell/2,y0-16,"ø",{fill:"#5b5b63","font-size":10,"text-anchor":"middle"}));
+    for(let j=0;j<n;j++)svg.appendChild(TX(x0+(j+1.5)*cell,y0-16,b[j],{fill:"#38bdf8","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(TX(x0+((n+1)/2)*cell,20,"target: "+b,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    // row headers (a)
+    svg.appendChild(TX(x0-10,y0+cell/2+4,"ø",{fill:"#5b5b63","font-size":10,"text-anchor":"end"}));
+    for(let i=0;i<m;i++)svg.appendChild(TX(x0-10,y0+(i+1.5)*cell+4,a[i],{fill:"#c4a2ff","font-size":11,"text-anchor":"end"}));
+    const maxD=Math.max(m,n);
+    for(let i=0;i<=m;i++)for(let j=0;j<=n;j++){const v=dp[i][j];const t=v/maxD;const last=(i===m&&j===n);
+      const r=Math.round(60+t*180),gc=Math.round(160-t*120);
+      svg.appendChild(S("rect",{x:x0+j*cell,y:y0+i*cell,width:cell-1.5,height:cell-1.5,rx:3,
+        fill:last?"#34d399":`rgba(${r},${gc},120,0.35)`,stroke:last?"#34d399":"#242a33","stroke-width":last?2:1}));
+      svg.appendChild(TX(x0+j*cell+cell/2,y0+i*cell+cell/2+3.5,v,{fill:last?"#0d0d0f":"#e4e4e7","font-size":9,"text-anchor":"middle","font-weight":last?700:400}));}
+    svg.appendChild(TX(W/2,H-4,"DP matrix — bottom-right (green) = edit distance",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgQ").oninput=run;$("pgT").oninput=()=>{$("pgTV").textContent=$("pgT").value;run();};$("pgRun").onclick=run;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"≈",title:"Fuzzy Search",category:"Search",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Typo-Tolerant Matching",
+  tagline:"Matching strings that are <b>similar but not identical</b>, so a search for \"recieve\" still finds \"receive\". Built on <b>edit distance</b> (Levenshtein) and accelerated with tries, automata, or n-gram indexes to avoid comparing against every word.",
+  pills:["<b>Edit distance</b>","<b>Levenshtein</b>","<b>Typo tolerance</b>","<b>n-grams / automata</b>"],
+  overview:"Users misspell, mistype, and mis-transliterate constantly. <b>Fuzzy search</b> finds strings within a small <b>edit distance</b> of the query. The classic metric is <b>Levenshtein distance</b>: the minimum number of single-character <b>insertions</b>, <b>deletions</b>, and <b>substitutions</b> to transform one string into another (e.g., kitten→sitting = 3). It's computed with an O(m·n) dynamic-programming table. <b>Damerau-Levenshtein</b> adds transpositions (swapping adjacent chars) since that's a very common typo. The catch: naively computing edit distance against every dictionary word is far too slow at scale. Real systems <b>prune</b> the candidate set first: index words as overlapping <b>n-grams</b> (or trigrams) and only score candidates that share enough n-grams; traverse a <b>trie</b> while tracking distance to cut off branches that already exceed the threshold; or compile a <b>Levenshtein automaton</b> for the query that accepts exactly the strings within distance k and intersect it with the term dictionary (how Lucene does fuzzy queries). Phonetic algorithms (Soundex/Metaphone) match by sound, and results are typically re-ranked by similarity plus popularity.",
+  problem:"Exact match fails the moment there's a typo, alternate spelling, or OCR error — yielding zero results for a query the user clearly intended. Search must be forgiving. But brute-force similarity (compare the query to every term) is O(N·m·n) and infeasible for large vocabularies, so the real problem is doing typo-tolerant matching efficiently.",
+  diagram,diagramCaption:"Levenshtein distance counts the minimum single-character edits between two strings.",
+  how:[
+    "Define a similarity metric: Levenshtein (insert/delete/substitute), often Damerau (+ transposition).",
+    "Compute edit distance via O(m·n) DP (or bounded/banded DP when only distances ≤ k matter).",
+    "Prune candidates: n-gram/trigram index, BK-tree, trie traversal with distance cutoff, or a Levenshtein automaton.",
+    "Keep only candidates within the max edit distance (often k=1 or 2, scaled by word length).",
+    "Re-rank surviving candidates by distance + term popularity/context; optionally add phonetic matching."
+  ],
+  complexity:[["Levenshtein (pair)","O(m·n)"],["Bounded distance ≤ k","O(k·min(m,n))"],["Pruning","n-grams / automata / BK-tree"],["Common threshold","k = 1–2"]],
+  advantages:["Tolerates typos, misspellings, OCR errors","Rescues zero-result queries → better UX","Works for autocomplete 'did you mean'","Combinable with phonetic & popularity signals","Well-understood, tunable via threshold"],
+  disadvantages:["Naive O(N·m·n) is too slow without indexing","Loose thresholds cause false positives/noise","Edit distance ignores meaning & keyboard layout","Higher k explodes the candidate space","Unicode/normalization edge cases"],
+  tradeoffs:"Fuzzy search trades precision and cost for recall and forgiveness. A larger edit-distance threshold catches more typos but also matches unrelated words (noise) and explodes the candidate set, so thresholds are usually tiny (1–2) and often scaled to word length. The core engineering trade-off is quality vs speed: exhaustively scoring every term gives the true nearest matches but is infeasible at scale, so systems use pruning structures (n-gram indexes, BK-trees, Levenshtein automata) that trade a little recall for huge speedups. Edit distance is also purely lexical — it treats 'form' and 'from' as close but has no idea 'car' and 'automobile' are related (that's semantic/vector search), and it ignores keyboard proximity (weighted variants help). In practice fuzzy matching is one signal, combined with exact matches, prefixes, phonetics, and popularity in a ranking layer.",
+  whenNot:"Don't apply fuzzy matching where exactness matters (IDs, codes, passwords, exact SKUs) or where false matches are dangerous. Avoid large thresholds and brute-force scoring on big vocabularies (use pruning or a search engine's built-in fuzzy query). For semantic similarity ('couch' ~ 'sofa') use embeddings/vector search, not edit distance. And prefer prefix/trie autocomplete for as-you-type completion, adding fuzziness only as a fallback.",
+  sim,
+  code:{
+"Levenshtein DP":`function levenshtein(a, b) {\n  const m = a.length, n = b.length;\n  const dp = Array.from({length: m+1}, (_, i) => [i, ...Array(n).fill(0)]);\n  for (let j = 0; j <= n; j++) dp[0][j] = j;\n  for (let i = 1; i <= m; i++)\n    for (let j = 1; j <= n; j++) {\n      const cost = a[i-1] === b[j-1] ? 0 : 1;\n      dp[i][j] = Math.min(\n        dp[i-1][j] + 1,      // deletion\n        dp[i][j-1] + 1,      // insertion\n        dp[i-1][j-1] + cost  // substitution (or match)\n      );\n    }\n  return dp[m][n];   // O(m*n) time, O(n) space if you keep two rows\n}`,
+"Bounded (early exit)":`// If you only care about distance <= k, band the DP and bail early —\n// O(k * min(m,n)) instead of O(m*n).\nfunction withinK(a, b, k) {\n  if (Math.abs(a.length - b.length) > k) return false;   // length filter\n  // ...compute only the diagonal band of width 2k+1;\n  // if the whole row exceeds k, stop: no match possible.\n}\n// n-gram prefilter: index trigrams of each term; a query only compares\n// against terms sharing >= (len - k*n) trigrams -> massive candidate cut.`,
+"Engine fuzzy query":`// Lucene/Elasticsearch compile a Levenshtein AUTOMATON for the query that\n// accepts exactly the strings within edit distance k, then intersect it\n// with the term dictionary (an FST) -> finds all fuzzy matches WITHOUT\n// scoring every term.\nGET /docs/_search\n{ "query": { "match": {\n    "title": { "query": "recieve", "fuzziness": "AUTO" }  // 0/1/2 by length\n}}}\n// "AUTO": distance 0 for short terms, up to 2 for longer ones.`
+  },
+  realWorld:[
+    ["Elasticsearch fuzzy queries","fuzziness:AUTO via Levenshtein automata over the term FST."],
+    ["Search 'Did you mean?'","Spelling correction/suggestions in web and site search."],
+    ["Autocomplete typo tolerance","Type-ahead that still matches with a mistyped character."],
+    ["Postgres pg_trgm","Trigram similarity index for fuzzy LIKE / % matching."],
+    ["Record linkage / dedup","Matching near-duplicate names/addresses across datasets."]
+  ],
+  interview:[
+    ["basic","What is fuzzy search and edit distance?","Fuzzy search finds strings similar to the query rather than exactly equal, tolerating typos and misspellings. It's based on edit distance — most commonly Levenshtein distance, the minimum number of single-character insertions, deletions, and substitutions to turn one string into another. Words within a small distance of the query are considered matches."],
+    ["basic","How is Levenshtein distance computed?","With dynamic programming: build an (m+1)×(n+1) table where dp[i][j] is the distance between the first i chars of A and first j of B. Each cell is the min of deletion (dp[i-1][j]+1), insertion (dp[i][j-1]+1), and substitution (dp[i-1][j-1]+cost, cost 0 if chars match else 1). The answer is dp[m][n], in O(m·n) time."],
+    ["inter","Why can't you just compute edit distance against every word?","Because that's O(N·m·n) for N dictionary terms — far too slow for large vocabularies and every keystroke. You must prune candidates first: n-gram/trigram indexes (only score terms sharing enough n-grams), BK-trees (metric-space pruning using the triangle inequality), trie traversal with a distance cutoff, or a Levenshtein automaton intersected with the term dictionary."],
+    ["inter","What is a Levenshtein automaton and why is it fast?","For a fixed query and max distance k, you can construct a finite automaton that accepts exactly the strings within edit distance k of the query. Intersecting this automaton with the (FST) term dictionary enumerates all fuzzy matches in roughly linear time in the output, without computing full DP against every term. Lucene/Elasticsearch use this for fuzzy queries."],
+    ["adv","How do you keep fuzzy matching efficient and precise at scale?","Bound the distance (k=1 or 2, often scaled to term length via 'AUTO'), add a length filter (terms differing in length by more than k can't match) and n-gram prefilters, and use banded/early-exit DP so you stop once distance exceeds k. Prune with automata/BK-trees. Then re-rank the small candidate set by distance plus popularity/context to control false positives."],
+    ["adv","Levenshtein vs Damerau vs phonetic vs semantic — when to use which?","Levenshtein handles insert/delete/substitute; Damerau-Levenshtein adds adjacent transpositions (very common typos like 'teh'). Phonetic algorithms (Soundex/Metaphone) match by pronunciation (good for names). Trigram similarity is cheap and index-friendly. None capture meaning — for 'sofa' ~ 'couch' you need semantic/vector search with embeddings. Real systems combine several signals in ranking."],
+    ["sd","Design a typo-tolerant search/'did you mean' feature.","Index terms with a trigram (n-gram) index and/or an FST for automaton-based fuzzy matching. On a query, first try exact/prefix matches; if results are weak, run bounded fuzzy matching (fuzziness AUTO, k≤2) using n-gram prefiltering or a Levenshtein automaton to get candidates cheaply. Score candidates by edit distance, term popularity (from query logs), and context, and surface the top suggestion as 'Did you mean X?'. Cache common corrections."]
+  ],
+  mistakes:["Brute-forcing edit distance against the whole vocabulary (too slow).","Using a large threshold, flooding results with false positives.","Ignoring length filters/early exit when only distance ≤ k matters.","Expecting edit distance to capture meaning (it's purely lexical).","Applying fuzziness to IDs/codes where exact match is required."],
+  best:["Keep thresholds small (1–2), ideally scaled to term length.","Prune candidates with n-grams, BK-trees, tries, or automata before scoring.","Use bounded/banded DP with early exit and length filters.","Combine fuzzy with exact/prefix/phonetic signals and popularity in ranking.","Use engine-native fuzzy queries (Lucene automata / pg_trgm) at scale."],
+  related:[["Trie","🌴","Prefix pruning","trie.html"],["Inverted Index","🔎","n-gram indexing","inverted-index.html"],["Full-Text Search","📄","Analysis pipeline","full-text-search.html"],["Typeahead Search","⌨️","Autocomplete + fuzziness","typeahead-search.html"],["Ranking (BM25)","🏆","Re-rank candidates","ranking.html"],["Elasticsearch","🔍","fuzziness:AUTO","elasticsearch.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

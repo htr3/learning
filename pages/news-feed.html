@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Twitter News Feed — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:740px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:460px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🐦</span> News Feed</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Twitter News Feed</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Push vs Pull</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Twitter News Feed</h1>
+      <p class="tagline">How a home timeline is built for hundreds of millions of users — the fan-out on write vs read trade-off,
+        the celebrity problem, Redis timeline caches, Kafka-driven fan-out workers, feed ranking, cursor pagination and trending
+        hashtags. Explore each with live visualizations and a fan-out cost playground.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>Read-heavy</b>&nbsp;timelines</span>
+        <span class="hpill"><b>Push + Pull</b>&nbsp;hybrid fan-out</span>
+        <span class="hpill"><b>Redis</b>&nbsp;precomputed feeds</span>
+        <span class="hpill"><b>Live</b>&nbsp;fan-out simulator</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">The Core Trade-off</div><h2>Fan-out: Write vs Read vs Hybrid</h2></div></div>
+      <div class="card">
+        <div class="block-title">Trade-off Matrix</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>What real Twitter does —</b> a <b>hybrid</b>: push tweets from normal users into follower timelines (fast reads), but for celebrities with millions of followers, skip the push and <b>pull</b> their tweets at read time and merge them in.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The key paths — posting a tweet, fan-out on write, building a hybrid home timeline, ranking, cursor pagination and trending.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Fan-out Cost Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Followers <b id="pgFollowersV">5,000</b></label><input id="pgFollowers" type="range" min="100" max="5000000" step="100" value="5000"></div>
+            <div class="pg-field">
+              <label>Fan-out strategy</label>
+              <select id="pgStrategy">
+                <option value="write">Fan-out on Write (push)</option>
+                <option value="read">Fan-out on Read (pull)</option>
+                <option value="hybrid" selected>Hybrid (push + pull)</option>
+              </select>
+            </div>
+            <div class="pg-field"><label>Celebrity threshold <b id="pgThreshV">100,000</b></label><input id="pgThresh" type="range" min="10000" max="2000000" step="10000" value="100000"></div>
+            <div class="pg-btns" style="margin-bottom:14px"><button class="go" id="pgPost">✍️ Post a tweet</button></div>
+            <div class="pg-field"><label>Auto-post rate (tweets/s) <b id="pgRateV">1</b></label><input id="pgRate" type="range" min="1" max="10" value="1"></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Auto</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Writes / tweet</div><div class="v ac" id="pgWrites">—</div></div>
+              <div class="pg-stat"><div class="k">Read cost</div><div class="v ok" id="pgRead">—</div></div>
+              <div class="pg-stat"><div class="k">Tweets posted</div><div class="v" id="pgTweets">0</div></div>
+              <div class="pg-stat"><div class="k">Total fan-out writes</div><div class="v bad" id="pgFanout">0</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   TWITTER NEWS FEED — modular vanilla JS (SVG animations, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=n=>n.toLocaleString();
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in typeof this export default stream "+
+    "def self lambda except raise with pass elif print import from as True False None "+
+    "String Long Integer List Map Stream true false null val "+
+    "SELECT INSERT UPDATE FROM WHERE ORDER BY LIMIT DESC select from where order by limit desc").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|--[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11.5,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color){ this.svg.appendChild(S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5})); }
+  dot(cx,cy,fill){ const c=S("circle",{r:4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.nodes=[["👤","User",14],["🚪","API GW",92],["📝","Tweet",182],["🪵","Kafka",274],["🧵","Fan-out",352],["⚡","Redis",452],["🗄️","Cass.",548]];
+    this.w=[70,78,80,70,88,80,80];
+    this.nodes.forEach(([ic,nm,x],i)=>{ this.box(x,90,this.w[i],46,nm,i===4?"#fbbf24":i===3?"#38bdf8":i===5?"#7C3AED":"#3a3a42",ic);
+      if(i<this.nodes.length-1) this.arrow(x+this.w[i],113,this.nodes[i+1][2],113); });
+    this.centers=this.nodes.map((n,i)=>n[2]+this.w[i]/2);
+    this.packets=[]; this.spawn=0;
+    this.cap("A tweet flows User → API Gateway → Tweet Service → Kafka → Fan-out workers → follower timelines in Redis, with Cassandra as durable storage.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.6,1.0);
+      this.packets.push({prog:0,dead:false,el:this.dot(this.centers[0],113,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.5;
+      if(p.prog>=this.centers.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog), f=p.prog-seg, a=this.centers[seg], b=this.centers[seg+1];
+      p.el.setAttribute("cx",a+(b-a)*f); p.el.setAttribute("fill",p.prog>=4?"#fbbf24":"#c4a2ff"); });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. Tweet Creation ---- */
+class CreateViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.box(24,80,130,46,"Tweet Service","#7C3AED","POST /tweets");
+    this.box(430,30,180,44,"Cassandra","#34d399","durable store");
+    this.box(430,128,180,44,"Kafka topic","#fbbf24","tweet event");
+    this.arrow(154,103,430,52); this.arrow(154,103,430,150);
+    this.packets=[]; this.spawn=0;
+    this.cap("Posting a tweet writes it durably to Cassandra and publishes an event to Kafka. Fan-out then happens asynchronously off that event.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.8,1.3);
+      [52,150].forEach(ty=>this.packets.push({ph:0,ty,dead:false,el:this.dot(160,103,"#c4a2ff")})); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.3;
+      p.el.setAttribute("cx",160+(430-160)*p.ph); p.el.setAttribute("cy",103+(p.ty-103)*p.ph);
+      p.el.setAttribute("fill",p.ty<100?"#34d399":"#fbbf24");
+      if(p.ph>=1){ p.dead=true; p.el.remove(); } });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 3. Fan-out on Write (push) ---- */
+class FanoutWriteViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(20,90,110,44,"Author","#7C3AED","new tweet");
+    this.box(230,90,110,44,"Fan-out","#fbbf24","worker");
+    this.tls=[]; const ys=[10,44,78,112,146,180];
+    ys.forEach((y,i)=>{ this.box(470,y,150,26,"timeline "+(i+1),"#3a3a42");
+      const c=T(612,y+17,"0",{fill:"#34d399","font-size":11,"text-anchor":"end","font-weight":700});
+      this.svg.appendChild(c); this.tls.push({y,cnt:c,n:0}); });
+    this.arrow(130,112,230,112);
+    this.ys=ys; this.parent=null; this.children=[]; this.timer=0.5;
+    this.cap("Push model: when the author tweets, a worker writes (prepends) the tweet id into every follower's precomputed timeline. Reads are then O(1).");
+  }
+  frame(dt){ this.timer-=dt;
+    if(this.timer<=0 && !this.parent){ this.timer=rand(1.6,2.4);
+      this.parent={ph:0,el:this.dot(75,112,"#c4a2ff")}; }
+    if(this.parent){ this.parent.ph+=dt*1.5; this.parent.el.setAttribute("cx",75+(285-75)*this.parent.ph);
+      if(this.parent.ph>=1){ this.parent.el.remove(); this.parent=null;
+        this.tls.forEach((tl,i)=>this.children.push({ph:0,idx:i,dead:false,el:this.dot(285,112,"#fbbf24")})); } }
+    this.children.forEach(c=>{ if(c.dead)return; c.ph+=dt*1.7; const tl=this.tls[c.idx];
+      c.el.setAttribute("cx",285+(470-285)*c.ph); c.el.setAttribute("cy",112+(tl.y+13-112)*c.ph);
+      if(c.ph>=1){ c.dead=true; c.el.remove(); tl.n++; tl.cnt.textContent=tl.n; } });
+    this.children=this.children.filter(c=>!c.dead);
+  }
+}
+
+/* ---- 4. Fan-out on Read (pull) ---- */
+class FanoutReadViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.fes=[]; const ys=[10,44,78,112,146,180];
+    ys.forEach((y,i)=>this.box(20,y,140,26,"followee "+(i+1),"#3a3a42"));
+    this.box(250,90,120,44,"Merge + sort","#fbbf24","at read time");
+    this.box(470,90,150,44,"Home feed","#34d399","reader");
+    ys.forEach(y=>this.arrow(160,y+13,250,112));
+    this.arrow(370,112,470,112);
+    this.ys=ys; this.children=[]; this.result=null; this.timer=0.4;
+    this.cap("Pull model: nothing is precomputed. At read time the service fetches recent tweets from every followee, then merges and sorts them. Writes are O(1), reads are expensive.");
+  }
+  frame(dt){ this.timer-=dt;
+    if(this.timer<=0 && this.children.length===0 && !this.result){ this.timer=rand(1.8,2.6);
+      this.ys.forEach(y=>this.children.push({ph:0,y,dead:false,el:this.dot(160,y+13,"#c4a2ff")})); }
+    let allDone=this.children.length>0;
+    this.children.forEach(c=>{ if(c.dead)return; c.ph+=dt*1.6;
+      c.el.setAttribute("cx",160+(310-160)*c.ph); c.el.setAttribute("cy",(c.y+13)+(112-(c.y+13))*c.ph);
+      if(c.ph>=1){ c.dead=true; c.el.remove(); } else allDone=false; });
+    this.children=this.children.filter(c=>!c.dead);
+    if(allDone && this.children.length===0 && !this.result){ this.result={ph:0,el:this.dot(310,112,"#34d399")}; }
+    if(this.result){ this.result.ph+=dt*1.6; this.result.el.setAttribute("cx",310+(470-310)*this.result.ph);
+      if(this.result.ph>=1){ this.result.el.remove(); this.result=null; } }
+  }
+}
+
+/* ---- 5. Celebrity Optimization (hybrid) ---- */
+class CelebrityViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(20,26,120,40,"Normal user","#7C3AED","few followers");
+    this.box(250,26,130,40,"Follower TL","#34d399","push (write)");
+    this.box(20,150,120,40,"Celebrity","#fbbf24","millions");
+    this.box(250,150,130,40,"Tweet store","#3a3a42","kept for pull");
+    this.box(470,88,150,44,"Reader feed","#38bdf8","merge on read");
+    this.arrow(140,46,250,46); this.arrow(140,170,250,170);
+    this.arrow(380,46,470,105); this.arrow(380,170,470,120);
+    this.svg.appendChild(T(560,90,"cache",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(T(560,140,"pull celebs",{fill:"#fbbf24","font-size":9,"text-anchor":"middle"}));
+    this.pk=[]; this.spawn=0;
+    this.cap("Hybrid: normal authors are pushed into follower timelines (cheap, since few followers). Celebrity tweets are NOT pushed — they're pulled and merged at read time.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.7,1.1);
+      this.pk.push({seg:"n1",ph:0,dead:false,el:this.dot(140,46,"#7C3AED")});
+      this.pk.push({seg:"c1",ph:0,dead:false,el:this.dot(140,170,"#fbbf24")}); }
+    this.pk.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.4;
+      if(p.seg==="n1"){ p.el.setAttribute("cx",140+(250-140)*p.ph); if(p.ph>=1){ p.dead=true; p.el.remove();
+          this.pk.push({seg:"n2",ph:0,dead:false,el:this.dot(315,46,"#34d399")}); } }
+      else if(p.seg==="c1"){ p.el.setAttribute("cx",140+(250-140)*p.ph); if(p.ph>=1){ p.dead=true; p.el.remove(); } }
+      else if(p.seg==="n2"){ p.el.setAttribute("cx",315+(470-315)*p.ph); p.el.setAttribute("cy",46+(105-46)*p.ph);
+          if(p.ph>=1){ p.dead=true; p.el.remove(); this.pk.push({seg:"c2",ph:0,dead:false,el:this.dot(315,170,"#fbbf24")}); } }
+      else if(p.seg==="c2"){ p.el.setAttribute("cx",315+(470-315)*p.ph); p.el.setAttribute("cy",170+(120-170)*p.ph);
+          if(p.ph>=1){ p.dead=true; p.el.remove(); } }
+    });
+    this.pk=this.pk.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 6. Timeline Cache (hit/miss) ---- */
+class TimelineCacheViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(30,95,90,46,"Reader","#3a3a42","GET feed");
+    this.box(255,40,120,46,"Redis","#34d399","timeline cache");
+    this.box(255,150,120,46,"Cassandra","#fbbf24","rebuild");
+    this.box(470,95,120,46,"Home feed","#7C3AED","rendered");
+    this.arrow(120,118,255,63); this.arrow(120,118,255,173);
+    this.arrow(375,63,470,118); this.arrow(375,173,470,118);
+    this.hits=0; this.miss=0; this.packets=[]; this.spawn=0;
+    this.stat=T(320,214,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.cap("Home timelines are cached in Redis. Most reads are served from memory; on a miss the feed is rebuilt from Cassandra and the cache is repopulated.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.35,.7); const hit=Math.random()<.85;
+      this.packets.push({hit,ph:0,dead:false,el:this.dot(75,118,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.6; const my=p.hit?63:173;
+      if(p.ph<1){ p.el.setAttribute("cx",75+(315-75)*p.ph); p.el.setAttribute("cy",118+(my-118)*p.ph); p.el.setAttribute("fill",p.hit?"#34d399":"#fbbf24"); }
+      else if(p.ph<2){ const f=p.ph-1; p.el.setAttribute("cx",315+(530-315)*f); p.el.setAttribute("cy",my+(118-my)*f); }
+      else { p.dead=true; p.el.remove(); p.hit?this.hits++:this.miss++; } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    const tot=this.hits+this.miss; this.stat.textContent=`hits ${this.hits} · misses ${this.miss} · hit rate ${tot?Math.round(this.hits/tot*100):0}%`;
+  }
+}
+
+/* ---- 7. Feed Ranking (reorder by score) ---- */
+class RankingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.n=5; this.rowH=36; this.top=18; this.barX=210; this.barMax=380;
+    this.items=[];
+    for(let i=0;i<this.n;i++){ const g=S("g"); this.svg.appendChild(g);
+      const rect=S("rect",{x:16,y:0,width:600,height:30,rx:8,fill:"#141416",stroke:"#3a3a42"}); g.appendChild(rect);
+      const label=T(28,20,"tweet "+(i+1),{fill:"#d4d4d8","font-size":12}); g.appendChild(label);
+      const bar=S("rect",{x:this.barX,y:9,width:10,height:12,rx:3,fill:"#7C3AED"}); g.appendChild(bar);
+      const sc=T(608,20,"0",{fill:"#8b8b93","font-size":11,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); g.appendChild(sc);
+      this.items.push({g,bar,sc,score:rand(.2,1),y:this.top+i*this.rowH,ty:this.top+i*this.rowH}); }
+    this.acc=0; this.reshuffle();
+    this.cap("Instead of pure reverse-chronological, tweets are scored (recency × affinity × engagement) and reordered — the highest-scoring tweets rise to the top.");
+  }
+  reshuffle(){ this.items.forEach(it=>it.score=clamp(it.score+rand(-.35,.35),.05,1));
+    const order=[...this.items].sort((a,b)=>b.score-a.score);
+    order.forEach((it,rank)=>it.ty=this.top+rank*this.rowH); }
+  frame(dt){ this.acc+=dt; if(this.acc>=2.4){ this.acc=0; this.reshuffle(); }
+    this.items.forEach(it=>{ it.y+=(it.ty-it.y)*Math.min(1,dt*5);
+      it.g.setAttribute("transform",`translate(0 ${it.y})`);
+      const w=6+this.items===0?0:(this.barMax-this.barX)*it.score; it.bar.setAttribute("width",Math.max(6,(this.barMax-this.barX)*it.score));
+      it.bar.setAttribute("fill", it.ty<=this.top+this.rowH ? "#34d399" : "#7C3AED");
+      it.sc.textContent=(it.score*100).toFixed(0); }); }
+}
+
+/* ---- 8. Pagination (cursor) ---- */
+class PaginationViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.svg.appendChild(S("rect",{x:180,y:16,width:280,height:180,rx:12,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.clip=S("clipPath",{id:"feedclip"}); const cr=S("rect",{x:184,y:20,width:272,height:172,rx:10}); this.clip.appendChild(cr);
+    this.svg.appendChild(this.clip);
+    this.g=S("g",{"clip-path":"url(#feedclip)"}); this.svg.appendChild(this.g);
+    this.rows=[]; this.nextId=10240; this.acc=0; this.page=1; this.spawnY=200;
+    this.pageLbl=T(320,216,"page 1 · GET /feed?limit=20",{fill:"#c4a2ff","font-size":11.5,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"});
+    this.svg.appendChild(this.pageLbl);
+    this.inPage=0;
+    this.cap("Cursor (keyset) pagination: each request asks for tweets with id < last-seen id. Stable under new inserts and far faster than OFFSET at deep pages.");
+  }
+  spawnRow(){ const g=S("g"); const y=this.spawnY;
+    g.appendChild(S("rect",{x:190,y,width:260,height:26,rx:7,fill:"#1a1a1c",stroke:"#3a3a42"}));
+    g.appendChild(T(200,y+17,"tweet #"+this.nextId,{fill:"#d4d4d8","font-size":11,"font-family":"JetBrains Mono,monospace"}));
+    this.g.appendChild(g); this.rows.push({g,y}); this.nextId--; this.inPage++;
+    if(this.inPage>=6){ this.inPage=0; this.page++; this.pageLbl.textContent=`page ${this.page} · GET /feed?cursor=${this.nextId}`; }
+  }
+  frame(dt){ this.rows.forEach(r=>{ r.off=(r.off||0)-26*dt; r.g.setAttribute("transform",`translate(0 ${r.off})`); });
+    this.rows=this.rows.filter(r=>{ if((r.off||0)<-190){ r.g.remove(); return false; } return true; });
+    this.acc+=dt; if(this.acc>=0.6){ this.acc=0; this.spawnRow(); }
+  }
+}
+
+/* ---- 9. Trending Hashtags ---- */
+class TrendingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.tags=[["#WorldCup",rand(4,9)],["#AI",rand(4,9)],["#Election",rand(3,8)],["#Crypto",rand(2,7)],["#NASA",rand(2,6)],["#Music",rand(2,6)]];
+    this.rowH=32; this.top=12; this.barX=150; this.barMax=520;
+    this.items=this.tags.map((t,i)=>{ const g=S("g"); this.svg.appendChild(g);
+      const label=T(16,20,t[0],{fill:"#d4d4d8","font-size":12,"font-family":"JetBrains Mono,monospace"}); g.appendChild(label);
+      const bar=S("rect",{x:this.barX,y:8,width:10,height:16,rx:4,fill:"#7C3AED"}); g.appendChild(bar);
+      const val=T(this.barX+16,20,"0",{fill:"#8b8b93","font-size":11,"font-family":"JetBrains Mono,monospace"}); g.appendChild(val);
+      return {g,bar,val,name:t[0],rate:t[1],count:rand(50,300),y:this.top+i*this.rowH,ty:this.top+i*this.rowH}; });
+    this.acc=0; this.reorder();
+    this.cap("Counters per hashtag increment inside a rolling time window (e.g. a Redis sorted set / Count-Min Sketch). The top-K by count are the current trends.");
+  }
+  reorder(){ const order=[...this.items].sort((a,b)=>b.count-a.count);
+    order.forEach((it,rank)=>it.ty=this.top+rank*this.rowH); }
+  frame(dt){ let max=1; this.items.forEach(it=>{ it.count+=it.rate*dt*rand(4,14); if(it.count>max)max=it.count; });
+    this.acc+=dt; if(this.acc>=0.8){ this.acc=0; this.reorder(); }
+    const top=Math.max(...this.items.map(i=>i.count));
+    this.items.forEach((it,i)=>{ it.y+=(it.ty-it.y)*Math.min(1,dt*5); it.g.setAttribute("transform",`translate(0 ${it.y})`);
+      it.bar.setAttribute("width",Math.max(6,(this.barMax-this.barX)*(it.count/top)));
+      const isTop=it.ty<=this.top+this.rowH*2.5; it.bar.setAttribute("fill",isTop?"#34d399":"#7C3AED");
+      it.val.textContent=Math.floor(it.count).toLocaleString(); }); }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS to avoid TDZ)
+   ===================================================================== */
+const CODE_flow =
+"POST /tweets\n" +
+"  -> API Gateway (auth, rate-limit)\n" +
+"  -> Tweet Service: save tweet in Cassandra\n" +
+"  -> publish TweetEvent to Kafka\n" +
+"  -> Fan-out workers consume the event\n" +
+"       normal author -> push id into each follower timeline (Redis)\n" +
+"       celebrity     -> skip; pulled at read time\n" +
+"GET /feed\n" +
+"  -> read timeline:<user> from Redis (fast) or rebuild from Cassandra\n" +
+"  -> merge celebrity tweets, rank, paginate";
+
+const CODE_create =
+"@PostMapping(\"/tweets\")\n" +
+"public Tweet post(@RequestBody TweetReq req){\n" +
+"  Tweet t = tweetRepo.save(new Tweet(req.userId(), req.text(), now()));\n" +
+"  // fan-out is asynchronous: just publish the event\n" +
+"  kafka.send(\"tweets\", new TweetEvent(t.id(), t.userId()));\n" +
+"  return t;\n" +
+"}";
+
+const CODE_fanout_write =
+"@KafkaListener(topics = \"tweets\", groupId = \"fanout\")\n" +
+"public void fanOut(TweetEvent e){\n" +
+"  if (graph.isCelebrity(e.userId())) return;          // skip: pull at read time\n" +
+"  List<Long> followers = graph.followersOf(e.userId());\n" +
+"  for (long f : followers){\n" +
+"    redis.lpush(\"timeline:\" + f, e.tweetId());        // prepend\n" +
+"    redis.ltrim(\"timeline:\" + f, 0, 799);             // keep newest 800\n" +
+"  }\n" +
+"}";
+
+const CODE_fanout_read =
+"public List<Tweet> pullTimeline(long userId){\n" +
+"  List<Long> followees = graph.followeesOf(userId);\n" +
+"  return followees.stream()\n" +
+"      .flatMap(f -> tweetRepo.recent(f, 50).stream())  // fetch each\n" +
+"      .sorted(comparingLong(Tweet::createdAt).reversed())\n" +
+"      .limit(50)\n" +
+"      .toList();                                       // merge + sort\n" +
+"}";
+
+const CODE_hybrid =
+"public List<Long> homeTimeline(long userId){\n" +
+"  // 1) precomputed timeline from push (normal authors)\n" +
+"  List<Long> ids = redis.lrange(\"timeline:\" + userId, 0, 799);\n" +
+"  // 2) pull + merge tweets from celebrities this user follows\n" +
+"  for (long celeb : graph.celebritiesFollowedBy(userId))\n" +
+"    ids.addAll(tweetRepo.recentIds(celeb, 50));\n" +
+"  return rank(ids, userId);        // merge, rank, then paginate\n" +
+"}";
+
+const CODE_ranking =
+"// engagement + recency + affinity score\n" +
+"double score(Tweet t, User viewer){\n" +
+"  double recency  = 1.0 / (1 + hoursSince(t.createdAt()));\n" +
+"  double affinity = graph.affinity(viewer, t.author());\n" +
+"  double engage   = 0.5*t.likes() + 1.0*t.retweets() + 0.3*t.replies();\n" +
+"  return 3*affinity + 2*recency + Math.log1p(engage);\n" +
+"}";
+
+const CODE_pagination =
+"-- cursor (keyset) pagination: no OFFSET, stable under inserts\n" +
+"SELECT id, text, created_at\n" +
+"FROM   home_timeline\n" +
+"WHERE  user_id = ? AND id < ?     -- ? = last id from the previous page\n" +
+"ORDER  BY id DESC\n" +
+"LIMIT  20;";
+
+const CODE_trending =
+"# rolling-window counter per hashtag (bucketed by the hour)\n" +
+"ZINCRBY trending:2026-07-24-14 1 \"#worldcup\"\n" +
+"EXPIRE  trending:2026-07-24-14 7200\n" +
+"# current top 10 trends\n" +
+"ZREVRANGE trending:2026-07-24-14 0 9 WITHSCORES";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A news feed (home timeline) shows a personalized, ordered stream of tweets from the accounts a user follows. At Twitter's scale this is a massive <b>read-heavy</b> problem: timelines are read far more often than tweets are written, so most systems <b>precompute</b> feeds.",
+    problem:"Building each user's timeline on the fly by querying all their followees at read time is far too slow at scale. Yet pushing every tweet to every follower is far too expensive for accounts with millions of followers. The whole design is about balancing these.",
+    how:["A user posts a tweet through the API Gateway.","The Tweet Service stores it durably (Cassandra) and emits a Kafka event.","Fan-out workers consume the event and update follower timelines in Redis.","Reads fetch the precomputed timeline from Redis (with Cassandra as fallback).","Ranking, pagination and trending are applied on the read path."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Reads are fast because feeds are precomputed","Async fan-out via Kafka smooths write spikes","Redis serves hot timelines from memory"],
+    disadvantages:["Fan-out on write is costly for popular accounts","Precomputed data can grow huge (storage)","Consistency between cache and store must be managed"],
+    interview:[["What makes a news feed hard to scale?","The read:write asymmetry plus the follower distribution. Most users have few followers (cheap to push), but a handful have tens of millions (impossible to push cheaply). You need different strategies for different accounts — hence hybrid fan-out."]] },
+
+  { id:"create", num:2, icon:"✍️", tag:"Write Path", title:"Tweet Creation", viz:CreateViz,
+    definition:"Posting a tweet is deliberately lightweight: persist the tweet and publish an event. The heavy work — delivering it to followers — happens asynchronously so the author gets an instant response.",
+    problem:"If posting a tweet had to synchronously update millions of follower timelines, the write would take forever and could fail partway.",
+    how:["Validate and store the tweet in Cassandra (durable, write-optimized).","Publish a TweetEvent (tweet id + author id) to Kafka.","Return success to the author immediately.","Fan-out workers pick up the event later.","Media is uploaded separately to blob storage / CDN."],
+    code:{ "Java":CODE_create, "Flow":CODE_flow },
+    advantages:["Fast, predictable write latency","Decouples posting from delivery","Kafka gives durability + replay of events"],
+    disadvantages:["Feed delivery is eventually consistent (slight delay)","Requires a reliable event pipeline","Ordering handled per-partition, not globally"],
+    interview:[["Why publish to Kafka instead of fanning out inline?","To keep the write fast and resilient. Kafka decouples posting from the expensive fan-out, absorbs bursts, lets many workers process in parallel, and allows replay if a worker fails — the author never waits for delivery."]] },
+
+  { id:"fanout-write", num:3, icon:"🧵", tag:"Push", title:"Fan-out on Write", viz:FanoutWriteViz,
+    definition:"Also called the <b>push</b> model. When a user tweets, the system immediately writes that tweet's id into the precomputed home timeline of every follower (typically a Redis list). Reads then just fetch a ready-made list.",
+    problem:"You want home-timeline reads to be as fast as possible for the common case, since reads vastly outnumber writes.",
+    how:["On a new tweet, look up the author's followers.","Prepend the tweet id to each follower's timeline list.","Trim each list to a bounded size (e.g. latest 800).","At read time, just LRANGE the list — O(1)-ish.","Store only ids in the timeline; hydrate tweet bodies separately."],
+    code:{ "Java":CODE_fanout_write },
+    advantages:["Extremely fast reads (precomputed)","Simple read path","Great for the 99% of users with modest follower counts"],
+    disadvantages:["A tweet with N followers = N writes (write amplification)","Wasteful for inactive followers","A celebrity tweet could mean tens of millions of writes"],
+    interview:[["What is write amplification in fan-out on write?","One logical write (a tweet) becomes N physical writes — one per follower. For an account with 50M followers that's 50M timeline updates for a single tweet, which is why pure push doesn't work for celebrities."]] },
+
+  { id:"fanout-read", num:4, icon:"🔎", tag:"Pull", title:"Fan-out on Read", viz:FanoutReadViz,
+    definition:"Also called the <b>pull</b> model. Nothing is precomputed. When a user opens their feed, the system fetches recent tweets from each account they follow and merges them on the fly.",
+    problem:"Fan-out on write is wasteful when an author is followed by millions or when followers rarely log in. Pull avoids all that write work.",
+    how:["On read, get the list of accounts the user follows.","Query recent tweets from each of them.","Merge the results and sort by time/score.","Return the top N.","Optionally cache the merged result briefly."],
+    code:{ "Java":CODE_fanout_read },
+    advantages:["Cheap writes — one store per tweet","No wasted work for inactive users","Naturally handles accounts with huge follower counts"],
+    disadvantages:["Expensive reads — must query many accounts and merge","Read latency grows with number of followees","Hard to keep read latency low at scale"],
+    interview:[["When is fan-out on read the better choice?","When writes are expensive relative to reads — e.g. celebrities with millions of followers, or users who log in rarely (so a precomputed feed would be wasted). It shifts cost from write time to read time."]] },
+
+  { id:"celebrity", num:5, icon:"⭐", tag:"The Big One", title:"Celebrity Optimization (Hybrid)", viz:CelebrityViz,
+    definition:"The production answer is a <b>hybrid</b>: use push (fan-out on write) for normal accounts, but for celebrities skip the push entirely and pull their tweets at read time, merging them into the reader's precomputed timeline.",
+    problem:"Pure push melts down on celebrity tweets (tens of millions of writes); pure pull makes every read slow. Neither alone works — the follower distribution is too skewed.",
+    how:["Classify authors: normal vs celebrity (by follower count threshold).","Normal authors → push into follower timelines as usual.","Celebrity authors → do NOT push; store their tweets for pulling.","At read time, take the reader's cached timeline and merge in recent tweets from the celebrities they follow.","Rank the merged set and return a page."],
+    code:{ "Java":CODE_hybrid },
+    advantages:["Avoids millions of writes per celebrity tweet","Keeps normal-user reads fast (mostly precomputed)","Balances write and read cost with follower skew"],
+    disadvantages:["More complex: two code paths + a merge step","Choosing/adjusting the celebrity threshold is tricky","Merge + rank adds read-time work for celeb-heavy feeds"],
+    interview:[["How do you solve the celebrity / hot-user problem?","Hybrid fan-out. Push for the many normal accounts (cheap, keeps reads fast), and pull for the few celebrity accounts (avoids write explosions). At read time you merge the precomputed timeline with freshly pulled celebrity tweets and rank the result."]] },
+
+  { id:"cache", num:6, icon:"⚡", tag:"Speed", title:"Timeline Cache (Redis)", viz:TimelineCacheViz,
+    definition:"Home timelines live in <b>Redis</b> — typically a capped list of tweet ids per user. Because reads dominate, this in-memory cache is what makes feeds feel instant.",
+    problem:"Rebuilding a timeline from Cassandra on every open would be slow and would hammer the database.",
+    how:["Store each user's timeline as a Redis list (ids only), trimmed to a bound.","On read, LRANGE the page you need — served from memory.","On a cache miss/eviction, rebuild from Cassandra and repopulate.","Hydrate tweet bodies from a separate tweet cache/store.","Only keep timelines for recently-active users hot."],
+    code:{ "Redis":CODE_trending, "Java":CODE_hybrid },
+    advantages:["Sub-millisecond timeline reads","Offloads the primary datastore","Ids-only lists keep memory small"],
+    disadvantages:["Memory is finite — can't cache every user","Cache invalidation on deletes/edits","Cold users cause rebuild spikes"],
+    interview:[["Why store only tweet ids in the timeline, not full tweets?","To save memory and avoid duplicating tweet bodies across millions of follower timelines. The timeline is a compact list of ids; the actual tweet content is fetched once from a shared tweet cache and hydrated at render time."]] },
+
+  { id:"ranking", num:7, icon:"🏅", tag:"Relevance", title:"Feed Ranking", viz:RankingViz,
+    definition:"Modern feeds aren't strictly reverse-chronological. Each candidate tweet gets a <b>score</b> from signals like recency, your affinity with the author, and engagement (likes/retweets/replies); the highest scores surface first.",
+    problem:"A pure time-ordered feed buries relevant content and shows low-value tweets just because they're newest. Ranking maximizes engagement/relevance.",
+    how:["Gather candidate tweets (from push timeline + pulled celebrities).","Compute a score per tweet (recency × affinity × engagement, often via an ML model).","Sort by score and take the top page.","Mix in ads / recommendations as needed.","Log impressions to feed back into the model."],
+    code:{ "Java":CODE_ranking },
+    advantages:["Surfaces the most relevant tweets first","Higher engagement and time-in-app","Can incorporate ML signals"],
+    disadvantages:["Complex, needs a feature/ML pipeline","Can create filter bubbles / hurt freshness","Harder to debug 'why did I see this?'"],
+    interview:[["Chronological vs ranked feed — trade-offs?","Chronological is simple, predictable and fresh but shows low-relevance content and misses posts you'd care about. Ranked maximizes relevance/engagement via scoring but is complex, can feel unpredictable, and risks filter bubbles. Many apps offer both."]] },
+
+  { id:"pagination", num:8, icon:"📄", tag:"Scrolling", title:"Pagination", viz:PaginationViz,
+    definition:"Infinite scroll uses <b>cursor (keyset) pagination</b>: each request asks for items with id &lt; the last id you saw, rather than OFFSET/LIMIT. It's stable when new tweets are inserted and stays fast at any depth.",
+    problem:"OFFSET-based paging re-scans and skips rows (slow at deep pages) and can duplicate or drop items when new tweets arrive between requests.",
+    how:["Return a page plus a cursor (the last item's id).","Next request passes that cursor: WHERE id &lt; cursor.","Order by id DESC, LIMIT page-size.","No OFFSET, so the DB seeks directly to the cursor.","Repeat until the user stops scrolling."],
+    code:{ "SQL":CODE_pagination },
+    advantages:["Constant-time paging at any depth","Stable under concurrent inserts","Works great with a clustered/sorted index"],
+    disadvantages:["Can't jump to an arbitrary page number","Cursor must be encoded/opaque to clients","Trickier with multi-column sort keys"],
+    interview:[["Why cursor pagination instead of OFFSET for feeds?","OFFSET scans and discards all skipped rows (slow at page 10,000) and shifts results when new items are inserted, causing duplicates/gaps. Cursor pagination seeks directly using WHERE id < lastId, giving stable, constant-time pages."]] },
+
+  { id:"trending", num:9, icon:"🔥", tag:"Aggregation", title:"Trending Hashtags", viz:TrendingViz,
+    definition:"Trending surfaces the hashtags/topics gaining the most traction <b>right now</b>. It's a streaming top-K problem over a rolling time window, computed from the same tweet event stream.",
+    problem:"You can't scan all tweets to rank hashtags in real time. You need approximate, memory-bounded counting over a sliding window.",
+    how:["Consume tweet events from Kafka and extract hashtags.","Increment per-hashtag counters in time-bucketed windows (e.g. Redis sorted sets).","Use approximate structures (Count-Min Sketch) for huge cardinality.","Read the top-K per window with ZREVRANGE.","Blend recency vs volume so genuinely rising topics win."],
+    code:{ "Redis":CODE_trending },
+    advantages:["Real-time, memory-bounded counting","Handles massive hashtag cardinality","Windowing captures 'rising now' not all-time"],
+    disadvantages:["Approximate counts (Count-Min overestimates)","Window/decay tuning is fiddly","Spam/bot manipulation must be filtered"],
+    interview:[["How would you compute trending topics at scale?","Stream tweet events, extract hashtags, and maintain rolling-window counts using Redis sorted sets or a Count-Min Sketch for huge cardinality. Read top-K per window and weight by rate-of-change so newly surging topics beat always-popular ones. Add anti-spam filtering."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["📰","Feed Generation","Push (fan-out on write), pull (fan-out on read), or hybrid — the central decision that shapes the whole system."],
+  ["⚡","Redis","Holds precomputed home timelines as capped id-lists, plus trending sorted sets — the source of instant reads."],
+  ["🪵","Kafka","Carries tweet events so fan-out is async, buffered against spikes, parallelizable and replayable."],
+  ["🧵","Fan-out","Delivering a tweet to followers. Write-side push vs read-side pull vs a hybrid to tame the celebrity problem."],
+  ["🗃️","Caching","Timelines and tweet bodies are cached (ids-only lists + a shared tweet cache) to keep reads in memory."],
+  ["🏅","Ranking","Scoring tweets by recency, affinity and engagement so the most relevant content rises to the top."],
+  ["🧩","Sharding","Tweets, the social graph and timelines are partitioned (by user id) across many nodes to scale writes and storage."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   COMPARISON table
+   ===================================================================== */
+const CMP=[
+  ["Fan-out on Write (push)","O(followers) per tweet","O(1) — read cached list","High (copy per follower)","Normal users; read-heavy feeds"],
+  ["Fan-out on Read (pull)","O(1) per tweet","O(followees) — merge at read","Low","Celebrities; inactive users"],
+  ["Hybrid (push + pull)","O(followers) for normal, O(1) for celebs","O(1) + merge celeb tweets","Medium","Real Twitter / production"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Strategy</th><th>Write cost</th><th>Read cost</th><th>Storage</th><th>Best for</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["Design Twitter's news feed / home timeline.","Clarify scale and read:write ratio. Core: post a tweet → store in Cassandra + publish to Kafka → fan-out workers update follower timelines in Redis → reads fetch the precomputed timeline. Then discuss the celebrity problem (hybrid fan-out), timeline cache, ranking, cursor pagination, trending and sharding by user id."],
+  ["Fan-out on write vs fan-out on read?","Write/push precomputes each follower's timeline (fast reads, but O(followers) writes). Read/pull builds the timeline at read time (cheap writes, expensive reads). Push suits normal users; pull suits celebrities and inactive users."],
+  ["How do you handle celebrities with millions of followers?","Hybrid fan-out: don't push their tweets. Push only normal-author tweets into follower timelines; at read time, pull recent celebrity tweets and merge them into the reader's cached timeline, then rank."],
+  ["Where is the home timeline stored and why?","In Redis as a capped list of tweet ids per user (e.g. newest 800). Ids-only keeps memory small and avoids duplicating tweet bodies; the actual content is hydrated from a shared tweet cache at render time. Cassandra is the durable fallback."],
+  ["Why Kafka in the pipeline?","To decouple posting from delivery. It makes writes fast, buffers spikes, lets many fan-out workers run in parallel, and supports replay if a worker fails — without the author waiting on fan-out."],
+  ["How do you rank the feed?","Score each candidate tweet using recency, viewer-author affinity and engagement signals (often an ML model), sort by score, and return the top page. Log impressions to retrain. Optionally offer a chronological toggle."],
+  ["How do you paginate an infinite feed?","Cursor/keyset pagination: return the last seen id as a cursor and query WHERE id < cursor ORDER BY id DESC LIMIT n. It's stable under new inserts and constant-time at any depth, unlike OFFSET."],
+  ["How do you compute trending hashtags?","Stream tweet events, extract hashtags, and keep rolling-window counts in Redis sorted sets (or a Count-Min Sketch for huge cardinality). Read top-K per window and weight by rate of change so rising topics win. Filter spam/bots."],
+  ["How do you shard the data?","Partition by user id: tweets, the social graph (followers/followees) and timelines are sharded across nodes. Cassandra handles tweet/timeline storage with wide-partition, write-optimized modeling; hot partitions (celebrities) get special handling."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Post tweet":CODE_create,
+  "Fan-out (write)":CODE_fanout_write,
+  "Home timeline (hybrid)":CODE_hybrid,
+  "Ranking":CODE_ranking,
+  "Pagination (SQL)":CODE_pagination,
+  "Trending (Redis)":CODE_trending
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["URL Shortener","🔗","Base62 & caching","url-shortener.html"],
+    ["Unique ID Generator","❄️","Snowflake tweet ids","id-generator.html"],
+    ["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"],
+    ["Kafka","🪵","Event streaming","kafka.html"],
+    ["Architecture","🏗️","Full system diagram","system-design.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — fan-out cost simulator
+   ===================================================================== */
+class Playground {
+  constructor(){ this.tweets=0; this.fanout=0; this.playing=false; this.acc=0;
+    this.host=$("pgViz"); this.svg=S("svg",{viewBox:"0 0 620 300"}); this.host.appendChild(this.svg);
+    this.buildStage(); this.bind(); this.last=performance.now(); this.packets=[]; this.readPulse=0;
+    const loop=now=>{ const dt=Math.min(.05,(now-this.last)/1000); this.last=now;
+      if(this.playing){ this.acc+=dt; const r=+$("pgRate").value; if(this.acc>=1/r){ this.acc=0; this.post(); } }
+      this.frame(dt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+    this.refreshLabels();
+  }
+  buildStage(){
+    const b=(x,y,w,h,label,color,sub)=>{ const g=S("g");
+      g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color,"stroke-width":1.5}));
+      g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11.5,"font-weight":600,"text-anchor":"middle"}));
+      if(sub)g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+      this.svg.appendChild(g); return g; };
+    b(24,128,120,50,"Author","#7C3AED","tweet");
+    // follower timeline grid (visual sample of followers)
+    this.cells=[]; const cols=6, rows=5, cw=40, ch=30, x0=250, y0=30, gx=45, gy=48;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){ const x=x0+c*gx, y=y0+r*gy;
+      const rect=S("rect",{x,y,width:cw,height:ch,rx:6,fill:"#141416",stroke:"#3a3a42"}); this.svg.appendChild(rect);
+      this.cells.push({x:x+cw/2,y:y+ch/2,rect,heat:0}); }
+    this.svg.appendChild(T(250+ (cols*gx)/2 -22,20,"sample follower timelines",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.note=T(84,205,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.note);
+  }
+  bind(){
+    const syncF=()=>{ $("pgFollowersV").textContent=fmt(+$("pgFollowers").value); this.refreshLabels(); };
+    const syncT=()=>{ $("pgThreshV").textContent=fmt(+$("pgThresh").value); this.refreshLabels(); };
+    $("pgFollowers").addEventListener("input",syncF);
+    $("pgThresh").addEventListener("input",syncT);
+    $("pgStrategy").addEventListener("change",()=>this.refreshLabels());
+    $("pgRate").addEventListener("input",()=>$("pgRateV").textContent=$("pgRate").value);
+    $("pgPost").onclick=()=>this.post();
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.playing=false; this.tweets=0; this.fanout=0;
+      this.packets.forEach(p=>p.el.remove()); this.packets=[]; this.cells.forEach(c=>{c.heat=0;c.rect.setAttribute("fill","#141416");});
+      $("pgTweets").textContent="0"; $("pgFanout").textContent="0"; this.refreshLabels(); };
+  }
+  isPush(){ const F=+$("pgFollowers").value, strat=$("pgStrategy").value, th=+$("pgThresh").value;
+    if(strat==="write") return true; if(strat==="read") return false; return F<=th; }
+  refreshLabels(){ const F=+$("pgFollowers").value, strat=$("pgStrategy").value, th=+$("pgThresh").value;
+    const push=this.isPush();
+    $("pgWrites").textContent = push? fmt(F) : "1";
+    if(strat==="read") $("pgRead").textContent="O(followees)";
+    else if(push) $("pgRead").textContent="O(1) cache";
+    else $("pgRead").textContent="O(1)+pull";
+    const celeb = strat==="hybrid" && F>th;
+    this.note.textContent = strat==="read" ? "pull: stored for read-time merge"
+      : celeb ? "celebrity → skip push, pull at read"
+      : push ? "push: writing into follower timelines" : "pull: stored for read-time merge";
+  }
+  post(){ const F=+$("pgFollowers").value; const push=this.isPush();
+    this.tweets++; $("pgTweets").textContent=fmt(this.tweets);
+    if(push){ this.fanout+=F; $("pgFanout").textContent=fmt(this.fanout);
+      // animate packets to sample cells (visual only)
+      this.cells.forEach((cell,i)=>{ setTimeout(()=>{ if(!this.host.isConnected&&false)return;
+        this.packets.push({ph:0,cell,dead:false,el:this.mk(84,153,"#fbbf24")}); }, i*12); });
+    } else {
+      this.fanout+=1; $("pgFanout").textContent=fmt(this.fanout);
+      // single store packet
+      this.packets.push({ph:0,cell:{x:300,y:150,rect:null},store:true,dead:false,el:this.mk(84,153,"#38bdf8")});
+    }
+    this.refreshLabels();
+  }
+  mk(cx,cy,fill){ const c=S("circle",{r:4,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+  frame(dt){
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.8;
+      p.el.setAttribute("cx",84+(p.cell.x-84)*p.ph); p.el.setAttribute("cy",153+(p.cell.y-153)*p.ph);
+      if(p.ph>=1){ p.dead=true; p.el.remove(); if(p.cell.rect){ p.cell.heat=Math.min(1,p.cell.heat+.34);
+        const g=Math.floor(52+p.cell.heat*120); p.cell.rect.setAttribute("fill",`rgb(${Math.floor(40+p.cell.heat*20)},${g},${Math.floor(60+p.cell.heat*40)})`);
+        p.cell.rect.setAttribute("stroke","#34d399"); } } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    // cool the cells slowly
+    this.readPulse-=dt; if(this.readPulse<=0){ this.readPulse=.15;
+      this.cells.forEach(c=>{ if(c.heat>0){ c.heat=Math.max(0,c.heat-.02);
+        if(c.heat===0){ c.rect.setAttribute("fill","#141416"); c.rect.setAttribute("stroke","#3a3a42"); } } }); }
+  }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Failover — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function node(x,y,label,state){const col=state==="up"?"#34d399":state==="down"?"#f87171":"#5b5b63";
+    g.appendChild(S("rect",{x:x-55,y:y-20,width:110,height:40,rx:8,fill:state==="down"?"rgba(248,113,113,.12)":"rgba(52,211,153,.12)",stroke:col,"stroke-width":2}));
+    g.appendChild(TX(x,y-2,label,{fill:"#e4e4e7","font-size":10.5,"text-anchor":"middle"}));
+    g.appendChild(TX(x,y+13,state==="up"?"● active":state==="down"?"✗ failed":"○ standby",{fill:col,"font-size":9,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:255,y:36,width:110,height:30,rx:8,fill:"#161619",stroke:"#3a3a42"}));g.appendChild(TX(310,55,"health check",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    if(phase===0){node(170,120,"Primary","up");node(450,120,"Standby","idle");
+      g.appendChild(S("line",{x1:310,y1:66,x2:180,y2:100,stroke:"#34d399","stroke-width":1.4,"stroke-dasharray":"3 3"}));
+      g.appendChild(S("line",{x1:170,y1:100,x2:170,y2:75,stroke:"#34d399","stroke-width":2}));g.appendChild(TX(170,72,"traffic",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="normal — primary serves, standby waits";lbl.setAttribute("fill","#34d399");sub.textContent="health checks confirm the primary is alive; the standby stays synced and ready";}
+    else{node(170,120,"Primary","down");node(450,120,"Standby","up");
+      g.appendChild(S("line",{x1:310,y1:66,x2:180,y2:100,stroke:"#f87171","stroke-width":1.4,"stroke-dasharray":"3 3"}));g.appendChild(TX(250,86,"✗ no heartbeat",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+      g.appendChild(S("line",{x1:450,y1:100,x2:450,y2:75,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));g.appendChild(TX(450,70,"traffic rerouted",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="failover — standby promoted to active";lbl.setAttribute("fill","#c4a2ff");sub.textContent="missed heartbeats trigger promotion; traffic redirects to the standby (brief downtime)";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">A load balancer routes traffic to healthy nodes using <b>health checks</b>. Kill the active node and watch failover: missed heartbeats mark it down, then traffic redirects to a standby. Compare <b>active-passive</b> (a warm spare, brief downtime on promotion) with <b>active-active</b> (all nodes serve, instant absorption).</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Topology</label><select id="pgMode"><option value="ap">Active-Passive</option><option value="aa">Active-Active</option></select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgKill" class="go">✗ Kill active node</button><button id="pgReq">Send request</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRevive">↻ Revive node</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Health checks poll every node. Active-passive must detect failure then promote the standby (failover time = detection + promotion). Active-active just stops routing to the dead node.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Serving</div><div class="v ok" id="pgServe">Node A</div></div>
+        <div class="pg-stat"><div class="k">Requests OK</div><div class="v ac" id="pgOk">0</div></div>
+        <div class="pg-stat"><div class="k">Dropped</div><div class="v bad" id="pgDrop">0</div></div>
+        <div class="pg-stat"><div class="k">Failovers</div><div class="v wa" id="pgFo">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=130;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let nodes,ok,drop,fo,failingOver;
+  function reset(){nodes=[{id:"A",up:true,role:"active"},{id:"B",up:true,role:mode()==="aa"?"active":"standby"},{id:"C",up:true,role:mode()==="aa"?"active":"standby"}];
+    ok=0;drop=0;fo=0;failingOver=false;draw();stats();$("pgLog").innerHTML="";log("send requests, then kill the active node","ac");}
+  function mode(){return $("pgMode").value||"ap";}
+  function active(){return nodes.filter(n=>n.up&&n.role==="active");}
+  function kill(){const act=active();if(!act.length){log("no active node to kill","wa");return;}
+    const victim=act[0];victim.up=false;log("✗ Node "+victim.id+" killed — health check will notice missing heartbeats","bad");
+    if(mode()==="ap"){failingOver=true;draw();stats();
+      log("⏱ detecting failure… (missed heartbeats)","wa");
+      setTimeout(()=>{const sb=nodes.find(n=>n.up&&n.role==="standby");
+        if(sb){sb.role="active";fo++;victim.role="standby";log("↑ promoted standby Node "+sb.id+" to active — failover complete","ok");}
+        else log("no healthy standby available — OUTAGE","bad");
+        failingOver=false;draw();stats();},900);}
+    else{fo++;log("active-active: LB simply stops routing to Node "+victim.id+"; others absorb the load instantly ✓","ok");draw();stats();}}
+  function revive(){const dead=nodes.find(n=>!n.up);if(!dead){log("all nodes already healthy","wa");return;}
+    dead.up=true;if(mode()==="aa")dead.role="active";log("↻ Node "+dead.id+" back online"+(mode()==="ap"?" (rejoins as standby)":" (serving again)"),"ok");draw();stats();}
+  function req(){const act=active();
+    if(failingOver||!act.length){drop++;log("request DROPPED — no active node (failover in progress / outage)","bad");}
+    else{ok++;const n=act[ok%act.length];log("request → Node "+n.id+" → 200 OK","ok");}
+    stats();}
+  function stats(){const act=active();$("pgServe").textContent=act.length?act.map(n=>"Node "+n.id).join(", "):"— none —";
+    $("pgServe").className="v "+(act.length?"ok":"bad");$("pgOk").textContent=ok;$("pgDrop").textContent=drop;$("pgFo").textContent=fo;}
+  function draw(){svg.innerHTML="";
+    svg.appendChild(S("rect",{x:W/2-55,y:8,width:110,height:26,rx:7,fill:"#161619",stroke:"#7C3AED"}));svg.appendChild(TX(W/2,25,"Load Balancer",{fill:"#c4a2ff","font-size":10,"text-anchor":"middle"}));
+    const xs=[110,280,450];
+    nodes.forEach((n,i)=>{const x=xs[i];const active=n.up&&n.role==="active";const col=!n.up?"#f87171":active?"#34d399":"#5b5b63";
+      svg.appendChild(S("line",{x1:W/2,y1:34,x2:x,y2:70,stroke:active?"#34d399":"#2f3742","stroke-width":active?2:1,"stroke-dasharray":active?"none":"3 3",...(active?{"marker-end":"url(#a)"}:{})}));
+      svg.appendChild(S("rect",{x:x-48,y:72,width:96,height:44,rx:9,fill:!n.up?"rgba(248,113,113,.12)":active?"rgba(52,211,153,.12)":"rgba(91,91,99,.1)",stroke:col,"stroke-width":2}));
+      svg.appendChild(TX(x,92,"Node "+n.id,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+      svg.appendChild(TX(x,107,!n.up?"✗ failed":active?"● active":"○ standby",{fill:col,"font-size":9,"text-anchor":"middle"}));});
+    if(failingOver)svg.appendChild(TX(W/2,60,"⏱ failing over…",{fill:"#fbbf24","font-size":10,"text-anchor":"middle","font-weight":700}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgMode").onchange=reset;$("pgKill").onclick=kill;$("pgReq").onclick=req;$("pgRevive").onclick=revive;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔀",title:"Failover",category:"Resilience",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Switching to a Healthy Replica",
+  tagline:"When a component fails, failover automatically redirects work to a healthy replica. Health checks detect the failure; a standby is promoted (active-passive) or surviving nodes absorb the load (active-active) — keeping the system available.",
+  pills:["<b>Health checks</b>","<b>Active-passive</b>","<b>Active-active</b>","<b>Automatic</b> promotion"],
+  overview:"Failover is the mechanism that keeps a system available when a node, database, or region fails. It has two ingredients: <b>detection</b> (health checks / heartbeats notice a component is unresponsive) and <b>redirection</b> (traffic moves to a healthy replica). Two common topologies: in <b>active-passive</b>, one node actively serves while a <b>standby</b> stays synced and idle; on failure the standby is <b>promoted</b> to active and traffic redirects to it — simple, but there's a brief window of downtime for detection + promotion, and the standby's capacity sits unused. In <b>active-active</b>, all nodes serve traffic simultaneously behind a load balancer; when one fails, the LB simply stops routing to it and the survivors absorb the load with (ideally) zero downtime — better utilization and faster recovery, but requires all nodes to handle concurrent traffic and share/replicate state. Databases add nuance: failover must avoid split-brain (two primaries) and data loss (promoting a replica that lags the failed primary).",
+  problem:"Hardware, software, and networks fail constantly. A single active component is a single point of failure — when it dies, the service is down until a human intervenes. Failover removes the human from the critical path: the system detects failure and shifts to a replica automatically, turning a would-be outage into a brief blip.",
+  diagram,diagramCaption:"Health checks detect the primary's failure; the standby is promoted and traffic reroutes to it.",
+  how:[
+    "Run replicas: a standby (active-passive) or multiple active nodes (active-active).",
+    "Continuously health-check nodes via heartbeats/probes from the LB or a coordinator.",
+    "On repeated missed heartbeats, mark the node down (avoid flapping with thresholds/hysteresis).",
+    "Redirect traffic: promote a standby to active, or (active-active) stop routing to the dead node.",
+    "Fence the old node (STONITH) and re-sync it as a new standby when it returns to avoid split-brain."
+  ],
+  complexity:[["Active-passive","1 serves, 1+ standby"],["Active-active","all serve"],["Downtime","AP: detect+promote; AA: ~0"],["Detection","heartbeats / probes"]],
+  advantages:["Removes single points of failure","Automatic recovery — no human in the loop","Active-active: near-zero downtime + full utilization","Improves availability (more nines)","Foundation for HA and DR"],
+  disadvantages:["Active-passive wastes standby capacity + has failover gap","Risk of split-brain (two active nodes)","Replica lag can cause data loss on promotion","Flapping health checks cause thrashing","Adds complexity (replication, fencing, LB config)"],
+  tradeoffs:"Active-passive is simpler and cleaner for stateful systems (one writer avoids conflicts) but wastes the standby and has a detection-plus-promotion downtime window; active-active maximizes utilization and minimizes downtime but demands that nodes handle concurrent traffic and reconcile shared state, raising consistency and conflict challenges. The universal hazards are split-brain (a partition making two nodes both think they're primary — mitigated with quorum/fencing) and data loss (promoting a replica that hadn't received the failed primary's latest writes — the RPO tension between synchronous replication, which is safe but slower, and asynchronous, which is fast but can lose recent data). Health-check tuning is a balance: too sensitive causes flapping, too lax delays failover.",
+  whenNot:"Failover isn't free: for non-critical, easily-restartable workloads a simple restart or manual recovery may suffice. Avoid automatic failover where a false positive is worse than the outage (e.g., promoting a lagging DB replica could lose data) — sometimes controlled/manual failover with confirmation is safer. Very tight RPO/consistency needs may require synchronous replication (with its latency cost) before you can safely auto-promote.",
+  sim,
+  code:{
+"Health checks (LB)":`# Load balancer health check drives failover: unhealthy nodes are removed.\nupstream app {\n  server 10.0.0.11:8080 max_fails=3 fail_timeout=10s;  # mark down after 3 fails\n  server 10.0.0.12:8080 max_fails=3 fail_timeout=10s;\n  server 10.0.0.13:8080 backup;   # active-passive: only used if others down\n}\n# active-active: list all as normal servers (no 'backup') -> traffic spreads,\n# a dead node is simply skipped.`,
+"DB failover":`# Managed DB failover (e.g., Postgres/MySQL with a coordinator):\n# 1) Primary stops sending heartbeats\n# 2) Coordinator waits for failure threshold (avoid flapping)\n# 3) Choose the most up-to-date replica (least lag) as new primary\n# 4) FENCE the old primary (STONITH) so it can't accept writes -> no split-brain\n# 5) Promote replica, repoint apps (DNS/proxy/virtual IP)\n# Synchronous replication => RPO ~0 (no data loss) but higher write latency.\n# Asynchronous => faster writes but may lose the last few transactions.`,
+"App-side handling":`// Clients should retry idempotently across the failover window.\nasync function query(sql) {\n  for (let attempt = 0; attempt < 3; attempt++) {\n    try { return await pool.query(sql); }\n    catch (e) {\n      if (isFailoverError(e)) {           // connection reset / read-only\n        await sleep(200 * 2 ** attempt);  // backoff over the promotion gap\n        await pool.reconnect();           // pick up the new primary\n        continue;\n      }\n      throw e;\n    }\n  }\n}`
+  },
+  realWorld:[
+    ["AWS RDS Multi-AZ","Synchronous standby in another AZ; automatic failover on primary failure."],
+    ["Redis Sentinel","Monitors masters, elects and promotes a replica on failure."],
+    ["Kubernetes","Reschedules pods off failed nodes; Services route only to ready endpoints."],
+    ["DNS / GSLB failover","Health-checked DNS routes users away from a failed region."],
+    ["Elasticsearch / Kafka","Replica shards/partitions promoted when a leader broker/node dies."]
+  ],
+  interview:[
+    ["basic","What is failover?","The automatic process of detecting that a component has failed and redirecting its work to a healthy replica, so the service stays available. It combines failure detection (health checks/heartbeats) with redirection (promoting a standby or rerouting to surviving nodes)."],
+    ["basic","Active-passive vs active-active — what's the difference?","In active-passive, one node serves while a standby stays synced and idle, then gets promoted on failure — simple but wastes the standby and has a failover downtime gap. In active-active, all nodes serve simultaneously behind a load balancer; on failure the LB just stops routing to the dead node and survivors absorb the load — better utilization and near-zero downtime, but nodes must handle concurrent traffic and shared state."],
+    ["inter","How is failure detected, and how do you avoid false positives?","Via heartbeats/health probes from the load balancer or a coordinator. To avoid flapping (marking a healthy node down due to a transient blip), require multiple consecutive failed checks before marking down (and successes before marking up), use sensible intervals/timeouts, and consider multiple observers so one network hiccup doesn't trigger a needless failover."],
+    ["inter","What is split-brain and how does failover prevent it?","Split-brain is when a network partition makes two nodes both believe they're the primary, so both accept writes and diverge. Failover prevents it with quorum (only the side with a majority may be primary) and fencing/STONITH (forcibly isolating or shutting down the old primary before promoting a new one), plus a single source of truth for leadership (e.g., a coordinator like ZooKeeper/etcd)."],
+    ["adv","What's the data-loss risk in database failover, and how is it controlled?","If replication is asynchronous, a replica may lag behind the primary; promoting it after a primary crash loses the un-replicated transactions (non-zero RPO). Synchronous replication avoids this (the primary waits for the replica to persist writes) at the cost of higher write latency. Systems often use semi-sync or choose the most up-to-date replica for promotion to minimize loss."],
+    ["adv","How do clients survive the failover window?","The connection to the failed node breaks and there's a brief gap while a new primary is promoted / DNS/proxy updates. Clients handle this with retries plus backoff over the window, reconnection logic that discovers the new endpoint (via a proxy, virtual IP, or service discovery), and idempotent operations so retried writes don't duplicate. Short DNS TTLs or a proxy layer speed up repointing."],
+    ["sd","Design failover for a stateful primary database.","Deploy the primary with one or more replicas across AZs using synchronous (or semi-sync) replication for low RPO. A coordinator health-checks the primary; on sustained failure it fences the old primary (STONITH), selects the most up-to-date replica, promotes it, and updates a proxy/virtual IP/service-discovery entry so apps reconnect. Use quorum to prevent split-brain. Apps retry idempotently with backoff across the promotion gap. Test failover regularly (game days)."]
+  ],
+  mistakes:["No fencing, allowing split-brain (two primaries diverge).","Over-sensitive health checks causing failover flapping.","Async replication with auto-promotion, silently losing recent writes.","Forgetting clients need retry/reconnect logic over the failover gap.","Never testing failover, so it fails when actually needed."],
+  best:["Use health checks with thresholds/hysteresis to avoid flapping.","Fence the old node (STONITH) and use quorum to prevent split-brain.","Match replication mode (sync/async) to your RPO tolerance.","Make clients retry idempotently and rediscover the new endpoint.","Regularly test failover (game days / chaos engineering)."],
+  related:[["High Availability","🟢","Failover enables HA","high-availability.html"],["Leader Election","👑","Choosing the new active","leader-election.html"],["Split Brain","🧠","The key hazard","split-brain.html"],["Disaster Recovery","🌐","Cross-region failover","disaster-recovery.html"],["Health Checks","❤️","Detect failures","system-designed.html"],["Load Balancer","⚖️","Reroutes traffic","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

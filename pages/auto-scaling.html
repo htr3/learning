@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Auto-Scaling — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function server(x,y,c){g.appendChild(S("rect",{x:x-16,y:y-20,width:32,height:40,rx:4,fill:c+"33",stroke:c,"stroke-width":1.6}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:250,y:36,width:140,height:30,rx:8,fill:"rgba(124,58,237,.2)",stroke:"#a78bfa"}));g.appendChild(TX(320,56,"⚖️ load balancer",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+    const counts=[2,4,3];const n=counts[phase%3];const startX=320-(n-1)*40/2;
+    for(let i=0;i<n;i++){const x=320-(n-1)*44/2+i*44;server(x,130,"#34d399");arrow(g,320,66,x,110,"#3a3a42");}
+    if(phase===0){lbl.textContent="low traffic → run the minimum instances";lbl.setAttribute("fill","#34d399");sub.textContent="pay only for what you need; a metric (CPU/RPS) is watched continuously";}
+    else if(phase===1){g.appendChild(TX(320,180,"CPU 85% > target → SCALE OUT (+2)",{fill:"#fbbf24","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="traffic spikes → add instances (scale out)";lbl.setAttribute("fill","#fbbf24");sub.textContent="new instances register with the LB and share the load";}
+    else{g.appendChild(TX(320,180,"CPU 30% < target → SCALE IN (−1)",{fill:"#38bdf8","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="traffic falls → remove instances (scale in)";lbl.setAttribute("fill","#38bdf8");sub.textContent="cooldown prevents flapping; drain connections before terminating";}}
+  function step(){phase=(phase+1)%3;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">A target-tracking autoscaler keeps average CPU near a <b>target</b> by adding or removing instances. Drive the incoming request rate up and down and watch the scaler <b>scale out</b> under load and <b>scale in</b> when idle — respecting <b>min/max</b> bounds and a <b>cooldown</b> to avoid flapping.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Incoming load (req/s): <b id="pgLoadV">40</b></label><input id="pgLoad" type="range" min="0" max="400" value="40" step="10"></div>
+      <div class="pg-field"><label>Target CPU %: <b id="pgTgtV">60</b></label><input id="pgTgt" type="range" min="30" max="90" value="60" step="5"></div>
+      <div class="pg-field"><label>Min: <b id="pgMinV">1</b></label><input id="pgMin" type="range" min="1" max="4" value="1" step="1"></div>
+      <div class="pg-field"><label>Max: <b id="pgMaxV">10</b></label><input id="pgMax" type="range" min="4" max="16" value="10" step="1"></div>
+      <button class="pg-btn" id="pgRun">▶ run</button>
+      <button class="pg-btn secondary" id="pgSpike">⚡ traffic spike</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Instances</div><div class="v ac" id="pgN">2</div></div>
+        <div class="pg-stat"><div class="k">Avg CPU</div><div class="v" id="pgCpu">0%</div></div>
+        <div class="pg-stat"><div class="k">Action</div><div class="v wa" id="pgAct">steady</div></div>
+        <div class="pg-stat"><div class="k">Dropped req</div><div class="v" id="pgDrop">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=140;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const CAP=50; // req/s each instance handles at 100% CPU
+  let n=2,cpu=0,dropped=0,running=false,raf,last,cooldown=0,t=0;
+  function bounds(){return[+$("pgMin").value||1,+$("pgMax").value||10];}
+  function draw(){svg.innerHTML="";
+    const cols=Math.min(n,8),rows=Math.ceil(n/8);const bw=Math.min(52,(W-40)/cols);
+    for(let i=0;i<n;i++){const r=Math.floor(i/8),c=i%8;const x=20+c*(bw+4),y=20+r*46;
+      const col=cpu>90?"#f87171":cpu>70?"#fbbf24":"#34d399";
+      svg.appendChild(S("rect",{x,y,width:bw,height:38,rx:5,fill:col+"33",stroke:col,"stroke-width":1.5}));
+      svg.appendChild(S("rect",{x:x+4,y:y+38-Math.max(3,34*cpu/100),width:bw-8,height:Math.max(3,34*cpu/100),rx:2,fill:col,opacity:.6}));}
+    svg.appendChild(TX(20,H-6,"each box = 1 instance; fill = CPU load",{fill:"#5b5b63","font-size":9}));}
+  function stats(){$("pgN").textContent=n;$("pgCpu").textContent=Math.round(cpu)+"%";$("pgCpu").className="v "+(cpu>90?"bad":cpu>70?"wa":"ok");$("pgDrop").textContent=dropped;draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function evaluate(){const load=+$("pgLoad").value||0,tgt=+$("pgTgt").value||60;const[mn,mx]=bounds();
+    const totalCap=n*CAP;cpu=totalCap?Math.min(100,load/totalCap*100):100;
+    if(load>totalCap){dropped+=Math.round((load-totalCap)/10);}
+    if(cooldown>0){cooldown--;$("pgAct").textContent="cooldown";$("pgAct").className="v";stats();return;}
+    // target tracking: desired = ceil(current * cpu/target)
+    const desired=Math.max(mn,Math.min(mx,Math.ceil(n*(cpu/tgt))));
+    if(desired>n){log("CPU "+Math.round(cpu)+"% > target "+tgt+"% → scale OUT "+n+"→"+desired,"wa");n=desired;cooldown=2;$("pgAct").textContent="scale out";$("pgAct").className="v wa";}
+    else if(desired<n){log("CPU "+Math.round(cpu)+"% < target "+tgt+"% → scale IN "+n+"→"+desired,"ac");n=desired;cooldown=2;$("pgAct").textContent="scale in";$("pgAct").className="v ac";}
+    else{$("pgAct").textContent="steady";$("pgAct").className="v ok";}
+    const totalCap2=n*CAP;cpu=totalCap2?Math.min(100,load/totalCap2*100):100;stats();}
+  function tick(now){if(!running)return;const dt=(now-last)/1000;last=now;t+=dt;if(t>=1){t=0;evaluate();}raf=requestAnimationFrame(tick);}
+  function run(){if(running){running=false;cancelAnimationFrame(raf);$("pgRun").textContent="▶ run";log("paused","ac");return;}running=true;$("pgRun").textContent="⏸ pause";last=performance.now();log("autoscaler running — adjust load and watch it react","ac");raf=requestAnimationFrame(tick);}
+  $("pgRun").onclick=run;
+  $("pgSpike").onclick=()=>{$("pgLoad").value=Math.min(400,(+$("pgLoad").value||0)+200);$("pgLoadV").textContent=$("pgLoad").value;log("⚡ traffic spike! load jumped to "+$("pgLoad").value+" req/s","bad");if(!running)evaluate();};
+  $("pgLoad").oninput=()=>{$("pgLoadV").textContent=$("pgLoad").value;if(!running)evaluate();};
+  $("pgTgt").oninput=()=>{$("pgTgtV").textContent=$("pgTgt").value;};
+  $("pgMin").oninput=()=>{$("pgMinV").textContent=$("pgMin").value;};
+  $("pgMax").oninput=()=>{$("pgMaxV").textContent=$("pgMax").value;};
+  evaluate();log("press ▶ run, then drive load up/down or hit spike","ac");
+}
+
+const DATA={
+  badge:"📈",title:"Auto-Scaling",category:"Traffic Management",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Elastic Capacity on Demand",
+  tagline:"Auto-scaling automatically adjusts the number of running instances (or their size) to match demand — <b>scaling out</b> under load to protect latency and <b>scaling in</b> when idle to save cost. It's the mechanism that makes elastic, pay-for-what-you-use infrastructure possible.",
+  pills:["<b>Horizontal</b> (out/in) vs <b>vertical</b> (up/down)","<b>Target-tracking</b> on a metric","<b>Min/max</b> bounds + <b>cooldown</b>","<b>Reactive</b> vs <b>predictive</b>"],
+  overview:"<b>Auto-scaling</b> dynamically changes capacity so a system has enough resources to serve demand without over-provisioning. The dominant form is <b>horizontal scaling</b>: adding instances (<em>scale out</em>) or removing them (<em>scale in</em>) behind a load balancer — as opposed to <b>vertical scaling</b> (making one instance bigger/smaller), which has hard ceilings and usually requires a restart. A scaling policy watches a <b>metric</b> — CPU utilization, request rate, queue depth, p99 latency — and acts. Common policy types: <b>target tracking</b> (keep a metric near a target, e.g. 60% CPU; the controller computes the desired count as <code>ceil(current × metric/target)</code>), <b>step/simple scaling</b> (add N when a threshold is breached), <b>scheduled scaling</b> (known daily/weekly patterns), and <b>predictive scaling</b> (forecast demand from history and scale ahead of it). Guardrails are essential: <b>minimum and maximum</b> instance counts bound cost and blast radius; a <b>cooldown / stabilization window</b> prevents rapid oscillation (<em>flapping</em>); and <b>connection draining</b> lets terminating instances finish in-flight requests. Auto-scaling only works well when the workload is <b>stateless</b> (or state is externalized) so any instance can serve any request, and when instances <b>start fast</b> enough to keep up with demand ramps — otherwise you scale too late.",
+  problem:"Demand is variable — daily peaks, marketing spikes, seasonal surges — but capacity is a cost. Static provisioning forces a bad choice: size for peak and waste money most of the time, or size for average and fall over during spikes (high latency, dropped requests). Auto-scaling resolves this by continuously matching capacity to demand, maintaining performance under load while minimizing idle spend.",
+  diagram,diagramCaption:"A policy watches a metric and adds instances under load, removing them when demand falls.",
+  how:[
+    "Define a target metric (CPU, RPS, queue depth, latency) and a scaling policy.",
+    "A controller samples the metric across the group at a fixed interval.",
+    "If the metric exceeds the target, scale out; if below, scale in — within min/max bounds.",
+    "New instances boot, pass health checks, and register with the load balancer to receive traffic.",
+    "A cooldown/stabilization window damps oscillation; connection draining protects requests during scale-in."
+  ],
+  complexity:[["Horizontal","add/remove instances"],["Vertical","resize one instance"],["Reaction","metric interval + boot time"],["Guardrails","min/max + cooldown"]],
+  advantages:["Handles variable load without manual intervention","Cost-efficient: pay for what you actually use","Improves availability under spikes","Horizontal scaling has effectively no ceiling","Pairs with load balancing + health checks for self-healing"],
+  disadvantages:["Reactive scaling lags sudden spikes (boot time)","Requires stateless (or externalized-state) workloads","Slow-starting instances or cold starts hurt","Poorly tuned thresholds cause flapping or thrash","Downstream deps (DB) can become the new bottleneck"],
+  tradeoffs:"Auto-scaling trades <b>responsiveness, cost, and stability</b> against each other. <b>Horizontal vs vertical</b>: scaling out is virtually unbounded and improves fault tolerance, but requires stateless design and a load balancer; scaling up is simpler and works for stateful/single-node workloads but hits hardware limits and often needs downtime. The core tension is <b>reactivity vs. lead time</b>: reactive policies only act after a metric breaches a threshold, and if instances take minutes to boot you're already saturated during a sharp spike — which is why teams add headroom (lower targets), <b>pre-warmed</b> pools, or <b>predictive/scheduled</b> scaling to get ahead of known patterns, at the cost of running spare capacity. <b>Aggressiveness</b> is another dial: tight thresholds and short cooldowns react fast but risk <b>flapping</b> (constantly adding/removing, causing churn and instability), while loose thresholds and long cooldowns are stable but sluggish and wasteful. Finally, scaling the app tier can just <b>move the bottleneck</b> downstream — a fleet of app servers can overwhelm a single database or hit connection limits — so auto-scaling must be considered end-to-end, not per tier in isolation.",
+  whenNot:"Auto-scaling adds little for steady, predictable workloads (a batch job or internal tool with flat load) where fixed capacity is simpler and cheaper to reason about. It's a poor fit for <b>stateful</b> nodes that can't freely come and go (a primary database, a stateful cache with local data) — scale those with sharding/replication instead. Very spiky workloads with slow boot times may be better served by <b>serverless</b> (which scales per-request) or by keeping a warm buffer. And if a downstream dependency is the real constraint, scaling the front tier just amplifies pressure — fix the bottleneck first.",
+  sim,
+  code:{
+"Target tracking policy":`# Keep average CPU near a target by computing the desired instance count.\n# desired = ceil( current_count * (current_metric / target_metric) )\n\ndef evaluate(current_count, current_cpu, target_cpu, mn, mx):\n    desired = math.ceil(current_count * (current_cpu / target_cpu))\n    desired = max(mn, min(mx, desired))        # clamp to bounds\n    return desired\n\n# e.g. 4 instances at 90% CPU, target 60%:\n#   ceil(4 * 90/60) = ceil(6) = 6  -> scale out to 6\n# 6 instances at 30% CPU, target 60%:\n#   ceil(6 * 30/60) = ceil(3) = 3  -> scale in to 3`,
+"AWS ASG (target tracking)":`# Autoscaling group with min/max and a target-tracking policy.\nMinSize: 2\nMaxSize: 20\nTargetTrackingConfiguration:\n  PredefinedMetric: ASGAverageCPUUtilization\n  TargetValue: 60.0            # keep avg CPU at 60%\n  # cooldown / stabilization window prevents flapping\nHealthCheckType: ELB          # replace instances that fail LB health checks\nConnectionDraining: 30s       # finish in-flight requests before terminating`,
+"Kubernetes HPA":`# Horizontal Pod Autoscaler scales pods on a metric.\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nspec:\n  minReplicas: 2\n  maxReplicas: 20\n  metrics:\n    - type: Resource\n      resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } }\n  behavior:                    # tune reaction speed / avoid flapping\n    scaleDown: { stabilizationWindowSeconds: 300 }\n    scaleUp:   { stabilizationWindowSeconds: 0 }`
+  },
+  realWorld:[
+    ["AWS Auto Scaling Groups","Target-tracking/step/scheduled scaling behind an ELB."],
+    ["Kubernetes HPA / VPA / Cluster Autoscaler","Scale pods and nodes on metrics."],
+    ["GCP / Azure managed instance groups","Cloud-native autoscaling equivalents."],
+    ["Serverless (Lambda / Cloud Run)","Per-request scaling to zero, no instance management."],
+    ["CDN / edge","Auto-provision capacity for traffic surges globally."]
+  ],
+  interview:[
+    ["basic","What is auto-scaling?","The automatic adjustment of capacity to match demand — adding instances (scale out) when load rises to protect latency and availability, and removing them (scale in) when load falls to save cost. A policy watches a metric like CPU or request rate and changes the instance count within configured min/max bounds, so you don't over-provision for peak or fall over during spikes."],
+    ["basic","Horizontal vs vertical scaling — what's the difference?","Horizontal scaling changes the number of instances (scale out/in); it's effectively unbounded and improves fault tolerance, but requires stateless workloads behind a load balancer. Vertical scaling changes the size of a single instance (scale up/down, more CPU/RAM); it's simpler and works for stateful single-node systems but hits a hardware ceiling and usually needs a restart/downtime. Most elastic web systems scale horizontally."],
+    ["inter","How does a target-tracking policy decide how many instances to run?","It keeps a metric near a target by computing desired = ceil(current_count × current_metric / target_metric), clamped to min/max. For example, 4 instances at 90% CPU with a 60% target gives ceil(4 × 1.5) = 6, so it scales out to 6; if CPU later drops to 30%, it computes ceil(6 × 0.5) = 3 and scales in. It's like a thermostat maintaining a setpoint."],
+    ["inter","What is flapping and how do you prevent it?","Flapping is rapid oscillation — repeatedly scaling out then in — caused by thresholds that are too tight or metrics that bounce around, leading to instability and churn. You prevent it with a cooldown/stabilization window (wait before the next action), hysteresis (different thresholds for scaling out vs in), smoothing the metric over a window, and using an asymmetric behavior (scale out fast, scale in slowly)."],
+    ["adv","Why can reactive auto-scaling struggle with sudden spikes, and what helps?","Reactive scaling only acts after a metric crosses a threshold, and new instances take time to boot, pass health checks, and warm up — so during a sharp spike you're saturated before capacity arrives, causing latency and drops. Remedies: run with headroom (lower target), pre-warm a buffer of instances, use faster-starting images or serverless, and add predictive or scheduled scaling to provision ahead of known patterns rather than chasing them."],
+    ["adv","What must be true about a workload for horizontal auto-scaling to work well?","It should be stateless or have state externalized (to a database, cache, or object store) so any instance can handle any request and instances can be created/destroyed freely. Instances must start quickly and register/deregister cleanly with the load balancer, support connection draining on termination, and be idempotent enough to tolerate restarts. Sessions should be shared (not sticky to local memory), and downstream dependencies must scale too or they become the bottleneck."],
+    ["sd","Design auto-scaling for a web application with daily peaks and occasional spikes.","Put stateless app servers in an autoscaling group behind a load balancer with health checks; externalize sessions to Redis. Use target tracking on CPU (or better, requests-per-instance/p99 latency) at ~60% with min/max bounds and a cooldown. Add scheduled scaling for the known daily peak and predictive scaling from history; keep a small warm buffer for sudden spikes. Ensure connection draining on scale-in. Scale the data tier separately (read replicas, connection pooling) so it doesn't become the bottleneck, and load-test to tune thresholds."]
+  ],
+  mistakes:["Scaling on CPU when the real bottleneck is latency or queue depth.","Thresholds too tight → flapping and churn.","Forgetting min/max bounds → runaway cost or capacity starvation.","Assuming instant scale — ignoring boot/warm-up time before spikes.","Scaling the app tier while the database silently becomes the bottleneck."],
+  best:["Scale on a metric that reflects user experience (RPS/instance, p99).","Set sensible min/max and a cooldown; scale out fast, in slowly.","Keep workloads stateless; externalize sessions and state.","Combine reactive with scheduled/predictive scaling for known peaks.","Ensure health checks + connection draining; scale downstream deps too."],
+  related:[["Load Balancing","⚖️","Distributes traffic to instances","system-designed.html"],["Health Checks","❤️","Gates traffic to healthy nodes","health-checks.html"],["High Availability","🟢","Redundancy & uptime","high-availability.html"],["Failover","🔀","Handling instance failure","failover.html"],["Canary Deployment","🐤","Safe rollout of new versions","canary.html"],["Backoff & Retry","🔁","Client behavior under load","backoff.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GraphQL — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function box(x,y,w,h,txt,fill,stroke){g.appendChild(S("rect",{x:x-w/2,y:y-h/2,width:w,height:h,rx:8,fill:fill,stroke:stroke,"stroke-width":2}));
+    const t=S("text",{x:x,y:y+4,fill:"#e4e4e7","font-size":10.5,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  function render(){g.innerHTML="";
+    box(90,100,120,36,"Client","#161619","#3a3a42");
+    box(310,100,130,44,"GraphQL server","rgba(124,58,237,.2)","#7C3AED");
+    if(phase===0){box(520,55,130,32,"users DB","rgba(56,189,248,.12)","#38bdf8");box(520,105,130,32,"posts service","rgba(52,211,153,.12)","#34d399");box(520,150,130,32,"followers API","rgba(251,191,36,.12)","#fbbf24");
+      [55,105,150].forEach(y=>g.appendChild(S("line",{x1:375,y1:100,x2:455,y2:y,stroke:"#3a3a42","stroke-width":1.4})));
+      g.appendChild(S("line",{x1:150,y1:100,x2:245,y2:100,stroke:"#7C3AED","stroke-width":2,"marker-end":"url(#a)"}));
+      lbl.textContent="ONE request → server resolves each field";lbl.setAttribute("fill","#c4a2ff");sub.textContent="the resolver fans out to whatever backends it needs — the client sees one endpoint";}
+    else{box(520,100,130,32,"single response","rgba(52,211,153,.14)","#34d399");
+      g.appendChild(S("line",{x1:245,y1:100,x2:150,y2:100,stroke:"#34d399","stroke-width":2,"stroke-dasharray":"5 4","marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:455,y1:100,x2:375,y2:100,stroke:"#34d399","stroke-width":1.6,"marker-end":"url(#a)"}));
+      lbl.textContent="exactly the fields you asked for — no more, no less";lbl.setAttribute("fill","#34d399");sub.textContent="no over-fetching, no under-fetching, one round trip";}}
+  function step(){phase=(phase+1)%2;timer=2.4;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Build a query by toggling fields. The response contains <b>exactly</b> what you selected — nothing more. Watch the <b>REST equivalent</b>: the same screen would need multiple endpoints and round trips, and would over-fetch fields you didn't want. GraphQL gets it in <b>one</b> request.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Select fields on <code>user(id: 42)</code></label></div>
+      <div id="pgFields" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div class="pg-btns" style="margin-top:10px"><button id="pgRun" class="go">▶ Run query</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Nested fields like <code>posts</code> and <code>followers</code> would each be separate REST calls. GraphQL resolves them server-side in one request.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">GraphQL requests</div><div class="v ok" id="pgGQ">1</div></div>
+        <div class="pg-stat"><div class="k">REST round trips</div><div class="v bad" id="pgREST">3</div></div>
+        <div class="pg-stat"><div class="k">Fields returned</div><div class="v ac" id="pgFC">0</div></div>
+        <div class="pg-stat"><div class="k">Over-fetch</div><div class="v wa" id="pgOF">none</div></div>
+      </div>
+      <div id="pgQuery" style="background:#0d0d0f;border:1px solid var(--gray-border);border-radius:8px;padding:10px;font-family:ui-monospace,monospace;font-size:12px;color:#c4a2ff;white-space:pre;overflow:auto;margin-bottom:8px"></div>
+      <div id="pgResp" style="background:#0d0d0f;border:1px solid var(--gray-border);border-radius:8px;padding:10px;font-family:ui-monospace,monospace;font-size:12px;color:#34d399;white-space:pre;overflow:auto;min-height:80px"></div>
+    </div>
+  </div>`;
+
+  const DB={id:42,name:"Ada Lovelace",email:"ada@calc.io",avatar:"https://…/ada.png",
+    posts:[{title:"On Analytical Engines"},{title:"Note G"}],
+    followers:1287};
+  const FIELDS=[["name","name",true],["email","email",false],["avatar","avatar",false],["posts","posts { title }",true],["followers","followers",false]];
+  const state={};FIELDS.forEach(f=>state[f[0]]=f[2]);
+  function renderFields(){const box=$("pgFields");box.innerHTML="";
+    FIELDS.forEach(f=>{const id="f_"+f[0];const row=el("label");row.style.cssText="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#e4e4e7";
+      const cb=document.createElement("input");cb.type="checkbox";cb.checked=state[f[0]];cb.id=id;
+      cb.addEventListener("change",()=>{state[f[0]]=cb.checked;build();});
+      row.appendChild(cb);const sp=el("span","",f[1]);sp.style.fontFamily="ui-monospace,monospace";row.appendChild(sp);box.appendChild(row);});}
+  function build(){const sel=FIELDS.filter(f=>state[f[0]]);
+    const q="query {\n  user(id: 42) {\n    id\n"+sel.map(f=>"    "+f[1]).join("\n")+"\n  }\n}";
+    $("pgQuery").textContent=q;
+    // response
+    const obj={id:DB.id};sel.forEach(f=>{if(f[0]==="posts")obj.posts=DB.posts;else obj[f[0]]=DB[f[0]];});
+    $("pgResp").textContent=JSON.stringify({data:{user:obj}},null,2);
+    const fc=1+sel.length;$("pgFC").textContent=fc;
+    // REST round trips: base user + 1 per nested resource (posts, followers)
+    let rt=1;if(state.posts)rt++;if(state.followers)rt++;
+    $("pgREST").textContent=rt;$("pgGQ").textContent=1;
+    $("pgOF").textContent="none (exact)";}
+  $("pgRun").onclick=build;
+  renderFields();build();
+}
+
+const DATA={
+  badge:"◼️",title:"GraphQL",category:"Networking",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Query Language for APIs",
+  tagline:"A single-endpoint API where the <b>client specifies exactly which fields it wants</b>, in one request. It eliminates over-fetching and under-fetching, aggregates data from many sources, and is described by a strongly-typed schema.",
+  pills:["<b>Client-driven</b> fields","<b>One</b> endpoint","<b>Typed</b> schema","<b>No over/under-fetch</b>"],
+  overview:"GraphQL (Facebook, 2015) is a query language and runtime for APIs. Instead of many fixed REST endpoints, there's usually a <b>single endpoint</b> (<code>/graphql</code>) and a strongly-typed <b>schema</b> that declares the available types, fields, queries, and mutations. The client sends a <b>query</b> describing precisely the shape of data it needs — including nested/related objects — and the server returns exactly that shape, no more and no less. Field-by-field <b>resolvers</b> on the server fetch each piece, fanning out to databases, REST services, or other sources as needed. This solves REST's over-fetching (getting unused fields) and under-fetching (needing multiple round trips to assemble a screen). It also supports <b>mutations</b> (writes) and <b>subscriptions</b> (real-time updates over WebSockets).",
+  problem:"Mobile and rich web clients often need data spread across many resources, but REST returns fixed shapes: you either fetch too much (wasting bandwidth) or make several sequential calls (latency, complexity). Different clients need different fields, forcing endpoint proliferation or one-size-fits-all payloads. GraphQL lets each client ask for precisely what it needs from one typed endpoint.",
+  diagram,diagramCaption:"One request; the server's resolvers fetch each requested field from whatever backends they live in.",
+  how:[
+    "Define a schema: types with fields, plus Query, Mutation, and Subscription roots.",
+    "Clients send a query naming exactly the fields (and nested fields) they want.",
+    "The server validates the query against the schema and runs a resolver per field.",
+    "Resolvers fetch data from DBs/services (batched with DataLoader to avoid N+1).",
+    "The server returns a JSON response matching the query's shape; mutations write, subscriptions push updates."
+  ],
+  complexity:[["Endpoint","1 (/graphql)"],["Fetch shape","client-defined"],["Round trips","1 (aggregated)"],["Contract","typed schema"]],
+  advantages:["No over-fetching or under-fetching","One request aggregates many sources","Strongly-typed, self-documenting schema","Rapid front-end iteration without backend changes","Great tooling (introspection, GraphiQL, codegen)"],
+  disadvantages:["Caching is harder (POST, dynamic queries)","Risk of expensive/deeply-nested queries (DoS)","N+1 resolver problem without batching","More server complexity than plain REST","File uploads / binary less natural"],
+  tradeoffs:"GraphQL trades REST's simplicity and free HTTP caching for flexibility and precision. Because queries are dynamic (usually POSTed), you lose easy URL-based CDN/browser caching and must add persisted queries, response caching, or client caches (Apollo/Relay). Its power to request anything means you must guard against abusive queries via depth/complexity limits, cost analysis, and rate limiting. It shines for front-end-driven aggregation across many services; for simple CRUD, high-throughput internal RPC (gRPC), or when HTTP caching is critical, REST/gRPC may be better. Also beware the N+1 problem — batch with DataLoader.",
+  whenNot:"Skip GraphQL for simple public CRUD APIs where REST's caching and simplicity win, for high-performance internal service-to-service calls (use gRPC), when strong CDN/edge caching of responses is essential, or for heavy binary/file transfer. It also adds operational overhead (schema, resolvers, query-cost controls) that a small API may not justify.",
+  sim,
+  code:{
+"Schema":`# GraphQL schema (SDL): strongly typed, self-documenting\ntype User {\n  id: ID!\n  name: String!\n  email: String\n  posts: [Post!]!          # nested relationship\n  followers: Int!\n}\ntype Post { id: ID!  title: String!  body: String! }\n\ntype Query {\n  user(id: ID!): User\n  users(first: Int, after: String): [User!]!\n}\ntype Mutation { followUser(id: ID!): User! }\ntype Subscription { userUpdated(id: ID!): User! }   # real-time push`,
+"Query":`# Client asks for EXACTLY these fields (one request, one round trip)\nquery {\n  user(id: 42) {\n    id\n    name\n    posts { title }        # nested — no extra REST call needed\n    followers\n  }\n}\n# Response mirrors the query shape:\n{ "data": { "user": {\n    "id": "42", "name": "Ada Lovelace",\n    "posts": [ { "title": "Note G" } ], "followers": 1287 } } }`,
+"Resolvers + N+1":`// Resolvers fetch each field; batch to avoid the N+1 problem.\nimport DataLoader from "dataloader";\nconst postLoader = new DataLoader(ids => batchGetPostsByUser(ids));\n\nconst resolvers = {\n  Query: { user: (_, { id }) => db.users.find(id) },\n  User: {\n    // WITHOUT batching this fires 1 query PER user (N+1);\n    // DataLoader coalesces them into ONE batched query.\n    posts: (user) => postLoader.load(user.id),\n    followers: (user) => cache.count(\`followers:\${user.id}\`),\n  },\n};`
+  },
+  realWorld:[
+    ["GitHub API v4","GitHub's GraphQL API lets clients fetch precisely the repo/issue/user fields they need."],
+    ["Facebook / Meta","Created GraphQL to power its data-hungry mobile apps with minimal round trips."],
+    ["Shopify","Storefront and Admin GraphQL APIs for flexible commerce data access."],
+    ["Netflix / Airbnb","Use GraphQL (often federated) to aggregate many microservices behind one graph."],
+    ["Apollo / Relay ecosystems","Client libraries with normalized caching, subscriptions, and codegen."]
+  ],
+  interview:[
+    ["basic","What problem does GraphQL solve compared to REST?","It eliminates over-fetching (REST returns fixed, often too-large payloads) and under-fetching (needing multiple REST calls to assemble a view). Clients request exactly the fields they need — including nested relationships — from a single typed endpoint in one round trip."],
+    ["basic","What are queries, mutations, and subscriptions?","Queries read data (like GET), mutations write data (create/update/delete), and subscriptions stream real-time updates to the client, typically over WebSockets. All three are defined in the schema's root types."],
+    ["inter","How does a GraphQL server actually fetch the data?","Each field has a resolver function. When a query arrives, the server validates it against the schema, then executes resolvers for the requested fields, walking the tree. Resolvers can pull from databases, REST services, caches, or other sources, so one query can aggregate many backends into a single response."],
+    ["inter","What is the N+1 problem in GraphQL and how do you fix it?","When resolving a list (say, 100 users) and then a nested field per item (their posts), a naive resolver issues 1 query for the list plus N queries for the nested field — 101 total. The fix is batching/caching with a DataLoader: it collects the per-item keys during a tick and issues a single batched query, collapsing N+1 into 2."],
+    ["inter","Why is caching harder in GraphQL than REST?","REST caches responses by URL at the browser/CDN/proxy layers, and GET is cacheable by default. GraphQL usually POSTs dynamic queries to one endpoint, so URL-based HTTP caching doesn't apply. You instead use persisted queries (map a hash to a stored query to enable GET/CDN caching), server-side response caching, and normalized client caches (Apollo/Relay) keyed by object id."],
+    ["adv","How do you prevent expensive or malicious queries?","Because clients can request deeply nested data, add query depth limits, complexity/cost analysis (assign costs to fields and reject over-budget queries), pagination requirements, timeouts, rate limiting, and persisted/allow-listed queries in production so only known queries run. This prevents a single crafted query from overloading the server."],
+    ["sd","When would you choose GraphQL over REST or gRPC in a design?","Choose GraphQL when diverse clients (web, iOS, Android) need flexible, aggregated data from many services and you want to minimize round trips and iterate on the front end without backend changes — often as an API gateway/federation layer. Choose REST for simple, cacheable public CRUD, and gRPC for high-throughput, low-latency internal service-to-service calls with strict contracts and streaming."]
+  ],
+  mistakes:["Ignoring the N+1 problem (no DataLoader/batching).","Exposing unbounded queries with no depth/complexity limits.","Assuming HTTP caching works like REST (it doesn't by default).","Putting business logic in resolvers instead of a service layer.","One giant schema with no pagination, enabling huge responses."],
+  best:["Batch data access with DataLoader to kill N+1 queries.","Enforce depth/complexity limits, timeouts, and pagination.","Use persisted/allow-listed queries for caching and safety.","Keep resolvers thin; delegate to a well-tested service layer.","Adopt a client cache (Apollo/Relay) and codegen from the schema."],
+  related:[["REST API","🌐","Fixed-endpoint alternative","rest.html"],["gRPC","🔗","Typed binary RPC","grpc.html"],["WebSockets","🔌","Powers subscriptions","websockets.html"],["API Gateway","🚪","Federation / gateway","system-designed.html"],["Caching","🧱","Why GraphQL caching differs","system-designed.html"],["Rate Limiting","🚦","Query cost control","rate-limiting.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

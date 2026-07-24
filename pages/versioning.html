@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Versioning — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function ver(x,y,v,t,c,cur){g.appendChild(S("rect",{x:x-40,y:y-18,width:80,height:36,rx:8,fill:c+(cur?"33":"14"),stroke:c,"stroke-width":cur?2.4:1.2}));g.appendChild(TX(x,y-2,v,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));g.appendChild(TX(x,y+13,t,{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    if(phase===0){ver(120,90,"v1","'hello'","#38bdf8");ver(280,90,"v2","'hello!'","#38bdf8");ver(440,90,"v3","'hi!'","#34d399",true);
+      arrow(g,160,90,240,90,"#3a3a42");arrow(g,320,90,400,90,"#3a3a42");
+      g.appendChild(TX(440,130,"↑ current",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="every change creates a new immutable version";lbl.setAttribute("fill","#38bdf8");sub.textContent="old versions are kept, not overwritten — full history preserved";}
+    else if(phase===1){ver(120,90,"v1","'hello'","#38bdf8");ver(280,90,"v2","'hello!'","#38bdf8");ver(440,90,"v3","'hi!'","#f87171");
+      g.appendChild(TX(440,130,"✗ bad change / deleted",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+      arrow(g,440,66,280,66,"#34d399");g.appendChild(TX(360,58,"restore v2",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="mistake or delete? roll back to any prior version";lbl.setAttribute("fill","#34d399");sub.textContent="versioning protects against overwrites, bugs, and accidental deletion";}
+    else{ver(320,90,"v3","'hi!'","#34d399",true);
+      g.appendChild(TX(320,135,"delete = a 'delete marker' (v2, v1 still recoverable)",{fill:"#a78bfa","font-size":9.5,"text-anchor":"middle"}));
+      g.appendChild(TX(320,155,"lifecycle rule: keep last N / expire after T",{fill:"#8b8b93","font-size":9.5,"text-anchor":"middle"}));
+      lbl.textContent="deletes are soft; lifecycle rules prune old versions";lbl.setAttribute("fill","#a78bfa");sub.textContent="balance recoverability vs storage cost by pruning history";}}
+  function step(){phase=(phase+1)%3;timer=3.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Edit an object and watch each save create a new <b>immutable version</b> instead of overwriting the last. You can <b>restore</b> any old version, <b>delete</b> (which adds a recoverable delete-marker), and apply a <b>lifecycle rule</b> to prune history — trading recoverability against storage cost.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>New content</label><input id="pgIn" type="text" value="draft v2" style="width:180px"></div>
+      <button class="pg-btn" id="pgSave">save (new version)</button>
+      <button class="pg-btn secondary" id="pgDel">delete object</button>
+      <div class="pg-field" style="margin-top:8px"><label>Keep last N versions: <b id="pgKeepV">5</b></label><input id="pgKeep" type="range" min="1" max="10" value="5" step="1"></div>
+      <button class="pg-btn secondary" id="pgPrune">apply lifecycle rule</button>
+      <button class="pg-btn secondary" id="pgReset">reset</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Versions kept</div><div class="v ac" id="pgN">1</div></div>
+        <div class="pg-stat"><div class="k">Current</div><div class="v ok" id="pgCur">v1</div></div>
+        <div class="pg-stat"><div class="k">Storage (versions)</div><div class="v wa" id="pgStore">1</div></div>
+        <div class="pg-stat"><div class="k">State</div><div class="v" id="pgState">live</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  let versions=[{id:1,content:"initial",del:false}],deleted=false,seq=1;
+  function draw(){const host=$("pgViz");host.innerHTML="";
+    versions.slice().reverse().forEach(v=>{const row=el("div","");const cur=(!deleted&&v.id===versions[versions.length-1].id);
+      row.style.cssText="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin:3px 0;border-radius:6px;background:"+(v.del?"rgba(248,113,113,.12)":cur?"rgba(52,211,153,.14)":"#141416")+";border:1px solid "+(v.del?"#f87171":cur?"#34d399":"#242a33")+";font-size:12px";
+      row.innerHTML="<span style='color:"+(v.del?"#f87171":cur?"#34d399":"#8b8b93")+";font-weight:700'>v"+v.id+(v.del?" · delete-marker":cur?" · current":"")+"</span><span style='color:#8b8b93;font-family:monospace'>"+(v.del?"—":("\""+v.content+"\""))+"</span>";
+      if(!v.del&&!cur){const b=el("button","pg-btn secondary","restore");b.style.cssText="font-size:9px;padding:2px 8px;margin-left:8px";b.onclick=()=>restore(v);row.appendChild(b);}
+      host.appendChild(row);});}
+  function stats(){const live=versions.filter(v=>!v.del);$("pgN").textContent=versions.length;
+    const cur=deleted?"(deleted)":("v"+versions[versions.length-1].id);$("pgCur").textContent=cur;
+    $("pgStore").textContent=versions.length;$("pgState").textContent=deleted?"deleted":"live";$("pgState").className="v "+(deleted?"bad":"ok");draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function save(){seq++;versions.push({id:seq,content:$("pgIn").value||"(empty)",del:false});deleted=false;
+    log("saved v"+seq+" — previous versions preserved (immutable)","ok");stats();}
+  function del(){if(deleted){log("already deleted","wa");return;}seq++;versions.push({id:seq,content:"",del:true});deleted=true;
+    log("delete added a delete-marker (v"+seq+") — prior versions are still recoverable","ac");stats();}
+  function restore(v){seq++;versions.push({id:seq,content:v.content,del:false});deleted=false;
+    log("restored v"+v.id+"'s content as new version v"+seq+" ('"+v.content+"')","ok");stats();}
+  function prune(){const keep=+$("pgKeep").value||5;if(versions.length<=keep){log("nothing to prune (≤ "+keep+" versions)","ac");return;}
+    const removed=versions.length-keep;versions=versions.slice(-keep);log("lifecycle rule: pruned "+removed+" oldest version(s), kept last "+keep+" — saves storage, loses old history","wa");stats();}
+  $("pgSave").onclick=save;$("pgDel").onclick=del;$("pgPrune").onclick=prune;
+  $("pgReset").onclick=()=>{versions=[{id:1,content:"initial",del:false}];deleted=false;seq=1;log("reset to v1","ac");stats();};
+  $("pgKeep").oninput=()=>{$("pgKeepV").textContent=$("pgKeep").value;};
+  stats();log("save edits to create versions; restore an old one or prune with a lifecycle rule","ac");
+}
+
+const DATA={
+  badge:"🕰️",title:"Versioning",category:"Storage",difficulty:"Easy",readingTime:"8 min",
+  eyebrow:"Keeping a History of Changes",
+  tagline:"Versioning preserves the <b>history</b> of an object by creating a new immutable version on every change instead of overwriting. It protects against accidental overwrites, bad edits, and deletions (you can <b>roll back</b> to any prior version), and underpins audit trails — with <b>lifecycle rules</b> pruning old versions to control cost.",
+  pills:["New version per <b>change</b>","<b>Immutable</b> history","<b>Restore</b> / rollback","<b>Lifecycle</b> pruning"],
+  overview:"<b>Versioning</b> means retaining previous states of data rather than replacing them, so every modification produces a new <b>version</b> while older versions remain accessible. In <b>object storage</b> (S3, GCS), enabling versioning means a <code>PUT</code> to an existing key doesn't overwrite it — it creates a new <b>version ID</b>, and old versions stay retrievable; a <code>DELETE</code> doesn't erase the data but inserts a <b>delete marker</b> (a soft delete), so the object appears gone but prior versions can still be restored. This provides protection against three common disasters: accidental <b>overwrites</b>, <b>application bugs</b> that corrupt data, and accidental (or malicious) <b>deletion</b> — you simply restore the last good version. The same idea appears throughout systems: <b>API versioning</b> (v1/v2 endpoints so clients aren't broken by changes), <b>schema versioning</b> and migrations, <b>document/record versioning</b> (Google Docs history, wiki page history), <b>optimistic concurrency</b> (a version number/ETag detects conflicting concurrent writes), and <b>content-addressed/immutable</b> models like Git (every commit is a version). Versioning naturally pairs with <b>immutability</b> and <b>copy-on-write</b>: because old versions are never mutated, they're safe to share, cache, and reference. The cost is <b>storage growth</b> — keeping every version consumes space — so systems apply <b>lifecycle policies</b>: keep the last N versions, expire versions older than T days, or tier old versions to cheaper cold storage. Deltas/deduplication can reduce the cost of storing many similar versions. The overarching benefit is a durable, auditable timeline of changes with the ability to travel back to any point.",
+  problem:"Overwriting data in place is destructive: a bad deploy, a buggy write, a fat-fingered delete, or a ransomware event can irreversibly lose or corrupt information with no way back. Systems also need to evolve interfaces and schemas without breaking existing clients, detect conflicting concurrent updates, and maintain audit trails. Versioning solves these by never destroying prior state — keeping a recoverable, immutable history.",
+  diagram,diagramCaption:"Each change makes a new immutable version; you can restore any prior one; lifecycle rules prune old history.",
+  how:[
+    "On each write, create a new version (new version ID) instead of overwriting the previous one.",
+    "Keep prior versions immutable and retrievable; the newest is the 'current' version.",
+    "Deletes are soft — insert a delete marker; the data remains recoverable.",
+    "Restore/rollback by promoting or copying an older version to current.",
+    "Apply lifecycle rules (keep last N / expire after T / tier to cold) to bound storage cost."
+  ],
+  complexity:[["Write","new version"],["Restore","O(1) copy/promote"],["Delete","soft (marker)"],["Cost","grows with history"]],
+  advantages:["Recover from overwrites, bugs, and deletions","Immutable history = audit trail & reproducibility","Enables rollback to any prior state","Pairs with optimistic concurrency (conflict detection)","Old versions are safe to cache/share (immutable)"],
+  disadvantages:["Storage grows with every version (cost)","Requires lifecycle policies to prune history","Listing/managing many versions adds complexity","Sensitive data persists in old versions (compliance)","Delete markers can confuse naive readers"],
+  tradeoffs:"Versioning trades <b>storage cost and management complexity for safety and auditability</b>. The fundamental tension is <b>recoverability vs. storage growth</b>: keeping every version gives you a complete, tamper-evident timeline and the ability to roll back to any point, but it consumes ever-increasing space — which is why <b>lifecycle policies</b> are essential to bound the cost (keep the last N, expire after T days, or tier old versions to cheap cold storage), and why <b>delta encoding / deduplication</b> is used to avoid storing near-identical versions in full. This directly pits <b>how far back you can recover</b> against how much you're willing to pay to store history. A second, subtler trade-off is around <b>deletion semantics</b>: soft deletes (delete markers) protect against accidental loss, but they mean data isn't truly gone, which complicates <b>compliance</b> (GDPR 'right to be forgotten', data-retention limits) — sensitive information can linger in old versions and must be explicitly purged, and versioning can be a defense against ransomware precisely because old versions survive. There's also an <b>immutability</b> benefit that cuts the other way on flexibility: immutable versions are safe to cache and reference and enable reproducible reads, but you can never edit in place, so 'changing' data always costs a new version. For interfaces, <b>API/schema versioning</b> trades the burden of maintaining multiple versions simultaneously against the ability to evolve without breaking clients. The design goal is to keep enough history to satisfy recovery, audit, and rollback needs while pruning aggressively enough (and purging sensitive data deliberately) to control cost and meet compliance.",
+  whenNot:"Full versioning is overkill for ephemeral, easily-recomputable, or high-churn data (caches, temp files, telemetry) where keeping history wastes space for no recovery value. It can conflict with strict data-minimization/compliance requirements where old copies of sensitive data must not persist. For very large, frequently-rewritten objects, unbounded versioning can explode cost unless deltas and aggressive lifecycle rules are used. And where you only need conflict detection (not history), a single version number/ETag suffices without retaining old bodies. Match the retention depth to the actual recovery, audit, and legal needs.",
+  sim,
+  code:{
+"Object storage versioning (S3)":`# Enable versioning: PUT creates a new version, never overwrites.\naws s3api put-bucket-versioning --bucket b \\\n    --versioning-configuration Status=Enabled\n\naws s3 cp report.pdf s3://b/report.pdf     # -> versionId: 3HL4kq...\naws s3 cp report.pdf s3://b/report.pdf     # -> versionId: xY9pQr... (new)\n\n# DELETE is soft: inserts a delete marker; prior versions remain.\naws s3api delete-object --bucket b --key report.pdf   # object "hidden"\n# Restore by copying an old version back to current:\naws s3api copy-object --bucket b --key report.pdf \\\n    --copy-source b/report.pdf?versionId=3HL4kq...`,
+"Lifecycle rules (bound cost)":`# Keep history useful but not infinite: expire / tier old versions.\n{\n  "Rules": [{\n    "Status": "Enabled",\n    "NoncurrentVersionTransitions": [\n      { "NoncurrentDays": 30, "StorageClass": "GLACIER" }   # tier old versions cheap\n    ],\n    "NoncurrentVersionExpiration": { "NoncurrentDays": 365 }, # then delete\n    "ExpiredObjectDeleteMarker": true                          # clean up markers\n  }]\n}\n# Trade-off dial: longer retention = more recovery, more cost.`,
+"Optimistic concurrency (version check)":`// A version number / ETag detects conflicting concurrent writes.\nrow = db.get(id)                       // { data, version: 7 }\nedited = modify(row.data)\n// Update only if nobody else changed it since we read (version still 7):\nn = db.execute(\n  "UPDATE t SET data=?, version=version+1 WHERE id=? AND version=?",\n  [edited, id, row.version])\nif (n === 0) retry()   // someone else wrote -> conflict; re-read v8 and retry\n// HTTP equivalent: If-Match: "<etag>"  -> 412 Precondition Failed on conflict.`
+  },
+  realWorld:[
+    ["S3 / GCS object versioning","New version per PUT; delete markers; lifecycle expiry."],
+    ["Git","Every commit is an immutable version of the tree."],
+    ["Google Docs / wikis","Full document/page revision history with restore."],
+    ["API versioning (/v1, /v2)","Evolve endpoints without breaking clients."],
+    ["Databases (temporal tables, MVCC)","Row versions for history and concurrency control."]
+  ],
+  interview:[
+    ["basic","What is versioning and why is it useful?","Versioning keeps a history of an object by creating a new immutable version on every change instead of overwriting the previous state. It's useful because it protects against accidental overwrites, buggy writes, and deletions — you can roll back to any prior version — and it provides an audit trail and reproducibility. In object storage it also enables soft deletes (delete markers) so nothing is truly lost by accident."],
+    ["basic","How does versioning work in object storage like S3?","When versioning is enabled, a PUT to an existing key doesn't overwrite it — it creates a new version with its own version ID, and older versions remain retrievable. A DELETE inserts a delete marker rather than erasing data, so the object appears gone but prior versions can still be restored by copying an old version back to current. Lifecycle rules then expire or tier old (noncurrent) versions to control storage cost."],
+    ["inter","What is the main trade-off of enabling versioning?","Recoverability versus storage cost and management. Keeping every version gives complete history and rollback but consumes ever-growing space, so you need lifecycle policies (keep last N, expire after T days, tier old versions to cold storage) and often delta encoding/dedup to avoid storing near-identical versions in full. There's also added complexity in listing/managing versions and a compliance concern that sensitive data persists in old versions until explicitly purged."],
+    ["inter","How does versioning help with concurrency control?","Through optimistic concurrency: each record carries a version number (or ETag). A client reads the data and its version, and its update only succeeds if the version is unchanged (WHERE version = N), incrementing it on success. If another writer committed in between, the version won't match and the update is rejected as a conflict, prompting a re-read and retry. This detects lost updates without locking; HTTP does the same with If-Match and 412 Precondition Failed."],
+    ["adv","How does versioning interact with data-deletion/compliance requirements?","Because versioning keeps old copies and turns deletes into recoverable markers, data isn't truly gone when 'deleted' — which conflicts with data-minimization and 'right to be forgotten' rules. To comply, you must explicitly purge specific versions (permanent delete by version ID) and configure lifecycle rules to expire noncurrent versions and delete markers within retention limits. Conversely, this persistence is a strength against ransomware and accidental loss. The design must balance retention for recovery/audit against legal obligations to actually erase data."],
+    ["adv","How do you store many versions efficiently, and when would you avoid versioning?","Use delta/differential storage (store only the changes between versions) and deduplication (share identical chunks across versions), plus lifecycle tiering of old versions to cheap cold storage and expiry of stale ones. Avoid full versioning for ephemeral or easily-recomputable data (caches, temp files, high-frequency telemetry) where history has no recovery value, for extremely high-churn large objects where cost would explode, and where compliance forbids retaining old copies. When you only need conflict detection, a version number/ETag without retained bodies is enough."],
+    ["sd","Design versioning for a document collaboration platform.","Store each save as an immutable version (content-addressed or with a version ID), keeping full revision history so users can view diffs and restore any prior version; use delta/dedup storage so many similar revisions are cheap. Represent deletes as soft deletes recoverable within a retention window. Apply optimistic concurrency (version/ETag) to handle simultaneous edits and detect conflicts (or use operational transforms/CRDTs for real-time merge). Add lifecycle policies to prune or tier old versions per plan/retention settings, support explicit permanent deletion for compliance, and record author/timestamp metadata per version for the audit trail."]
+  ],
+  mistakes:["Enabling versioning without lifecycle rules → runaway storage cost.","Assuming DELETE erases data (it adds a delete marker).","Storing full copies of near-identical versions (no delta/dedup).","Forgetting sensitive data lingers in old versions (compliance).","Naive readers tripping over delete markers / noncurrent versions."],
+  best:["Pair versioning with lifecycle rules (keep last N / expire / tier).","Use delta encoding and dedup for many similar versions.","Support explicit permanent deletion for compliance/purging.","Use version numbers/ETags for optimistic concurrency.","Record metadata (author, time) per version for audit trails."],
+  related:[["Deduplication","♻️","Store similar versions cheaply","deduplication.html"],["Block vs File vs Object","🧱","Object versioning","block-storage.html"],["Cloud File Storage","☁️","Versioned file sync","system-designed.html"],["Merkle Tree","🌳","Content-addressed versions (Git)","merkle-tree.html"],["Idempotency","🔁","Safe repeated writes","idempotency.html"],["Blue-Green Deployment","🔵","Versioned releases","blue-green.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

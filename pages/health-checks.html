@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Health Checks — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function node(x,y,ok,label){const c=ok?"#34d399":"#f87171";g.appendChild(S("rect",{x:x-24,y:y-20,width:48,height:40,rx:6,fill:c+"33",stroke:c,"stroke-width":2}));g.appendChild(TX(x,y+5,ok?"✓":"✗",{fill:c,"font-size":16,"text-anchor":"middle","font-weight":700}));g.appendChild(TX(x,y+34,label,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:255,y:38,width:130,height:28,rx:8,fill:"rgba(124,58,237,.2)",stroke:"#a78bfa"}));g.appendChild(TX(320,56,"⚖️ load balancer",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+    const health=phase===0?[1,1,1]:phase===1?[1,0,1]:[1,1,1];const xs=[150,320,490];
+    xs.forEach((x,i)=>{node(x,130,health[i],"node "+(i+1));
+      if(health[i])arrow(g,320,66,x,108,"#34d399");
+      else{g.appendChild(S("line",{x1:320,y1:66,x2:x,y2:108,stroke:"#f87171","stroke-width":1.5,"stroke-dasharray":"4 4"}));g.appendChild(TX((320+x)/2,92,"no traffic",{fill:"#f87171","font-size":8,"text-anchor":"middle"}));}});
+    if(phase===0){lbl.textContent="the LB probes each node: GET /health every few seconds";lbl.setAttribute("fill","#34d399");sub.textContent="all healthy → all receive traffic";}
+    else if(phase===1){g.appendChild(TX(320,180,"node 2 failed N consecutive probes → marked unhealthy",{fill:"#f87171","font-size":10,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="node 2 stops responding → removed from rotation";lbl.setAttribute("fill","#f87171");sub.textContent="traffic reroutes to healthy nodes; users never hit the bad one";}
+    else{g.appendChild(TX(320,180,"node 2 passes M probes → added back",{fill:"#34d399","font-size":10,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="node 2 recovers → re-added after passing probes";lbl.setAttribute("fill","#34d399");sub.textContent="self-healing: the pool automatically converges to healthy nodes";}}
+  function step(){phase=(phase+1)%3;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">A load balancer probes each node's <code>/health</code> endpoint. It won't drop a node on a single blip — it waits for <b>N consecutive failures</b> (unhealthy threshold) before removing it, and <b>M consecutive successes</b> before adding it back. Tune the thresholds and toggle a node's health to see how quickly (and how stably) traffic reroutes.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Unhealthy threshold (fails): <b id="pgUhV">3</b></label><input id="pgUh" type="range" min="1" max="6" value="3" step="1"></div>
+      <div class="pg-field"><label>Healthy threshold (successes): <b id="pgHhV">2</b></label><input id="pgHh" type="range" min="1" max="6" value="2" step="1"></div>
+      <div class="pg-field"><label>Probe interval (s): <b id="pgIntV">1</b></label><input id="pgInt" type="range" min="1" max="4" value="1" step="1"></div>
+      <button class="pg-btn" id="pgRun">▶ run probes</button>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="pg-btn secondary" id="pgK1" style="font-size:10px">toggle node 1</button>
+        <button class="pg-btn secondary" id="pgK2" style="font-size:10px">toggle node 2</button>
+        <button class="pg-btn secondary" id="pgK3" style="font-size:10px">toggle node 3</button>
+      </div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">In rotation</div><div class="v ok" id="pgIn">3 / 3</div></div>
+        <div class="pg-stat"><div class="k">Probes sent</div><div class="v" id="pgProbes">0</div></div>
+        <div class="pg-stat"><div class="k">Requests to dead node</div><div class="v wa" id="pgBad">0</div></div>
+        <div class="pg-stat"><div class="k">Detection lag</div><div class="v ac" id="pgLag">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=130;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  // each node: alive (actual), inRotation (LB belief), fails, succ, failedAt
+  let nodes=[{alive:true,rot:true,f:0,s:0,failAt:null},{alive:true,rot:true,f:0,s:0,failAt:null},{alive:true,rot:true,f:0,s:0,failAt:null}];
+  let running=false,raf,last,t=0,probes=0,bad=0,clock=0;
+  function draw(){svg.innerHTML="";
+    svg.appendChild(TX(20,18,"⚖️ load balancer",{fill:"#a78bfa","font-size":11,"font-weight":700}));
+    nodes.forEach((n,i)=>{const x=70+i*170,y=60;const c=n.rot?"#34d399":"#f87171";
+      svg.appendChild(S("rect",{x:x-45,y,width:90,height:50,rx:8,fill:c+(n.rot?"33":"18"),stroke:c,"stroke-width":n.rot?2.2:1.4}));
+      svg.appendChild(TX(x,y+22,"node "+(i+1),{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+      svg.appendChild(TX(x,y+40,n.alive?(n.rot?"healthy":"recovering"):"DOWN",{fill:c,"font-size":9.5,"text-anchor":"middle"}));
+      if(n.rot)arrow(svg,x,30,x,y-2,"#34d399");
+      else svg.appendChild(S("line",{x1:x,y1:30,x2:x,y2:y-2,stroke:"#f87171","stroke-dasharray":"3 3"}));
+      svg.appendChild(TX(x,y+62,"f:"+n.f+" s:"+n.s,{fill:"#5b5b63","font-size":8.5,"text-anchor":"middle"}));});}
+  function stats(){const inrot=nodes.filter(n=>n.rot).length;$("pgIn").textContent=inrot+" / 3";$("pgIn").className="v "+(inrot===3?"ok":inrot>0?"wa":"bad");
+    $("pgProbes").textContent=probes;$("pgBad").textContent=bad;draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function probe(){const uh=+$("pgUh").value||3,hh=+$("pgHh").value||2;clock++;
+    nodes.forEach((n,i)=>{probes++;
+      if(n.alive){n.s++;n.f=0;if(!n.rot&&n.s>=hh){n.rot=true;log("node "+(i+1)+" passed "+hh+" probes → BACK in rotation","ok");}}
+      else{n.f++;n.s=0;
+        if(n.rot){bad++; // LB still believes healthy → routes a request that fails
+          if(n.f===1)n.failAt=clock;
+          if(n.f>=uh){n.rot=false;const lag=(clock-n.failAt+1);$("pgLag").textContent=lag+" probes";log("node "+(i+1)+" failed "+uh+" consecutive probes → REMOVED (detection lag ~"+lag+" probes)","bad");}
+          else log("node "+(i+1)+" probe failed ("+n.f+"/"+uh+") — still in rotation, requests may error","wa");}}});
+    stats();}
+  function tick(now){if(!running)return;const dt=(now-last)/1000;last=now;t+=dt;const iv=+$("pgInt").value||1;if(t>=iv){t=0;probe();}raf=requestAnimationFrame(tick);}
+  function run(){if(running){running=false;cancelAnimationFrame(raf);$("pgRun").textContent="▶ run probes";return;}running=true;$("pgRun").textContent="⏸ pause";last=performance.now();log("probing every "+($("pgInt").value)+"s…","ac");raf=requestAnimationFrame(tick);}
+  function toggle(i){nodes[i].alive=!nodes[i].alive;nodes[i].f=0;nodes[i].s=0;log("node "+(i+1)+" is now "+(nodes[i].alive?"UP (will recover)":"DOWN (will fail probes)"),nodes[i].alive?"ac":"bad");stats();}
+  $("pgRun").onclick=run;$("pgK1").onclick=()=>toggle(0);$("pgK2").onclick=()=>toggle(1);$("pgK3").onclick=()=>toggle(2);
+  $("pgUh").oninput=()=>{$("pgUhV").textContent=$("pgUh").value;};$("pgHh").oninput=()=>{$("pgHhV").textContent=$("pgHh").value;};$("pgInt").oninput=()=>{$("pgIntV").textContent=$("pgInt").value;};
+  stats();log("run probes, then knock a node down and watch detection + reroute","ac");
+}
+
+const DATA={
+  badge:"❤️",title:"Health Checks",category:"Traffic Management",difficulty:"Easy",readingTime:"8 min",
+  eyebrow:"Detecting & Routing Around Failure",
+  tagline:"Health checks let a load balancer or orchestrator continuously probe instances and route traffic <b>only to healthy ones</b>, automatically removing failing nodes and re-adding recovered ones. With thresholds to avoid flapping, they're the foundation of <b>self-healing</b>, highly-available systems.",
+  pills:["<b>Liveness</b> vs <b>readiness</b>","<b>Shallow</b> vs <b>deep</b>","Un/healthy <b>thresholds</b>","Enables <b>self-healing</b>"],
+  overview:"A <b>health check</b> is a periodic probe that answers 'can this instance serve traffic right now?' Load balancers, service meshes, and orchestrators (Kubernetes) use the answer to decide whether to send requests to an instance, restart it, or replace it — enabling <b>self-healing</b> without human intervention. There are distinct kinds, and conflating them causes outages. <b>Liveness</b> checks ask 'is the process alive/not deadlocked?' — failing one typically triggers a <b>restart</b>. <b>Readiness</b> checks ask 'is it ready to accept traffic?' — failing one removes the instance from the load balancer <b>without</b> killing it (useful during startup, warm-up, or temporary overload). <b>Startup</b> checks give slow-booting apps time before liveness kicks in. Checks also vary in depth: a <b>shallow</b> check confirms the process responds (e.g. returns 200 on <code>/health</code>); a <b>deep</b> check verifies critical dependencies (database, cache, downstream services) are reachable. To avoid <b>flapping</b> (rapidly toggling in and out of rotation on transient blips), checks use <b>thresholds</b>: an instance must fail <em>N consecutive</em> probes to be marked unhealthy and pass <em>M consecutive</em> probes to be restored, plus tunable <b>interval</b> and <b>timeout</b>. There's an inherent <b>detection lag</b> — roughly interval × unhealthy-threshold — during which some requests may still hit a failing node (mitigated by retries and outlier detection). Good health checks are cheap, fast, and reflect real serving capability; bad ones (too deep, too strict, or checking irrelevant things) cause <b>cascading failures</b> where a shared-dependency blip marks the whole fleet unhealthy at once.",
+  problem:"In any system with multiple instances, some will fail — crashes, deadlocks, lost dependencies, overload. Without a way to detect this, a load balancer keeps sending traffic to broken instances, causing errors and timeouts for users. Health checks provide continuous, automated detection so traffic is steered only to instances that can actually serve it, and failed instances are restarted or replaced.",
+  diagram,diagramCaption:"The LB probes each node; failing nodes leave rotation after N fails and rejoin after M successes.",
+  how:[
+    "The LB/orchestrator probes each instance's health endpoint at a fixed interval with a timeout.",
+    "Readiness failures remove the instance from the load-balancer rotation (no traffic).",
+    "Liveness failures trigger a restart/replacement of the instance.",
+    "Thresholds require N consecutive failures to mark unhealthy and M successes to restore — preventing flapping.",
+    "Recovered instances that pass probes are automatically re-added; the system self-heals."
+  ],
+  complexity:[["Interval","secs (tunable)"],["Detection lag","≈ interval × N"],["Liveness","→ restart"],["Readiness","→ pull from LB"]],
+  advantages:["Automatic failure detection and traffic rerouting","Self-healing (restart/replace) without humans","Thresholds prevent flapping on transient blips","Readiness gates traffic during startup/warm-up","Foundation for HA, auto-scaling, and rolling/canary deploys"],
+  disadvantages:["Detection lag → some requests hit failing nodes","Deep checks can cause correlated/cascading failures","Too-strict thresholds cause flapping or false removals","Checks that don't reflect real capacity mislead the LB","Adds probe traffic and endpoint maintenance"],
+  tradeoffs:"Health checks balance <b>fast detection against stability and safety</b>. Shorter intervals and lower unhealthy thresholds detect failures quickly (less time routing to a dead node) but increase the chance of <b>flapping</b> on transient blips and add probe overhead; longer intervals/higher thresholds are stable but leave a bigger <b>detection-lag</b> window where users hit failing instances (partly mitigated by client retries and outlier ejection). <b>Shallow vs deep</b> is the subtlest trade-off: a shallow 'process is up' check is cheap and independent but can keep routing to an instance that can't actually do useful work (e.g. its database is down); a deep check that verifies dependencies is more accurate but dangerous — if a <b>shared</b> dependency (the same database) hiccups, <em>every</em> instance fails its health check simultaneously and the LB pulls the entire fleet out of rotation, turning a minor blip into a total outage (a classic <b>cascading failure</b>). The resolution is to separate concerns: use <b>liveness</b> narrowly (only restart on true unrecoverable state, never on dependency errors) and <b>readiness</b> for traffic gating, and be cautious about failing readiness on shared downstream dependencies. Health checks must reflect <b>real serving capability</b> — a check that always returns 200 regardless of true state is worse than none, and one that's overly comprehensive risks amplifying failures.",
+  whenNot:"You essentially always want health checks in a multi-instance system, but the depth and strictness should be chosen carefully. Avoid deep dependency checks in <b>liveness</b> probes (they cause restart loops and cascading failures) — keep liveness minimal. For a single-instance or stateless serverless model, LB-style health checking is handled by the platform. And don't over-engineer checks for low-stakes internal tools where a simple process-up probe suffices. The anti-pattern to avoid is a health check that either lies (always 200) or is so comprehensive it takes the whole fleet down together.",
+  sim,
+  code:{
+"Liveness vs readiness (K8s)":`# Liveness: is the process healthy? Failing -> RESTART the container.\nlivenessProbe:\n  httpGet: { path: /livez, port: 8080 }   # keep this SHALLOW & dependency-free\n  periodSeconds: 10\n  failureThreshold: 3                       # 3 consecutive fails -> restart\n\n# Readiness: is it ready to serve? Failing -> remove from Service endpoints.\nreadinessProbe:\n  httpGet: { path: /readyz, port: 8080 }    # may check warm-up / capacity\n  periodSeconds: 5\n  failureThreshold: 2\n\n# Startup: give slow boots time before liveness applies.\nstartupProbe:\n  httpGet: { path: /livez, port: 8080 }\n  failureThreshold: 30                        # up to 30*periodSeconds to boot`,
+"Shallow vs deep endpoints":`// /livez  -> SHALLOW: just prove the event loop/process responds.\napp.get("/livez", (_, res) => res.sendStatus(200));\n\n// /readyz -> can it serve? Check ONLY dependencies it truly needs to work,\n// and be careful: failing on a SHARED dep can eject the whole fleet at once.\napp.get("/readyz", async (_, res) => {\n  try {\n    await db.ping();            // required to serve requests\n    if (overloaded()) throw new Error("shedding load");\n    res.sendStatus(200);\n  } catch { res.sendStatus(503); }   // pulled from LB, NOT restarted\n});`,
+"Load balancer health check":`# Classic LB target-group health check with thresholds (anti-flap).\nHealthCheck:\n  Protocol: HTTP\n  Path: /readyz\n  Interval: 5s\n  Timeout: 2s\n  HealthyThreshold: 2      # 2 passes  -> add back to rotation\n  UnhealthyThreshold: 3    # 3 fails   -> remove from rotation\n# Detection lag ~= Interval * UnhealthyThreshold = ~15s worst case.\n# Pair with retries + outlier ejection to cover the lag window.`
+  },
+  realWorld:[
+    ["Kubernetes probes","Liveness/readiness/startup probes drive restarts and endpoint membership."],
+    ["AWS ELB/ALB target groups","Health checks with healthy/unhealthy thresholds."],
+    ["Consul / etcd","Service registries mark instances up/down via health checks."],
+    ["Envoy / service meshes","Active health checks + passive outlier detection."],
+    ["Monitoring (uptime probes)","External synthetic checks for user-facing availability."]
+  ],
+  interview:[
+    ["basic","What is a health check and why is it needed?","A periodic probe that determines whether an instance can serve traffic. Load balancers and orchestrators use it to route requests only to healthy instances and to restart or replace failed ones. It's needed because instances inevitably fail — crashes, deadlocks, lost dependencies — and without automated detection the LB would keep sending traffic to broken instances, causing user-facing errors."],
+    ["basic","What's the difference between liveness and readiness checks?","Liveness answers 'is the process alive and not stuck?' — failing it triggers a restart of the instance. Readiness answers 'is it ready to accept traffic right now?' — failing it removes the instance from the load balancer without killing it, which is right during startup, warm-up, or temporary overload. Confusing them is dangerous: putting dependency checks in liveness can cause restart loops and outages."],
+    ["inter","What are healthy/unhealthy thresholds and why do they exist?","They require an instance to fail N consecutive probes before being marked unhealthy and pass M consecutive probes before being restored to rotation. They exist to prevent flapping — rapidly toggling a node in and out on a single transient blip — which would cause instability and churn. The trade-off: higher thresholds are more stable but increase detection lag (how long a failing node keeps getting traffic)."],
+    ["inter","What is a shallow vs deep health check, and when do you use each?","A shallow check just confirms the process responds (returns 200), independent of dependencies. A deep check verifies critical dependencies (database, cache, downstream) are reachable. Use shallow for liveness (so a dependency blip doesn't restart everything) and consider deep for readiness only carefully — because if all instances share a dependency, a deep check failing takes the whole fleet out of rotation simultaneously, turning a small issue into a full outage."],
+    ["adv","How can health checks cause cascading failures, and how do you prevent it?","If every instance's health check verifies the same shared dependency (e.g. one database), a brief dependency hiccup makes all instances fail their checks at once, so the LB removes the entire fleet — a total outage caused by the safety mechanism. Prevent it by keeping liveness shallow and dependency-free, being conservative about failing readiness on shared deps (or using graceful degradation instead), adding jitter, and using passive outlier detection plus circuit breakers rather than binary fleet-wide health gating."],
+    ["adv","What is detection lag and how do you mitigate its impact?","Detection lag is the window between when an instance actually fails and when the health-check system marks it unhealthy — roughly interval × unhealthy-threshold. During it, the LB still routes some requests to the failing node, causing errors. Mitigate with client-side retries (to another instance), passive outlier ejection (remove a node that returns errors immediately, without waiting for the active probe cycle), circuit breakers, and tuning interval/threshold to balance speed against flapping."],
+    ["sd","Design health checking for a horizontally-scaled service on Kubernetes behind an LB.","Expose a shallow /livez (process-only) for the liveness probe so transient dependency issues never trigger restarts, a /readyz for readiness that reflects the ability to serve (warm-up complete, and cautiously, required deps), and a startupProbe for slow boots. Configure sensible interval/timeout and healthy/unhealthy thresholds to avoid flapping while keeping detection lag low. At the LB, health-check /readyz with thresholds, and add retries + outlier ejection + circuit breakers to cover the lag window. Avoid failing readiness on shared dependencies fleet-wide; prefer graceful degradation, and monitor probe results and detection times."]
+  ],
+  mistakes:["Putting dependency checks in liveness → restart loops and cascades.","Deep checks on a shared dependency → whole fleet ejected at once.","Health endpoint that always returns 200 regardless of real state.","Thresholds too strict (flapping) or too loose (long detection lag).","Ignoring detection lag — no retries/outlier ejection to cover it."],
+  best:["Separate liveness (restart) from readiness (traffic gating).","Keep liveness shallow and dependency-free.","Use thresholds + interval/timeout to prevent flapping.","Cover detection lag with retries, outlier ejection, circuit breakers.","Ensure checks reflect real serving capability; add startup probes for slow boots."],
+  related:[["Auto-Scaling","📈","Uses health to replace instances","auto-scaling.html"],["Failover","🔀","Reroute on failure","failover.html"],["High Availability","🟢","Redundancy & uptime","high-availability.html"],["Blue-Green Deployment","🔵","Gate cutover on health","blue-green.html"],["Canary Deployment","🐤","Health gates rollout","canary.html"],["Timeouts","⏱️","Fail-fast on slow deps","timeout.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

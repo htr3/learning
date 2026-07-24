@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bulkhead Pattern — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function pool(x,y,w,label,fill,stroke){g.appendChild(S("rect",{x:x,y:y,width:w,height:44,rx:8,fill:fill,stroke:stroke,"stroke-width":2}));
+    g.appendChild(TX(x+w/2,y+27,label,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    if(phase===0){pool(60,90,180,"shared thread pool","rgba(248,113,113,.14)","#f87171");
+      g.appendChild(TX(150,80,"Service A",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(S("line",{x1:240,y1:100,x2:360,y2:100,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:240,y1:120,x2:360,y2:120,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));
+      pool(360,70,180,"🐌 slow dependency","rgba(248,113,113,.2)","#f87171");
+      lbl.textContent="no bulkhead — one pool for everything";lbl.setAttribute("fill","#f87171");sub.textContent="a slow dependency consumes ALL threads → every feature goes down together";}
+    else{pool(40,60,150,"pool: payments","rgba(52,211,153,.14)","#34d399");pool(40,110,150,"pool: search 🐌","rgba(248,113,113,.16)","#f87171");
+      g.appendChild(S("line",{x1:190,y1:82,x2:420,y2:82,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:190,y1:132,x2:420,y2:132,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));
+      pool(420,60,160,"payments dep ✓","rgba(52,211,153,.14)","#34d399");pool(420,110,160,"search dep 🐌","rgba(248,113,113,.2)","#f87171");
+      lbl.textContent="bulkheads — isolated pools per dependency";lbl.setAttribute("fill","#34d399");sub.textContent="search's slowness only drains ITS pool; payments keeps its own threads and stays up";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Two features — <b>Payments</b> and <b>Search</b> — share a server with 12 worker threads. Make Search hang, then compare: with a <b>shared</b> pool, Search's stuck calls eat every thread and Payments dies too; with <b>bulkheads</b> (a capped pool per dependency), Search fills only its own slots and Payments keeps serving.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Isolation</label><select id="pgMode"><option value="shared">Shared pool (no bulkhead)</option><option value="bulk">Bulkheads (isolated pools)</option></select></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgSlow" checked>Search dependency is hanging 🐌</label></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgSearch">Search request</button><button id="pgPay" class="go">Payment request</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset (free threads)</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">12 total threads. Bulkheads cap Search at 6 and Payments at 6, so neither can starve the other. A held slot only frees on Reset (simulating stuck calls).</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Threads used</div><div class="v ac" id="pgUsed">0/12</div></div>
+        <div class="pg-stat"><div class="k">Payments</div><div class="v ok" id="pgPayS">healthy</div></div>
+        <div class="pg-stat"><div class="k">Search</div><div class="v" id="pgSrchS">healthy</div></div>
+        <div class="pg-stat"><div class="k">Rejected</div><div class="v wa" id="pgRej">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const TOTAL=12,CAP=6,W=560,H=120;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let slots,rej; // slots: array of 'pay'|'search'|null
+  function reset(){slots=new Array(TOTAL).fill(null);rej=0;draw();stats();$("pgLog").innerHTML="";log("send requests; make Search hang to see isolation","ac");}
+  function mode(){return $("pgMode").value||"shared";}
+  function used(kind){return slots.filter(s=>s===kind).length;}
+  function acquire(kind){
+    if(mode()==="bulk"&&used(kind)>=CAP){rej++;log(kind+" rejected — its bulkhead ("+CAP+" threads) is full, but the OTHER pool is untouched ✓",kind==="search"?"wa":"bad");stats();draw();return;}
+    const i=slots.indexOf(null);
+    if(i<0){rej++;log(kind+" rejected — no free threads at all (pool exhausted)","bad");stats();draw();return;}
+    const willHang=(kind==="search"&&$("pgSlow").checked);
+    slots[i]=kind;
+    if(willHang){log(kind+" request → 🐌 stuck (holds a thread until reset)","wa");}
+    else{log(kind+" request → completed ✓ (thread returns)","ok");setTimeout(()=>{const j=slots.indexOf(kind);if(j>=0&&!(kind==="search"&&$("pgSlow").checked)){slots[j]=null;draw();stats();}},500);}
+    stats();draw();}
+  function stats(){const u=slots.filter(Boolean).length;$("pgUsed").textContent=u+"/"+TOTAL;
+    const free=slots.includes(null);
+    const payOk=mode()==="bulk"?used("pay")<CAP:free;
+    const srchOk=mode()==="bulk"?used("search")<CAP:free;
+    $("pgPayS").textContent=payOk?"healthy":"BLOCKED";$("pgPayS").className="v "+(payOk?"ok":"bad");
+    $("pgSrchS").textContent=srchOk?"healthy":"saturated";$("pgSrchS").className="v "+(srchOk?"ok":"wa");
+    $("pgRej").textContent=rej;}
+  function draw(){svg.innerHTML="";
+    const cols=TOTAL,cw=(W-40)/cols;
+    svg.appendChild(TX(20,20,"worker threads ("+(mode()==="bulk"?"bulkheads: 6 payments / 6 search":"shared pool")+"):",{fill:"#8b8b93","font-size":10}));
+    for(let i=0;i<TOTAL;i++){const x=20+i*cw;const s=slots[i];
+      const inSearchZone=mode()==="bulk"&&i>=CAP;
+      const fill=s==="pay"?"#34d399":s==="search"?"#f87171":(mode()==="bulk"?(inSearchZone?"rgba(248,113,113,.08)":"rgba(52,211,153,.08)"):"#161619");
+      svg.appendChild(S("rect",{x:x+3,y:40,width:cw-6,height:40,rx:5,fill:fill,stroke:s?(s==="pay"?"#34d399":"#f87171"):"#2f3742","stroke-width":1.4}));
+      if(s)svg.appendChild(TX(x+cw/2,64,s==="pay"?"$":"🔍",{fill:"#fff","font-size":11,"text-anchor":"middle"}));}
+    if(mode()==="bulk"){const midX=20+CAP*cw;svg.appendChild(S("line",{x1:midX,y1:34,x2:midX,y2:86,stroke:"#c4a2ff","stroke-width":2,"stroke-dasharray":"4 3"}));
+      svg.appendChild(TX(20+CAP*cw/2,98,"payments pool",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      svg.appendChild(TX(20+CAP*cw+CAP*cw/2,98,"search pool",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));}}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgMode").onchange=()=>{reset();log("mode: "+(mode()==="bulk"?"bulkheads (isolated)":"shared pool"),"ac");};
+  $("pgSearch").onclick=()=>acquire("search");$("pgPay").onclick=()=>acquire("pay");$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🧱",title:"Bulkhead Pattern",category:"Resilience",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Isolating Resource Pools",
+  tagline:"Named after a ship's watertight compartments: partition resources (thread pools, connections) so a failure in one part can't flood the whole system. One misbehaving dependency drains only its own compartment — everything else stays afloat.",
+  pills:["<b>Isolation</b> by pool","<b>Contain</b> failures","<b>Prevent</b> exhaustion","<b>Per-dependency</b> limits"],
+  overview:"A ship is divided into watertight <b>bulkheads</b> so a hull breach floods one compartment instead of sinking the vessel. The software pattern does the same: instead of one shared pool of threads/connections serving every dependency, you give each dependency (or class of work) its own <b>bounded</b> pool. If a dependency becomes slow or fails, calls to it pile up and saturate <b>only its</b> pool; when that pool is full, further calls to it are rejected quickly — but pools for other dependencies remain untouched and keep serving. This prevents the classic cascading failure where one slow downstream service consumes all shared threads and takes down unrelated features (payments dying because search is slow). Bulkheads are often implemented as separate thread pools, connection pools, or concurrency-limited semaphores per dependency, and pair naturally with timeouts and circuit breakers.",
+  problem:"With a single shared resource pool, any dependency that slows down can monopolize all threads/connections as calls queue up waiting. Once the pool is exhausted, every other feature that needs a thread also stalls — a local problem becomes a total outage. Bulkheads limit the blast radius so one failing dependency can't starve the rest.",
+  diagram,diagramCaption:"Shared pool: one slow dependency drains all threads. Bulkheads: each dependency is capped and isolated.",
+  how:[
+    "Identify independent dependencies / workloads that shouldn't share fate.",
+    "Give each its own bounded resource pool (thread pool, connection pool, or semaphore permit count).",
+    "Size each pool for that dependency's throughput and acceptable concurrency.",
+    "When a pool is full, reject or queue-with-limit immediately (fail fast) instead of blocking shared resources.",
+    "Combine with timeouts (bound each call) and circuit breakers (stop calling a broken dependency)."
+  ],
+  complexity:[["Isolation unit","pool / semaphore"],["Failure scope","one compartment"],["When full","reject / fail fast"],["Pairs with","timeout + breaker"]],
+  advantages:["Contains failures to one dependency","Prevents total resource exhaustion","Critical features stay up under partial failure","Fail-fast rejection instead of blocking","Enables per-dependency capacity tuning"],
+  disadvantages:["Lower overall utilization (reserved capacity)","More pools to size and monitor","Poor sizing can reject valid load or waste resources","Added complexity vs one shared pool","Doesn't fix the failing dependency itself"],
+  tradeoffs:"Bulkheads trade some efficiency for a lot of isolation. Because each pool reserves capacity, total utilization is lower than one big shared pool that can flex to whatever needs it — but that flexibility is exactly what lets one dependency consume everything. Sizing is the hard part: too small and you reject legitimate bursts; too large and a compartment can still starve others or waste memory. Bulkheads don't repair a broken dependency; they only bound its impact, so they're used together with timeouts (to stop waiting) and circuit breakers (to stop trying). The pattern is most valuable when you have a mix of critical and non-critical dependencies sharing a process.",
+  whenNot:"For a small service with a single dependency, one pool plus timeouts may be enough — bulkheads add complexity for little gain. If all workloads are equally critical and equally likely to fail together, isolation buys less. Also avoid over-partitioning into many tiny pools, which fragments capacity and increases rejections without improving resilience.",
+  sim,
+  code:{
+"Semaphore bulkhead":`// Cap concurrency per dependency with a semaphore (a lightweight bulkhead).\nclass Bulkhead {\n  constructor(max) { this.max = max; this.active = 0; }\n  async run(fn) {\n    if (this.active >= this.max) throw new Error("bulkhead full"); // fail fast\n    this.active++;\n    try { return await fn(); }\n    finally { this.active--; }\n  }\n}\nconst payments = new Bulkhead(6);   // isolated pools per dependency\nconst search   = new Bulkhead(6);\n// A flood of slow search calls can only exhaust 'search' — payments is safe.\nawait search.run(() => searchService.query(q));`,
+"resilience4j":`// Java resilience4j: a dedicated bulkhead per downstream service.\nBulkheadConfig cfg = BulkheadConfig.custom()\n    .maxConcurrentCalls(6)      // max in-flight calls to THIS dependency\n    .maxWaitDuration(Duration.ofMillis(10))  // don't block long if full\n    .build();\nBulkhead searchBulkhead = Bulkhead.of("search", cfg);\n\nSupplier<Result> call = Bulkhead.decorateSupplier(\n    searchBulkhead, () -> searchClient.query(q));\n// Combine: Bulkhead + TimeLimiter + CircuitBreaker around each dependency.`,
+"Pool isolation":`# Separate connection pools so a slow DB can't starve cache calls, etc.\ndb_pool    = Pool(max=10, connect_timeout=0.5)   # bulkhead A\ncache_pool = Pool(max=20, connect_timeout=0.1)   # bulkhead B\nsearch_pool= Pool(max=6,  connect_timeout=0.3)   # bulkhead C\n\n# Thread-pool isolation at the process level (e.g., per-endpoint executors)\n# ensures a hang in one endpoint's handlers doesn't block the others.`
+  },
+  realWorld:[
+    ["Netflix Hystrix","Popularized bulkheads: separate thread pools per dependency to prevent cascades."],
+    ["resilience4j","Bulkhead module (semaphore & thread-pool) for JVM services."],
+    ["Envoy / Istio","Connection pool limits and outlier ejection per upstream cluster."],
+    ["Kubernetes","Resource requests/limits & separate node pools isolate workloads."],
+    ["Databases","Separate connection pools per service/tenant to prevent one from starving others."]
+  ],
+  interview:[
+    ["basic","What is the bulkhead pattern?","Partitioning resources so a failure in one area can't consume everything. Instead of a single shared pool of threads/connections for all dependencies, each dependency gets its own bounded pool. A slow or failing dependency can only exhaust its own compartment; other dependencies keep their resources and stay functional — like watertight compartments in a ship."],
+    ["basic","What problem does it solve?","Cascading failure via resource exhaustion. With a shared pool, calls to one slow dependency queue up and consume all threads/connections, so unrelated features that need those resources also stall and fail. Bulkheads bound each dependency's resource usage, containing the failure so it doesn't sink the whole system."],
+    ["inter","How is a bulkhead typically implemented?","Two common ways: (1) a dedicated thread pool per dependency, so calls run and block within that pool only; (2) a semaphore/permit limit that caps the number of concurrent calls to a dependency, rejecting or briefly queuing beyond that. Connection pools per dependency are another form. When the limit is hit, you fail fast rather than blocking shared resources."],
+    ["inter","How does bulkhead relate to timeouts and circuit breakers?","They're complementary layers. Timeouts bound how long any single call waits. Bulkheads bound how many concurrent calls a dependency can consume. Circuit breakers stop calling a dependency entirely once it's clearly failing. Together: timeouts stop individual hangs, bulkheads contain the blast radius, and breakers give the dependency time to recover — a defense-in-depth resilience stack."],
+    ["adv","What's the main trade-off in sizing bulkheads?","Utilization vs isolation. Reserving capacity per dependency lowers overall utilization compared to one elastic shared pool, and mis-sizing hurts: too small rejects legitimate bursts, too large lets a compartment still consume too much or wastes memory. You size each pool from the dependency's expected concurrency/throughput and its criticality, then monitor rejection rates and saturation to tune."],
+    ["adv","How would you isolate at different levels — thread, process, or service?","Thread/semaphore bulkheads isolate within a process (cheapest, but a crash still affects the process). Separate processes or containers isolate memory and crashes. Deploying critical dependencies' callers as separate services (or node pools/clusters) gives the strongest isolation (independent scaling and failure domains) at higher operational cost. Choose the level based on how critical the isolation is and the overhead you can accept."],
+    ["sd","Where would you apply bulkheads in a system design?","Anywhere a shared process serves both critical and non-critical dependencies. E.g., an API server calling payments (critical) and recommendations (best-effort): give each its own bounded pool so a recommendations outage can't take down checkout. Also isolate per-tenant pools in multi-tenant systems, and separate connection pools per backing store. Combine with timeouts, retries+backoff, and circuit breakers."]
+  ],
+  mistakes:["Using one shared pool for all dependencies (single point of exhaustion).","Sizing pools by guesswork instead of measured concurrency.","Over-partitioning into many tiny pools, fragmenting capacity.","Blocking (not failing fast) when a bulkhead is full.","Using bulkheads without timeouts/circuit breakers (stuck calls still hold slots)."],
+  best:["Give each dependency its own bounded pool/semaphore.","Size pools from measured throughput/concurrency and criticality.","Fail fast (reject) when a compartment is full.","Combine bulkheads with timeouts and circuit breakers.","Monitor per-pool saturation and rejection rates to tune."],
+  related:[["Timeout","⏱️","Bound each call","timeout.html"],["Circuit Breaker","🔌","Stop calling failures","system-designed.html"],["Retry & Backoff","⏳","Retry without storms","backoff.html"],["Rate Limiting","🚦","Cap incoming load","rate-limiting.html"],["High Availability","🟢","Stay up under failure","high-availability.html"],["Failover","🔀","Redirect on failure","failover.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

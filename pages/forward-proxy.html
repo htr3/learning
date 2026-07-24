@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Forward & Reverse Proxy — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function box(x,y,w,txt,fill,stroke){g.appendChild(S("rect",{x:x-w/2,y:y-18,width:w,height:36,rx:8,fill:fill,stroke:stroke,"stroke-width":2}));
+    const t=S("text",{x:x,y:y+4,fill:"#e4e4e7","font-size":10.5,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  function arrow(x1,x2,y,c){g.appendChild(S("line",{x1,y1:y,x2,y2:y,stroke:c,"stroke-width":2,"marker-end":"url(#a)"}));}
+  function render(){g.innerHTML="";
+    if(phase===0){box(80,100,110,"Clients","#161619","#3a3a42");box(300,100,120,"Forward proxy","rgba(56,189,248,.18)","#38bdf8");box(540,100,110,"Internet","rgba(124,58,237,.18)","#7C3AED");
+      arrow(135,240,100,"#38bdf8");arrow(360,485,100,"#38bdf8");
+      g.appendChild(S("path",{d:"M300 118 A 30 20 0 0 0 300 82",fill:"none"}));
+      lbl.textContent="Forward proxy — sits in FRONT of clients";lbl.setAttribute("fill","#38bdf8");sub.textContent="acts on behalf of clients: hides them, filters/caches outbound requests (corporate/VPN)";}
+    else{box(80,100,110,"Internet","rgba(124,58,237,.18)","#7C3AED");box(300,100,130,"Reverse proxy","rgba(52,211,153,.18)","#34d399");box(540,60,110,"Server A","#161619","#3a3a42");box(540,140,110,"Server B","#161619","#3a3a42");
+      arrow(135,235,100,"#34d399");g.appendChild(S("line",{x1:365,y1:92,x2:485,y2:64,stroke:"#34d399","stroke-width":1.8,"marker-end":"url(#a)"}));g.appendChild(S("line",{x1:365,y1:108,x2:485,y2:140,stroke:"#34d399","stroke-width":1.8,"marker-end":"url(#a)"}));
+      lbl.textContent="Reverse proxy — sits in FRONT of servers";lbl.setAttribute("fill","#34d399");sub.textContent="acts on behalf of servers: load balancing, TLS termination, caching, hides origin (Nginx/CDN)";}}
+  function step(){phase=(phase+1)%2;timer=2.8;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Switch between a <b>forward proxy</b> (in front of clients) and a <b>reverse proxy</b> (in front of servers) and send a request. See who the proxy represents, what IP the other end observes, and how caching changes the outcome — the key distinction interviewers probe.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Proxy type</label>
+        <select id="pgType"><option value="fwd">Forward proxy (client-side)</option><option value="rev">Reverse proxy (server-side)</option><option value="none">No proxy (direct)</option></select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReq" class="go">Send request</button><button id="pgReq2">Repeat (cache?)</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Same box, opposite side: a forward proxy hides & serves <i>clients</i>; a reverse proxy hides & fronts <i>servers</i>. Both can cache, filter, and terminate TLS.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Acts for</div><div class="v ac" id="pgFor">—</div></div>
+        <div class="pg-stat"><div class="k">Origin sees IP</div><div class="v ok" id="pgIP">—</div></div>
+        <div class="pg-stat"><div class="k">Cache</div><div class="v wa" id="pgCache">—</div></div>
+        <div class="pg-stat"><div class="k">Requests to origin</div><div class="v" id="pgOrigin">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=170;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let originHits,cached;
+  function reset(){originHits=0;cached=false;draw();stats();$("pgLog").innerHTML="";log("pick a proxy type and send a request","ac");}
+  function type(){return $("pgType").value||"fwd";}
+  function req(repeat){const t=type();
+    if(t==="none"){originHits++;log("client → origin directly (origin sees the client's real IP)","ac");cached=false;}
+    else if(t==="fwd"){
+      if(repeat&&cached){log("forward proxy CACHE HIT → served locally, origin NOT contacted (saves bandwidth)","ok");}
+      else{originHits++;cached=true;log("client → forward proxy → internet. Proxy forwards on behalf of client; origin sees the PROXY's IP (client hidden)","ac");}}
+    else{ // reverse
+      if(repeat&&cached){log("reverse proxy CACHE HIT → response served from edge, backend NOT hit (offloads servers)","ok");}
+      else{originHits++;cached=true;log("internet → reverse proxy → backend. Proxy fronts servers: load-balances, terminates TLS; client never sees the origin server","ac");}}
+    stats();draw(repeat&&cached);}
+  function stats(){const t=type();
+    $("pgFor").textContent=t==="fwd"?"clients":t==="rev"?"servers":"—";
+    $("pgIP").textContent=t==="fwd"?"proxy IP":t==="rev"?"proxy IP":"client IP";
+    $("pgCache").textContent=t==="none"?"n/a":cached?"warm":"cold";
+    $("pgOrigin").textContent=originHits;}
+  function draw(hit){svg.innerHTML="";const t=type();
+    function box(x,y,w,txt,fill,stroke){svg.appendChild(S("rect",{x:x-w/2,y:y-20,width:w,height:40,rx:8,fill:fill,stroke:stroke,"stroke-width":2}));svg.appendChild(TX(x,y+4,txt,{fill:"#e4e4e7","font-size":10.5,"text-anchor":"middle"}));}
+    if(t==="none"){box(120,85,120,"Client","#161619","#3a3a42");box(440,85,120,"Origin server","rgba(124,58,237,.18)","#7C3AED");
+      svg.appendChild(S("line",{x1:180,y1:85,x2:380,y2:85,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));}
+    else if(t==="fwd"){box(75,85,100,"Client","#161619","#3a3a42");box(280,85,120,"Forward proxy","rgba(56,189,248,.18)","#38bdf8");box(485,85,110,"Origin","rgba(124,58,237,.18)","#7C3AED");
+      svg.appendChild(S("line",{x1:125,y1:85,x2:218,y2:85,stroke:"#38bdf8","stroke-width":2,"marker-end":"url(#a)"}));
+      if(!hit)svg.appendChild(S("line",{x1:342,y1:85,x2:428,y2:85,stroke:"#38bdf8","stroke-width":2,"marker-end":"url(#a)"}));
+      else svg.appendChild(TX(400,80,"✗ cached",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));}
+    else{box(75,85,100,"Client","#161619","#3a3a42");box(280,85,120,"Reverse proxy","rgba(52,211,153,.18)","#34d399");box(490,50,100,"Server A","#161619","#3a3a42");box(490,120,100,"Server B","#161619","#3a3a42");
+      svg.appendChild(S("line",{x1:125,y1:85,x2:218,y2:85,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));
+      if(!hit){svg.appendChild(S("line",{x1:342,y1:78,x2:438,y2:52,stroke:"#34d399","stroke-width":1.6,"marker-end":"url(#a)"}));svg.appendChild(S("line",{x1:342,y1:92,x2:438,y2:120,stroke:"#3a3a42","stroke-width":1.4}));}
+      else svg.appendChild(TX(400,80,"✗ cached at edge",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));}
+    svg.appendChild(TX(W/2,H-8,t==="fwd"?"proxy represents the CLIENT":t==="rev"?"proxy represents the SERVER":"direct connection",{fill:"#6b6b73","font-size":10,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgReq").onclick=()=>req(false);$("pgReq2").onclick=()=>req(true);$("pgReset").onclick=reset;$("pgType").onchange=()=>{cached=false;stats();draw();log("switched to "+({fwd:"forward proxy",rev:"reverse proxy",none:"no proxy"})[type()],"ac");};
+  reset();
+}
+
+const DATA={
+  badge:"🔁",title:"Forward & Reverse Proxy",category:"Networking",difficulty:"Easy",readingTime:"8 min",
+  eyebrow:"Intermediary Servers",
+  tagline:"A proxy is a middleman that relays traffic. A <b>forward proxy</b> sits in front of <b>clients</b> (representing them to the internet); a <b>reverse proxy</b> sits in front of <b>servers</b> (representing them to clients). Same idea, opposite side — and it changes everything.",
+  pills:["<b>Forward</b> = client-side","<b>Reverse</b> = server-side","<b>Caching & TLS</b>","<b>LB & security</b>"],
+  overview:"A proxy server intercepts requests and forwards them on someone's behalf. The direction determines the type. A <b>forward proxy</b> is deployed near <b>clients</b> and acts on their behalf toward the wider internet — think corporate egress proxies, VPNs, or content filters. It hides client identity/IP, enforces access policies, and can cache outbound requests. A <b>reverse proxy</b> is deployed in front of <b>origin servers</b> and acts on their behalf toward clients — think Nginx, HAProxy, a CDN edge, or an API gateway. Clients think they're talking to the real server, but the reverse proxy handles <b>load balancing</b>, <b>TLS termination</b>, <b>caching</b>, compression, rate limiting, and security (hiding and protecting the origin). The mnemonic: a forward proxy protects/serves the <i>client</i>; a reverse proxy protects/serves the <i>server</i>.",
+  problem:"Clients and servers often shouldn't talk directly. Organizations need to control, filter, and anonymize outbound traffic (forward proxy). Services need a single front door that spreads load across many backends, offloads TLS/caching, and shields origins from direct attack (reverse proxy). Proxies insert a controllable, observable layer where policy, performance, and security live.",
+  diagram,diagramCaption:"Same component, opposite placement: a forward proxy fronts clients; a reverse proxy fronts servers.",
+  how:[
+    "Forward proxy: clients are configured to send requests to the proxy, which forwards them to the destination and returns responses (optionally caching/filtering).",
+    "The destination server sees the proxy's IP, not the client's — providing anonymity and policy control.",
+    "Reverse proxy: DNS points clients at the reverse proxy; it receives all requests for the site.",
+    "It selects a healthy backend (load balancing), can terminate TLS, cache responses, compress, and rate-limit.",
+    "Clients never learn the backend's address; the origin is hidden and protected behind the proxy."
+  ],
+  complexity:[["Forward","in front of clients"],["Reverse","in front of servers"],["Sees client IP","forward: proxy hides it"],["Common tools","Squid / Nginx / HAProxy / CDN"]],
+  advantages:["Central place for caching, security, and policy","Forward: client anonymity, filtering, egress control","Reverse: load balancing, TLS offload, origin protection","Adds observability (logging, metrics) at one layer","Enables blue-green/canary and A/B at the edge"],
+  disadvantages:["Extra hop = added latency & a component to run","Can become a single point of failure/bottleneck","Misconfiguration risks (open proxy, header leaks)","TLS termination needs careful trust boundaries","Caching introduces staleness/invalidations"],
+  tradeoffs:"Proxies centralize cross-cutting concerns (caching, auth, TLS, LB, rate limiting) at the cost of an extra network hop and an operational component that must itself be highly available. Reverse proxies are near-universal in web architecture because the benefits (scaling, security, caching, single front door) far outweigh the cost, but they must be replicated/clustered to avoid becoming a SPOF. TLS termination at a reverse proxy simplifies certificate management but means traffic to backends may be plaintext unless you re-encrypt (adds CPU). Forward proxies give control/anonymity but can leak identity if misconfigured (X-Forwarded-For) or become open relays if left unauthenticated.",
+  whenNot:"Skip a forward proxy for typical consumer apps (clients hitting public APIs directly) unless you need egress control, filtering, or anonymity. You rarely 'skip' reverse proxies in server architectures, but for a tiny single-instance service the extra hop may not be worth it. Avoid a single non-redundant proxy in the critical path — always make it highly available.",
+  sim,
+  code:{
+"Reverse (Nginx)":`# Reverse proxy: one front door, load-balance to backends, TLS + cache\nupstream app { server 10.0.0.11:8080; server 10.0.0.12:8080; }\n\nserver {\n  listen 443 ssl;                       # TLS termination here\n  server_name api.example.com;\n  ssl_certificate     /etc/ssl/api.crt;\n  ssl_certificate_key /etc/ssl/api.key;\n\n  location / {\n    proxy_pass http://app;              # spread across backends\n    proxy_set_header X-Forwarded-For $remote_addr;   # pass real client IP\n    proxy_cache my_cache;               # cache responses at the edge\n  }\n}`,
+"Forward (Squid)":`# Forward proxy: clients route outbound traffic through it\n# /etc/squid/squid.conf\nhttp_port 3128\nacl corp_net src 10.0.0.0/8\nhttp_access allow corp_net              # only our clients may use it\nhttp_access deny all                    # NOT an open proxy\n\n# Filtering + caching of outbound web requests:\nacl blocked dstdomain .facebook.com\nhttp_access deny blocked\ncache_dir ufs /var/spool/squid 10000 16 256`,
+"Client config":`# Point a client at a forward proxy (env vars):\nexport HTTP_PROXY=http://proxy.corp:3128\nexport HTTPS_PROXY=http://proxy.corp:3128\ncurl https://example.com     # request goes: client -> forward proxy -> origin\n# origin logs show the PROXY's IP, not the client's.\n\n# Reverse proxy needs NO client config — DNS just points at the proxy:\n# api.example.com  ->  reverse proxy  ->  hidden backends`
+  },
+  realWorld:[
+    ["Nginx / HAProxy / Envoy","Ubiquitous reverse proxies for load balancing, TLS, and caching."],
+    ["CDNs (Cloudflare, Akamai)","Giant distributed reverse proxies caching and protecting origins."],
+    ["Corporate egress proxies (Squid, Zscaler)","Forward proxies for filtering, logging, and controlling outbound traffic."],
+    ["API gateways","Reverse proxies adding auth, rate limiting, and routing in front of services."],
+    ["VPN / Tor","Forward-proxy-like anonymization of client traffic."]
+  ],
+  interview:[
+    ["basic","What's the difference between a forward and reverse proxy?","A forward proxy sits in front of clients and acts on their behalf toward the internet (hiding/filtering clients). A reverse proxy sits in front of servers and acts on their behalf toward clients (load balancing, TLS, caching, hiding the origin). Same relaying idea, but the forward proxy represents the client and the reverse proxy represents the server."],
+    ["basic","Give real examples of each.","Forward proxy: a corporate Squid/Zscaler egress proxy, a VPN, or a content filter that all employee traffic passes through. Reverse proxy: Nginx/HAProxy in front of app servers, a CDN edge like Cloudflare, or an API gateway fronting microservices."],
+    ["inter","What does a reverse proxy typically do?","Load balancing across backends, TLS/SSL termination, response caching, compression, request routing (by path/host), rate limiting and WAF, health checks, and hiding/protecting origin servers. It's the single front door where cross-cutting concerns are centralized."],
+    ["inter","How does the origin know the real client IP behind a reverse proxy?","The proxy adds a header like X-Forwarded-For (or Forwarded) containing the client's IP, since the origin otherwise only sees the proxy's IP. Backends must be configured to trust and read that header — and only from trusted proxies, or clients could spoof it."],
+    ["adv","What is TLS termination and its trade-offs?","The reverse proxy decrypts HTTPS at the edge, so backends receive plaintext HTTP — simplifying certificate management and offloading crypto from app servers. The trade-off: traffic between proxy and backend is unencrypted unless you re-encrypt (TLS re-origination / mTLS), which you should do in zero-trust environments. Termination also lets the proxy inspect/cache/route based on request content."],
+    ["adv","What security risks do proxies introduce?","An open forward proxy (no auth) can be abused to relay attacks or exfiltrate data. Misconfigured X-Forwarded-For handling can leak or let clients spoof IPs. A reverse proxy is a high-value target and potential SPOF, so it must be hardened and made redundant. TLS termination creates a plaintext segment that must be secured. Caching sensitive responses can leak private data if not scoped correctly."],
+    ["sd","Where do proxies fit in a typical web architecture?","Clients hit a reverse proxy / CDN (DNS points there), which terminates TLS, caches static assets, and load-balances dynamic requests to app servers, often through an API gateway. Internally, egress traffic may go through a forward proxy for control. The reverse proxy layer is replicated across zones for HA and is where you implement rate limiting, blue-green/canary routing, and WAF."]
+  ],
+  mistakes:["Confusing the two: remember forward = clients, reverse = servers.","Running an open (unauthenticated) forward proxy — abuse risk.","Trusting X-Forwarded-For from untrusted sources (IP spoofing).","Making the reverse proxy a non-redundant single point of failure.","Caching private/authenticated responses at a shared proxy (data leaks)."],
+  best:["Deploy reverse proxies in a redundant, load-balanced cluster (no SPOF).","Authenticate and restrict forward proxies; never leave them open.","Only trust forwarding headers from known proxy IPs.","Re-encrypt proxy→backend traffic (mTLS) in zero-trust setups.","Scope caches carefully (Vary, cache-control) to avoid leaking private data."],
+  related:[["Load Balancer","⚖️","Reverse proxy core job","system-designed.html"],["API Gateway","🚪","A specialized reverse proxy","system-designed.html"],["CDN","🌍","Distributed reverse proxy","system-designed.html"],["Service Mesh","🕸️","Sidecar proxies","service-mesh.html"],["TLS Handshake","🔐","TLS termination","tls-handshake.html"],["REST API","🌐","What proxies front","rest.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

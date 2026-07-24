@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuadTree — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 210"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const X=235,Y=36,W=150;
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("rect,circle,line").forEach(n=>n.remove());
+    svg.appendChild(S("rect",{x:X,y:Y,width:W,height:W,rx:4,fill:"#0e1116",stroke:"#3a3a42"}));
+    const pts=[[.2,.25],[.3,.35],[.28,.2],[.75,.7],[.85,.4],[.6,.85],[.4,.6]];
+    function line(x1,y1,x2,y2){svg.appendChild(S("line",{x1:X+x1*W,y1:Y+y1*W,x2:X+x2*W,y2:Y+y2*W,stroke:"#2f3742","stroke-width":1}));}
+    if(phase>=1){line(.5,0,.5,1);line(0,.5,1,.5);}
+    if(phase>=2){line(.25,0,.25,.5);line(0,.25,.5,.25);}// top-left dense quadrant subdivides
+    pts.forEach(([px,py])=>svg.appendChild(S("circle",{cx:X+px*W,cy:Y+py*W,r:3.5,fill:"#7C3AED"})));
+    if(phase===0){lbl.textContent="a region with scattered points";lbl.setAttribute("fill","#c4a2ff");sub.textContent="each node holds up to k points";}
+    else if(phase===1){lbl.textContent="too many points → split into 4 quadrants";sub.textContent="NW, NE, SW, SE children";}
+    else{lbl.textContent="dense quadrants keep subdividing";lbl.setAttribute("fill","#34d399");sub.textContent="cells adapt to density — empty areas stay coarse";}}
+  function step(){phase=(phase+1)%3;timer=2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Click the canvas to drop points. When a cell exceeds its capacity it splits into four quadrants, so dense areas get fine cells and sparse areas stay coarse. Drag a query box: only the overlapping cells are visited, so a range search skips most of the tree.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Node capacity <b id="pgCapV">4</b></label><input id="pgCap" type="range" min="1" max="8" value="4"></div>
+      <div class="pg-field"><label>Mode</label>
+        <div class="pg-btns"><button id="pgModeAdd" class="go">Add points</button><button id="pgModeQuery">Query box</button></div></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgScatter">Scatter 40</button><button id="pgCluster">Cluster</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">In "Query box" mode, drag on the canvas to draw a rectangle. Watch how few nodes are visited vs the total.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Points</div><div class="v ac" id="pgN">0</div></div>
+        <div class="pg-stat"><div class="k">Nodes</div><div class="v" id="pgNodes">1</div></div>
+        <div class="pg-stat"><div class="k">Max depth</div><div class="v" id="pgD">0</div></div>
+        <div class="pg-stat"><div class="k">Query: found</div><div class="v ok" id="pgFound">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const SZ=360;let CAP=4,mode="add",root,points;
+  const svg=S("svg",{viewBox:"0 0 "+SZ+" "+SZ});svg.style.cursor="crosshair";$("pgViz").appendChild(svg);
+  function mkNode(x,y,w){return {x,y,w,pts:[],div:false,ch:null};}
+  function reset(){root=mkNode(0,0,SZ);points=[];draw();log("empty region — click to add points","ac");}
+  function subdivide(n){const h=n.w/2;n.ch=[mkNode(n.x,n.y,h),mkNode(n.x+h,n.y,h),mkNode(n.x,n.y+h,h),mkNode(n.x+h,n.y+h,h)];n.div=true;
+    n.pts.forEach(p=>insertInto(n,p));n.pts=[];}
+  function inside(n,p){return p.x>=n.x&&p.x<n.x+n.w&&p.y>=n.y&&p.y<n.y+n.w;}
+  function insertInto(n,p){if(!inside(n,p))return false;
+    if(!n.div){if(n.pts.length<CAP){n.pts.push(p);return true;}if(n.w<=8){n.pts.push(p);return true;}subdivide(n);}
+    for(const c of n.ch)if(insertInto(c,p))return true;return false;}
+  function add(p){points.push(p);insertInto(root,p);draw();stats();}
+  function stats(){let nodes=0,depth=0;(function walk(n,d){nodes++;depth=Math.max(depth,d);if(n.div)n.ch.forEach(c=>walk(c,d+1));})(root,0);
+    $("pgN").textContent=points.length;$("pgNodes").textContent=nodes;$("pgD").textContent=depth;}
+  let qbox=null,visited=0,found=0;
+  function query(box){visited=0;found=0;const hits=[];
+    (function q(n){visited++;if(!(box.x<n.x+n.w&&box.x+box.w>n.x&&box.y<n.y+n.w&&box.y+box.h>n.y))return;
+      if(n.div){n.ch.forEach(q);}else{n.pts.forEach(p=>{if(p.x>=box.x&&p.x<=box.x+box.w&&p.y>=box.y&&p.y<=box.y+box.h){hits.push(p);found++;}});}})(root);
+    $("pgFound").textContent=found;draw(hits,box);log("query visited "+visited+" nodes → "+found+" points (of "+points.length+")","ok");}
+  function draw(hits,box){svg.innerHTML="";
+    (function walk(n){svg.appendChild(S("rect",{x:n.x,y:n.y,width:n.w,height:n.w,fill:"none",stroke:"#242a33","stroke-width":1}));if(n.div)n.ch.forEach(walk);})(root);
+    const hitSet=new Set(hits||[]);
+    points.forEach(p=>svg.appendChild(S("circle",{cx:p.x,cy:p.y,r:3.5,fill:hitSet.has(p)?"#34d399":"#7C3AED"})));
+    if(box)svg.appendChild(S("rect",{x:box.x,y:box.y,width:box.w,height:box.h,fill:"rgba(52,211,153,.12)",stroke:"#34d399","stroke-width":2,rx:2}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>20)l.removeChild(l.lastChild);}
+  const pos=e=>{const r=svg.getBoundingClientRect();return {x:clamp((e.clientX-r.left)/r.width*SZ,0,SZ-1),y:clamp((e.clientY-r.top)/r.height*SZ,0,SZ-1)};};
+
+  let drag=null;
+  svg.addEventListener("mousedown",e=>{const p=pos(e);if(mode==="add"){add(p);}else{drag={x0:p.x,y0:p.y};}});
+  window.addEventListener("mousemove",e=>{if(mode==="query"&&drag){const p=pos(e);const box={x:Math.min(drag.x0,p.x),y:Math.min(drag.y0,p.y),w:Math.abs(p.x-drag.x0),h:Math.abs(p.y-drag.y0)};qbox=box;draw(null,box);}});
+  window.addEventListener("mouseup",()=>{if(mode==="query"&&drag&&qbox){query(qbox);}drag=null;});
+  function setMode(m){mode=m;$("pgModeAdd").classList.toggle("go",m==="add");$("pgModeQuery").classList.toggle("go",m==="query");log("mode: "+(m==="add"?"add points (click)":"query (drag a box)"),"ac");}
+  $("pgModeAdd").onclick=()=>setMode("add");$("pgModeQuery").onclick=()=>setMode("query");
+  $("pgCap").addEventListener("input",()=>{CAP=+$("pgCap").value;$("pgCapV").textContent=CAP;const pp=points.slice();points=[];root=mkNode(0,0,SZ);pp.forEach(add);});
+  $("pgScatter").onclick=()=>{for(let i=0;i<40;i++)add({x:rand(10,SZ-10),y:rand(10,SZ-10)});};
+  $("pgCluster").onclick=()=>{const cx=rand(80,280),cy=rand(80,280);for(let i=0;i<30;i++)add({x:clamp(cx+rand(-40,40),5,SZ-5),y:clamp(cy+rand(-40,40),5,SZ-5)});};
+  $("pgReset").onclick=reset;
+  reset();$("pgModeAdd").classList.add("go");
+  for(let i=0;i<18;i++)add({x:rand(10,SZ-10),y:rand(10,SZ-10)});
+}
+
+const DATA={
+  badge:"🗺️",title:"QuadTree",category:"Algorithms",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Adaptive Spatial Partitioning",
+  tagline:"A tree that recursively splits 2-D space into four quadrants, subdividing only where points are dense — so range and nearest-neighbor queries skip empty regions and touch just a handful of cells.",
+  pills:["<b>Density-adaptive</b>","<b>O(log n)</b> typical query","<b>Range & kNN</b>","<b>Powers maps & collision</b>"],
+  overview:"A quadtree partitions a 2-D region into four equal quadrants (NW, NE, SW, SE). Each node holds up to a small capacity of points; when it overflows, it subdivides into four children and pushes its points down. Because subdivision only happens where points actually cluster, dense areas get fine-grained cells while empty areas stay coarse. This adaptivity makes spatial queries — 'points in this rectangle', 'nearest neighbors', collision candidates — efficient: you recurse only into cells that overlap the query, pruning the rest of the tree.",
+  problem:"Checking every object against every other (or scanning all points for a range query) is O(n) or O(n²). A quadtree spatially indexes points so a range query visits only overlapping cells and neighbor searches prune empty space — turning brute-force scans into near-logarithmic lookups, which is essential for maps, games, and simulations.",
+  diagram,diagramCaption:"Cells split only where points cluster; sparse regions remain a single coarse cell.",
+  how:[
+    "Start with one node covering the whole region, capacity k.",
+    "Insert a point into the node whose bounds contain it.",
+    "If a leaf exceeds k points, subdivide it into 4 child quadrants and redistribute its points.",
+    "Repeat recursively; dense clusters produce deep subtrees, sparse areas stay shallow.",
+    "Range query: recurse only into children whose bounds intersect the query rectangle."
+  ],
+  complexity:[["Insert","O(depth) ≈ O(log n)"],["Range query","O(log n + hits)"],["Space","O(n)"],["Worst case","O(n) if fully clustered"]],
+  advantages:["Adapts cell size to point density","Efficient range & nearest-neighbor queries","Simple recursive structure","Great for collision detection / culling"],
+  disadvantages:["Can get unbalanced/deep with tight clusters","Rebuild/rebalance cost on heavy updates","Only 2-D (octree for 3-D)","Boundary points need careful handling"],
+  tradeoffs:"Capacity k trades tree depth against per-node scan cost: small k → deeper tree, finer cells, more nodes; large k → shallower tree, more brute-force within a leaf. Quadtrees adapt to density (unlike uniform geohash grids) but can degenerate to O(n) depth if all points coincide (cap the depth). For moving objects, updates mean re-inserting; grids or H3 may be cheaper. Choose quadtrees for static or moderately dynamic, skewed point sets needing range/kNN queries.",
+  whenNot:"Avoid quadtrees for uniformly distributed data (a flat grid is simpler and as fast), for extremely high update rates where constant re-insertion dominates, for 3-D data (use an octree/k-d tree), or when you only need coarse bucketing (geohash/H3 are simpler to index in a database).",
+  sim,
+  code:{
+"Java":`// quadtree insert with capacity-based subdivision\nclass QuadTree {\n  Rect bounds; int cap; List<Pt> pts = new ArrayList<>();\n  QuadTree[] ch; boolean divided = false;\n  boolean insert(Pt p){\n    if(!bounds.contains(p)) return false;\n    if(!divided && pts.size() < cap){ pts.add(p); return true; }\n    if(!divided) subdivide();\n    for(QuadTree c: ch) if(c.insert(p)) return true;\n    return false;\n  }\n  void query(Rect range, List<Pt> out){\n    if(!bounds.intersects(range)) return;          // prune whole subtree\n    for(Pt p: pts) if(range.contains(p)) out.add(p);\n    if(divided) for(QuadTree c: ch) c.query(range, out);\n  }\n  void subdivide(){\n    double h = bounds.w/2;\n    ch = new QuadTree[]{ /* NW,NE,SW,SE quadrants */ };\n    for(Pt p: pts) for(QuadTree c: ch) if(c.insert(p)) break;\n    pts.clear(); divided = true;\n  }\n}`,
+"Python":`class QuadTree:\n    def __init__(self, bounds, cap=4):\n        self.b, self.cap = bounds, cap\n        self.pts, self.children, self.divided = [], None, False\n    def insert(self, p):\n        if not self.b.contains(p): return False\n        if not self.divided and len(self.pts) < self.cap:\n            self.pts.append(p); return True\n        if not self.divided: self.subdivide()\n        return any(c.insert(p) for c in self.children)\n    def query(self, rng, out):\n        if not self.b.intersects(rng): return          # prune\n        out += [p for p in self.pts if rng.contains(p)]\n        if self.divided:\n            for c in self.children: c.query(rng, out)`
+  },
+  realWorld:[
+    ["Google Maps / GIS","Spatial indexes bucket features so map tiles render only nearby geometry."],
+    ["Game engines","Broad-phase collision detection and view-frustum culling use quadtrees/octrees to avoid O(n²) checks."],
+    ["Image compression","Quadtrees encode images by subdividing only detailed regions (region quadtrees)."],
+    ["Uber / ride-hailing","Spatial partitioning to find nearby drivers in dense city cores vs sparse suburbs."],
+    ["Databases (PostGIS, SQLite R*Tree)","Tree-based spatial indexes power bounding-box and nearest-neighbor queries."]
+  ],
+  interview:[
+    ["basic","What is a quadtree?","A tree that recursively partitions 2-D space into four quadrants. Each node stores a few points; when it fills, it subdivides into four children. It adapts resolution to point density, making spatial queries efficient."],
+    ["basic","How does a range query work?","Starting at the root, you check whether each node's bounds intersect the query rectangle. If not, you prune that entire subtree; if yes, you test the node's points and recurse into intersecting children. This skips most of the space."],
+    ["inter","Why is a quadtree better than a uniform grid for some data?","A uniform grid wastes cells in empty areas and can overflow single cells in dense clusters. A quadtree subdivides only where points are dense, so it uses fewer nodes overall and keeps per-cell counts bounded, adapting naturally to skewed distributions."],
+    ["inter","How do you handle points on quadrant boundaries?","Use a consistent, half-open convention (e.g., a point belongs to the child whose range includes its lower edge but excludes the upper) so each point lands in exactly one child. Alternatively, store boundary-straddling objects (with extent) at the parent, as in region/loose quadtrees."],
+    ["adv","What's the worst case and how do you bound it?","If many points coincide or cluster tightly, subdivision recurses deeply, approaching O(n) depth and query cost. Bound it by capping maximum depth (stop subdividing and allow a leaf to hold extra points) or by using a k-d tree which splits on median for balance."],
+    ["adv","Quadtree vs k-d tree vs R-tree?","Quadtree splits space into fixed quadrants (region-based), simple and good for points. A k-d tree splits on alternating dimensions at medians, staying balanced for kNN. An R-tree groups objects by minimum bounding rectangles and is optimized for disk and extended objects (used in spatial databases). Choose based on data (points vs shapes), balance needs, and in-memory vs on-disk."],
+    ["sd","Where would a quadtree fit in a system design?","In the location/matching service of a maps or ride-hailing system to index moving/static points and answer 'who/what is near here?' queries; in game servers for collision broad-phase; and in rendering pipelines for culling. For database-backed proximity, you'd often pair or replace it with geohash/H3 or an R-tree index."]
+  ],
+  mistakes:["No max-depth cap, so coincident points cause runaway subdivision.","Inconsistent boundary handling that double-counts or drops points.","Rebuilding the whole tree on every small update instead of incremental insert/remove.","Using a quadtree for uniform data where a grid is simpler and faster.","Ignoring object extent — points-only quadtrees mishandle sized objects."],
+  best:["Cap maximum depth and/or node capacity to bound worst case.","Use a clear half-open boundary rule for quadrant assignment.","Prune aggressively: test bounds intersection before recursing.","Consider loose/region quadtrees for objects with size.","For heavy movement, rebuild periodically or use grid/H3 instead."],
+  related:[["Geohash","🌐","String-based spatial index","geohash.html"],["H3 Indexing","⬡","Hexagonal grid system","h3-indexing.html"],["Ride Sharing","🚗","Nearby matching","ride-sharing.html"],["B-Tree / B+ Tree","🌲","Tree indexing","b-tree.html"],["Database Indexing","🔎","Spatial indexes","system-designed.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Distributed Web Crawler — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:740px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:520px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🕷️</span> Web Crawler</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Distributed Web Crawler</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> BFS vs DFS</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Distributed Web Crawler</h1>
+      <p class="tagline">How Googlebot and friends fetch billions of pages — a scheduler feeding a massive URL frontier,
+        pools of polite crawler workers respecting robots.txt and per-host delays, a parser extracting new links, and a
+        Bloom filter keeping the "have I seen this URL?" check fast and tiny. Explore scheduling, politeness, dedup, queue
+        growth and worker scaling with live visualizations and an interactive crawl simulator.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>URL frontier</b>&nbsp;at web scale</span>
+        <span class="hpill"><b>Polite</b>&nbsp;per-host crawling</span>
+        <span class="hpill"><b>Bloom filter</b>&nbsp;dedup</span>
+        <span class="hpill"><b>Live</b>&nbsp;crawl simulator</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Frontier Ordering</div><h2>BFS vs DFS vs Priority</h2></div></div>
+      <div class="card">
+        <div class="block-title">Traversal Strategies</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>What real crawlers do —</b> essentially <b>BFS with priorities</b>. The frontier is a priority queue keyed by importance (PageRank, freshness, host budget), not a pure FIFO or stack — so high-value pages are fetched first while breadth keeps coverage wide.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The key paths — the crawl loop, a priority frontier, per-host politeness, robots.txt checks, a Bloom filter and URL deduplication.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Crawl Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Crawler workers <b id="pgWorkersV">4</b></label><input id="pgWorkers" type="range" min="1" max="8" value="4"></div>
+            <div class="pg-field"><label>Links per page <b id="pgBranchV">3</b></label><input id="pgBranch" type="range" min="1" max="6" value="3"></div>
+            <div class="pg-field"><label>Duplicate rate <b id="pgDupV">40%</b></label><input id="pgDup" type="range" min="0" max="85" value="40"></div>
+            <div class="pg-btns" style="margin-bottom:14px"><button class="go" id="pgSeed">🌱 Add seed URLs</button></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Start</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Crawled</div><div class="v ok" id="pgCrawled">0</div></div>
+              <div class="pg-stat"><div class="k">Frontier</div><div class="v ac" id="pgFrontier">0</div></div>
+              <div class="pg-stat"><div class="k">Dupes skipped</div><div class="v" id="pgDupes">0</div></div>
+              <div class="pg-stat"><div class="k">Pages / sec</div><div class="v wa" id="pgRate">0</div></div>
+              <div class="pg-stat"><div class="k">Unique found</div><div class="v" id="pgUnique">0</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   DISTRIBUTED WEB CRAWLER — modular vanilla JS (SVG animations, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=n=>n.toLocaleString();
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in typeof this export default stream throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None while not and or "+
+    "String Long Integer List Map Set Stream Queue true false null val boolean byte "+
+    "SELECT INSERT UPDATE FROM WHERE ORDER BY LIMIT DESC select from where order by limit desc").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|--[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture (snake pipeline + discovery loop) ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    const W=108,H=42,colX=c=>18+c*125,rowY=r=>r===0?40:132;
+    this.nodes=[["🌱","Seeds",0,0],["🗓️","Scheduler",1,0],["📥","Queue",2,0],["🤖","Workers",3,0],["📄","Parser",4,0],
+                ["🔁","Dedup",4,1],["🌸","Bloom",3,1],["🗄️","Storage",2,1],["🔎","Indexer",1,1]];
+    this.cx=[]; this.cy=[];
+    this.nodes.forEach(([ic,nm,c,r])=>{ const x=colX(c),y=rowY(r);
+      this.box(x,y,W,H,nm,nm==="Bloom"?"#fbbf24":nm==="Workers"?"#7C3AED":nm==="Queue"?"#38bdf8":"#3a3a42",ic);
+      this.cx.push(x+W/2); this.cy.push(y+H/2); });
+    for(let i=0;i<this.nodes.length-1;i++) this.arrow(this.cx[i],this.cy[i],this.cx[i+1],this.cy[i+1],"#2f2f37");
+    // discovery feedback arc: Parser -> Scheduler (over the top)
+    this.p0=[this.cx[4],this.cy[4]-24]; this.p2=[this.cx[1],this.cy[1]-24]; this.p1=[(this.p0[0]+this.p2[0])/2,4];
+    this.svg.appendChild(S("path",{d:`M ${this.p0[0]} ${this.p0[1]} Q ${this.p1[0]} ${this.p1[1]} ${this.p2[0]} ${this.p2[1]}`,fill:"none",stroke:"#2f2f37","stroke-dasharray":"4 4"}));
+    this.svg.appendChild(T(this.p1[0],14,"discovered links",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));
+    this.packets=[]; this.fb=[]; this.spawn=0;
+    this.cap("Seed URLs enter the scheduler, which feeds the frontier queue. Workers fetch pages, the parser extracts links, dedup + a Bloom filter drop URLs already seen, content is stored and indexed — and freshly discovered links loop back into the scheduler.");
+  }
+  bez(t){ const u=1-t,a=this.p0,b=this.p1,c=this.p2;
+    return [u*u*a[0]+2*u*t*b[0]+t*t*c[0], u*u*a[1]+2*u*t*b[1]+t*t*c[1]]; }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.55,.95); this.packets.push({prog:0,dead:false,el:this.dot(this.cx[0],this.cy[0],"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.7;
+      if(p.prog>=this.cx.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog),f=p.prog-seg;
+      p.el.setAttribute("cx",this.cx[seg]+(this.cx[seg+1]-this.cx[seg])*f);
+      p.el.setAttribute("cy",this.cy[seg]+(this.cy[seg+1]-this.cy[seg])*f);
+      if(seg===4&&Math.random()<0.05*dt*60){/*noop*/}
+      // spawn feedback as packet passes parser
+      if(!p.fbDone && p.prog>=4){ p.fbDone=true; if(Math.random()<0.6) this.fb.push({t:0,el:this.dot(this.p0[0],this.p0[1],"#34d399",3.5)}); }
+    });
+    this.fb.forEach(f=>{ f.t+=dt*.9; const pt=this.bez(clamp(f.t,0,1)); f.el.setAttribute("cx",pt[0]); f.el.setAttribute("cy",pt[1]);
+      if(f.t>=1){ f.dead=true; f.el.remove(); } });
+    this.fb=this.fb.filter(f=>!f.dead);
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. URL Scheduling (priority frontier) ---- */
+class SchedulingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.box(20,92,110,44,"Scheduler","#7C3AED","prioritize");
+    this.svg.appendChild(T(520,20,"priority frontier",{fill:"#8b8b93","font-size":10.5,"text-anchor":"middle"}));
+    this.qx=445; this.qw=180; this.top=32; this.slotH=28; this.max=6;
+    this.svg.appendChild(S("rect",{x:this.qx-5,y:this.top-6,width:this.qw+10,height:this.slotH*this.max+10,rx:10,fill:"#0e0e11",stroke:"#26262e"}));
+    this.entries=[]; this.workerBox=this.box(20,20,110,40,"Worker","#3a3a42","fetch");
+    this.arrow(130,114,this.qx-5,this.top+40,"#2f2f37");
+    this.spawn=.4; this.pop=1.4; this.inc=[];
+    this.PC={3:"#7C3AED",2:"#38bdf8",1:"#3a3a42"};
+    this.cap("The scheduler assigns each URL a priority (importance, freshness, host budget) and inserts it into the frontier — a priority queue. Workers always pull the highest-priority URL next, so valuable pages are crawled first.");
+  }
+  addEntry(prio){ if(this.entries.length>=this.max){ // drop lowest
+      let lowIdx=0; this.entries.forEach((e,i)=>{ if(e.prio<this.entries[lowIdx].prio)lowIdx=i; });
+      const e=this.entries.splice(lowIdx,1)[0]; e.g.remove(); }
+    const g=S("g");
+    const rect=S("rect",{x:this.qx,y:0,width:this.qw,height:this.slotH-6,rx:7,fill:"#161619",stroke:this.PC[prio]}); g.appendChild(rect);
+    g.appendChild(S("circle",{cx:this.qx+14,cy:(this.slotH-6)/2,r:5,fill:this.PC[prio]}));
+    g.appendChild(T(this.qx+28,(this.slotH-6)/2+4,"/page-"+randi(100,999),{fill:"#d4d4d8","font-size":11,"font-family":"JetBrains Mono,monospace"}));
+    g.appendChild(T(this.qx+this.qw-10,(this.slotH-6)/2+4,"P"+prio,{fill:this.PC[prio],"font-size":10,"text-anchor":"end","font-weight":700}));
+    this.svg.appendChild(g);
+    const e={prio,g,y:this.top+this.max*this.slotH,ty:0}; this.entries.push(e);
+    this.entries.sort((a,b)=>b.prio-a.prio);
+    this.entries.forEach((en,i)=>en.ty=this.top+i*this.slotH);
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.6,1.0); const prio=randi(1,3);
+      this.inc.push({prog:0,prio,dead:false,el:this.dot(150,114,this.PC[prio])}); }
+    this.inc.forEach(p=>{ if(p.dead)return; p.prog+=dt*2; p.el.setAttribute("cx",150+(300-150)*p.prog);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); this.addEntry(p.prio); } });
+    this.inc=this.inc.filter(p=>!p.dead);
+    this.entries.forEach(e=>{ e.y+=(e.ty-e.y)*Math.min(1,dt*7); e.g.setAttribute("transform",`translate(0 ${e.y})`); });
+    this.pop-=dt;
+    if(this.pop<=0 && this.entries.length>0){ this.pop=rand(1.1,1.7);
+      const e=this.entries.shift(); this.popping={g:e.g,x:0,tx:-330};
+      this.entries.forEach((en,i)=>en.ty=this.top+i*this.slotH); }
+    if(this.popping){ this.popping.x+=(this.popping.tx-this.popping.x)*Math.min(1,dt*5);
+      this.popping.g.setAttribute("transform",`translate(${this.popping.x} ${this.top})`);
+      if(this.popping.x<-320){ this.popping.g.remove(); this.popping=null; } }
+  }
+}
+
+/* ---- 3. Politeness (per-host crawl delay) ---- */
+class PolitenessViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.hosts=[["site-a.com",30],["site-b.com",90],["site-c.com",150]];
+    this.barX=170; this.barW=280;
+    this.rows=this.hosts.map(([nm,y])=>{ this.box(20,y-4,130,34,nm,"#3a3a42");
+      this.svg.appendChild(S("rect",{x:this.barX,y:y,width:this.barW,height:18,rx:5,fill:"#141416",stroke:"#26262e"}));
+      const fill=S("rect",{x:this.barX,y:y,width:0,height:18,rx:5,fill:"#7C3AED"}); this.svg.appendChild(fill);
+      const lbl=T(this.barX+this.barW+8,y+14,"ready",{fill:"#34d399","font-size":10.5,"font-weight":700}); this.svg.appendChild(lbl);
+      return {y,cool:rand(0,1),delay:rand(1.4,2.2),fill,lbl,pulse:0}; });
+    this.cap("Politeness means never hammering one server. Each host has a crawl-delay: after a fetch the worker must wait before hitting that host again. Different hosts are crawled in parallel — the delay is per-host, not global.");
+  }
+  frame(dt){ this.rows.forEach(r=>{ r.cool-=dt/r.delay;
+      if(r.cool<=0){ // fetch now
+        r.cool=1; r.pulse=1; }
+      r.fill.setAttribute("width", clamp(r.cool,0,1)*this.barW);
+      if(r.pulse>0){ r.pulse-=dt*2.2; r.fill.setAttribute("fill","#34d399"); r.lbl.textContent="fetch ✓"; r.lbl.setAttribute("fill","#34d399"); }
+      else if(r.cool>0.02){ r.fill.setAttribute("fill","#7C3AED"); r.lbl.textContent="wait "+ (r.cool*r.delay).toFixed(1)+"s"; r.lbl.setAttribute("fill","#8b8b93"); }
+      else { r.lbl.textContent="ready"; r.lbl.setAttribute("fill","#34d399"); }
+    }); }
+}
+
+/* ---- 4. robots.txt (allow / disallow) ---- */
+class RobotsViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.svg.appendChild(S("rect",{x:18,y:24,width:180,height:150,rx:10,fill:"#0e0e11",stroke:"#3a3a42"}));
+    this.svg.appendChild(T(30,44,"robots.txt",{fill:"#c4a2ff","font-size":12,"font-weight":700,"font-family":"JetBrains Mono,monospace"}));
+    ["User-agent: *","Allow: /blog","Allow: /public","Disallow: /admin","Disallow: /private","Crawl-delay: 1"]
+      .forEach((ln,i)=>this.svg.appendChild(T(30,66+i*18,ln,{fill:i>=3&&i<=4?"#f87171":i>=1&&i<=2?"#34d399":"#8b8b93","font-size":10.5,"font-family":"JetBrains Mono,monospace"})));
+    this.box(250,90,110,44,"Checker","#7C3AED","match rules");
+    this.box(490,44,130,40,"Fetch","#34d399","allowed");
+    this.box(490,140,130,40,"Skip","#f87171","disallowed");
+    this.arrow(198,112,250,112,"#2f2f37"); this.arrow(360,108,490,64,"#242430"); this.arrow(360,120,490,160,"#242430");
+    this.paths=[["/blog/post-1",true],["/admin/panel",false],["/public/img.png",true],["/private/keys",false],["/blog/tag/go",true],["/admin/users",false]];
+    this.pk=[]; this.spawn=.3;
+    this.lbl=T(305,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.lbl);
+    this.cap("Before fetching, the crawler reads a site's robots.txt and honours its Allow/Disallow rules (and crawl-delay). URLs under disallowed paths are skipped — respecting robots.txt is a hard rule for well-behaved crawlers.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0 && !this.cur){ this.spawn=rand(1.0,1.5); const p=this.paths[randi(0,this.paths.length-1)];
+      this.cur={path:p[0],ok:p[1],phase:"in",prog:0,el:this.dot(210,112,"#c4a2ff")}; this.lbl.textContent="checking "+p[0]; this.lbl.setAttribute("fill","#8b8b93"); }
+    if(this.cur){ const c=this.cur;
+      if(c.phase==="in"){ c.prog+=dt*2; c.el.setAttribute("cx",210+(305-210)*c.prog);
+        if(c.prog>=1){ c.phase="out"; c.prog=0; c.el.setAttribute("fill",c.ok?"#34d399":"#f87171"); } }
+      else { c.prog+=dt*2; const ty=c.ok?64:160; c.el.setAttribute("cx",305+(490-305)*c.prog); c.el.setAttribute("cy",112+(ty-112)*c.prog);
+        if(c.prog>=1){ c.el.remove(); this.lbl.textContent=c.path+(c.ok?"  → allowed":"  → blocked"); this.lbl.setAttribute("fill",c.ok?"#34d399":"#f87171"); this.cur=null; } }
+    }
+  }
+}
+
+/* ---- 5. Duplicate Detection (Bloom filter) ---- */
+class BloomViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.N=24; this.bits=new Array(this.N).fill(0);
+    this.cw=22; this.x0=40; this.by=150;
+    this.cells=[];
+    for(let i=0;i<this.N;i++){ const x=this.x0+i*this.cw;
+      const r=S("rect",{x,y:this.by,width:this.cw-4,height:26,rx:4,fill:"#141416",stroke:"#26262e"}); this.svg.appendChild(r);
+      this.svg.appendChild(T(x+(this.cw-4)/2,this.by+40,"0",{fill:"#5b5b63","font-size":8,"text-anchor":"middle"}));
+      this.cells.push(r); }
+    this.svg.appendChild(T(40,140,"bit array",{fill:"#8b8b93","font-size":10}));
+    this.src=this.dot(70,44,"#c4a2ff",6);
+    this.urlLbl=T(90,48,"",{fill:"#d4d4d8","font-size":12,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.urlLbl);
+    this.verdict=T(430,48,"",{fill:"#8b8b93","font-size":13,"font-weight":700,"text-anchor":"start"}); this.svg.appendChild(this.verdict);
+    this.pool=["/a","/b","/c","/d","/e","/f"];
+    this.arcs=[]; this.spawn=.3; this.newN=0; this.dupN=0;
+    this.stat=T(320,206,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.reset=0;
+    this.cap("A Bloom filter answers 'have I seen this URL?' in tiny space. Each URL is hashed to k bit positions. If all k bits are already 1 it's probably a duplicate (skip); if any is 0 it's definitely new — set the bits and crawl it.");
+  }
+  hashes(str){ let h1=7,h2=13,h3=101; for(const ch of str){ const c=ch.charCodeAt(0); h1=(h1*31+c)%this.N; h2=(h2*17+c+5)%this.N; h3=(h3*13+c+9)%this.N; }
+    return [h1%this.N,h2%this.N,h3%this.N]; }
+  frame(dt){ this.reset+=dt; if(this.reset>=9){ this.reset=0; this.bits.fill(0); this.cells.forEach(c=>{ c.setAttribute("fill","#141416"); c.setAttribute("stroke","#26262e"); }); }
+    this.spawn-=dt;
+    if(this.spawn<=0 && !this.cur){ this.spawn=rand(1.1,1.6); const u="/page"+this.pool[randi(0,this.pool.length-1)];
+      const pos=this.hashes(u); const seen=pos.every(p=>this.bits[p]===1);
+      this.cur={u,pos,seen,phase:0,prog:0}; this.urlLbl.textContent=u; this.verdict.textContent="hashing…"; this.verdict.setAttribute("fill","#8b8b93");
+      this.arcs=pos.map(p=>this.dot(70,44,"#fbbf24",4)); }
+    if(this.cur){ const c=this.cur; c.prog+=dt*1.8;
+      c.pos.forEach((p,i)=>{ const tx=this.x0+p*this.cw+(this.cw-4)/2, ty=this.by;
+        this.arcs[i].setAttribute("cx",70+(tx-70)*c.prog); this.arcs[i].setAttribute("cy",44+(ty-44)*Math.min(1,c.prog)); });
+      if(c.prog>=1){ this.arcs.forEach(a=>a.remove()); this.arcs=[];
+        if(c.seen){ this.dupN++; this.verdict.textContent="⚠ probably seen → skip"; this.verdict.setAttribute("fill","#fbbf24");
+          c.pos.forEach(p=>this.cells[p].setAttribute("stroke","#fbbf24")); }
+        else { this.newN++; this.verdict.textContent="✓ new → crawl + set bits"; this.verdict.setAttribute("fill","#34d399");
+          c.pos.forEach(p=>{ this.bits[p]=1; this.cells[p].setAttribute("fill","rgba(52,211,153,.3)"); this.cells[p].setAttribute("stroke","#34d399"); }); }
+        this.cur=null; }
+    }
+    this.stat.textContent=`new: ${this.newN} · duplicates skipped: ${this.dupN} · bits set: ${this.bits.filter(b=>b).length}/${this.N}`;
+  }
+}
+
+/* ---- 6. BFS vs DFS traversal ---- */
+class TraversalViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.pos=[[320,24],[170,90],[320,90],[470,90],[110,162],[210,162],[290,162],[370,162],[450,162],[540,162]];
+    this.edges=[[0,1],[0,2],[0,3],[1,4],[1,5],[2,6],[2,7],[3,8],[3,9]];
+    this.edges.forEach(([a,b])=>this.arrow(this.pos[a][0],this.pos[a][1]+8,this.pos[b][0],this.pos[b][1]-8,"#2a2a32"));
+    this.circs=this.pos.map((p,i)=>{ const c=S("circle",{cx:p[0],cy:p[1],r:13,fill:"#161619",stroke:"#3a3a42","stroke-width":2}); this.svg.appendChild(c);
+      this.svg.appendChild(T(p[0],p[1]+4,String(i),{fill:"#8b8b93","font-size":10,"text-anchor":"middle"})); return c; });
+    this.bfs=[0,1,2,3,4,5,6,7,8,9]; this.dfs=[0,1,4,5,2,6,7,3,8,9];
+    this.mode="BFS"; this.order=this.bfs; this.ptr=0; this.timer=0;
+    this.modeLbl=T(320,198,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.modeLbl);
+    this.cap("The crawl frontier's ordering decides traversal. A FIFO queue gives breadth-first (level by level); a LIFO stack gives depth-first (follow one path deep). Real crawlers use BFS-like ordering with priorities for broad, fair coverage.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=0.55;
+    if(this.ptr>=this.order.length){ // switch mode
+      this.circs.forEach(c=>{ c.setAttribute("fill","#161619"); c.setAttribute("stroke","#3a3a42"); });
+      this.mode=this.mode==="BFS"?"DFS":"BFS"; this.order=this.mode==="BFS"?this.bfs:this.dfs; this.ptr=0; this.timer=0.8; return; }
+    const idx=this.order[this.ptr];
+    this.circs[idx].setAttribute("fill", this.mode==="BFS"?"rgba(56,189,248,.35)":"rgba(124,58,237,.4)");
+    this.circs[idx].setAttribute("stroke", this.mode==="BFS"?"#38bdf8":"#7C3AED");
+    this.modeLbl.textContent=`${this.mode} order — visiting node ${idx}  (${this.mode==="BFS"?"FIFO queue":"LIFO stack"})`;
+    this.modeLbl.setAttribute("fill", this.mode==="BFS"?"#38bdf8":"#c4a2ff");
+    this.ptr++;
+  }
+}
+
+/* ---- 7. Queue Growth ---- */
+class QueueViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.cx0=40; this.cy0=20; this.cw=560; this.ch=150;
+    this.svg.appendChild(S("rect",{x:this.cx0,y:this.cy0,width:this.cw,height:this.ch,rx:8,fill:"#0e0e11",stroke:"#26262e"}));
+    this.area=S("path",{fill:"rgba(124,58,237,.18)",stroke:"#7C3AED","stroke-width":2}); this.svg.appendChild(this.area);
+    this.svg.appendChild(T(this.cx0,this.cy0-6,"frontier size",{fill:"#8b8b93","font-size":10}));
+    this.discLbl=T(this.cx0,205,"",{fill:"#38bdf8","font-size":11}); this.svg.appendChild(this.discLbl);
+    this.crawlLbl=T(this.cx0+220,205,"",{fill:"#34d399","font-size":11}); this.svg.appendChild(this.crawlLbl);
+    this.hist=[]; this.acc=0; this.simT=0; this.disc=0; this.crawled=0; this.q=2;
+    this.cap("Early on, each crawled page discovers several new links, so the frontier explodes faster than workers can drain it. As coverage saturates (more duplicates, fewer new links), growth slows and the queue stabilizes.");
+  }
+  frame(dt){ this.acc+=dt; this.simT+=dt;
+    // discovery rate decays over time (saturation); crawl rate steady
+    const discoverRate=6*Math.exp(-this.simT/6)+0.6, crawlRate=2.2;
+    this.disc+=discoverRate*dt; this.crawled+=crawlRate*dt;
+    this.q=Math.max(0,this.disc-this.crawled);
+    if(this.acc>=0.1){ this.acc=0; this.hist.push(this.q); if(this.hist.length>140)this.hist.shift(); }
+    const maxV=Math.max(20,...this.hist);
+    const n=this.hist.length; let d=`M ${this.cx0} ${this.cy0+this.ch}`;
+    this.hist.forEach((v,i)=>{ const x=this.cx0+ (n<=1?0:i/(n-1))*this.cw, y=this.cy0+this.ch-(v/maxV)*(this.ch-8); d+=` L ${x.toFixed(1)} ${y.toFixed(1)}`; });
+    d+=` L ${this.cx0+this.cw} ${this.cy0+this.ch} Z`; this.area.setAttribute("d",d);
+    this.discLbl.textContent="discovered: "+Math.floor(this.disc);
+    this.crawlLbl.textContent="crawled: "+Math.floor(this.crawled)+"  ·  frontier: "+Math.floor(this.q);
+    if(this.simT>26){ this.simT=0; this.disc=0; this.crawled=0; this.hist=[]; }
+  }
+}
+
+/* ---- 8. Worker Scaling (+ host sharding) ---- */
+class WorkerViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(20,86,100,48,"Frontier","#38bdf8","URL queue");
+    this.slots=[]; const ys=[16,58,100,142,184];
+    ys.forEach((y,i)=>{ const g=this.box(280,y,150,30,"worker "+(i+1),"#3a3a42"); this.slots.push({y:y+15,g,active:i<3}); });
+    this.hostC=["#7C3AED","#38bdf8","#fbbf24"];
+    ys.forEach(y=>this.arrow(120,110,280,y+15,"#242430"));
+    this.thru=T(500,100,"",{fill:"#34d399","font-size":22,"text-anchor":"middle","font-weight":800,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.thru);
+    this.svg.appendChild(T(500,72,"throughput",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.svg.appendChild(T(500,130,"pages / sec",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.svg.appendChild(T(500,164,"sharded by host",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));
+    this.active=3; this.target=3; this.pk=[]; this.spawn=0; this.timer=0;
+    this.applyActive();
+    this.cap("Throughput scales with worker count — add workers, crawl more pages per second. URLs are sharded by host (consistent hashing) so each host's politeness delay is enforced in one place and load spreads evenly.");
+  }
+  applyActive(){ this.slots.forEach((s,i)=>{ s.active=i<this.active;
+    const rect=s.g.querySelector("rect"); rect.setAttribute("stroke",s.active?"#7C3AED":"#26262e"); rect.setAttribute("opacity",s.active?1:.4); }); }
+  frame(dt){ this.timer-=dt; if(this.timer<=0){ this.timer=rand(2,3.2); this.target=randi(2,5); }
+    if(this.active<this.target){ this.active++; this.applyActive(); } else if(this.active>this.target){ this.active--; this.applyActive(); }
+    this.spawn-=dt; const interval=0.5/this.active;
+    if(this.spawn<=0){ this.spawn=interval; const i=randi(0,this.active-1); const col=this.hostC[randi(0,2)];
+      this.pk.push({prog:0,y:this.slots[i].y,col,dead:false,el:this.dot(120,110,col,4)}); }
+    this.pk.forEach(p=>{ if(p.dead)return; p.prog+=dt*2.2; p.el.setAttribute("cx",120+(280-120)*p.prog); p.el.setAttribute("cy",110+(p.y-110)*p.prog);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); } });
+    this.pk=this.pk.filter(p=>!p.dead);
+    this.thru.textContent=(this.active*2.4).toFixed(1);
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS to avoid TDZ)
+   ===================================================================== */
+const CODE_flow =
+"Seed URLs -> Scheduler (assign priority) -> Frontier queue\n" +
+"loop (each worker):\n" +
+"  url  = frontier.poll()              # highest priority next\n" +
+"  if not robots.allowed(url): continue\n" +
+"  politeness.waitForHost(url.host)    # per-host crawl delay\n" +
+"  html = fetch(url)\n" +
+"  links = parser.extract(html)\n" +
+"  for link in links:\n" +
+"    link = normalize(link)\n" +
+"    if bloom.mightContain(link): continue   # duplicate, skip\n" +
+"    bloom.add(link); frontier.add(link)      # new -> enqueue\n" +
+"  store(url, html); indexer.index(url, html)";
+
+const CODE_schedule =
+"// frontier = a priority queue keyed by crawl importance\n" +
+"PriorityQueue<Url> frontier = new PriorityQueue<>(\n" +
+"    Comparator.comparingDouble(Url::score).reversed());\n" +
+"double score(Url u){\n" +
+"  return 0.6*u.pageRank() + 0.3*u.freshness() - 0.1*hostLoad(u.host());\n" +
+"}\n" +
+"void schedule(Url u){ if (!seen(u)) frontier.add(u); }";
+
+const CODE_politeness =
+"// never hit the same host faster than its crawl-delay\n" +
+"private final Map<String, Long> nextAllowed = new ConcurrentHashMap<>();\n" +
+"void waitForHost(String host){\n" +
+"  long delay = robots.crawlDelayMs(host);      // e.g. 1000ms\n" +
+"  long now = System.currentTimeMillis();\n" +
+"  long ready = nextAllowed.getOrDefault(host, 0L);\n" +
+"  if (ready > now) sleep(ready - now);          // back off\n" +
+"  nextAllowed.put(host, Math.max(now, ready) + delay);\n" +
+"}";
+
+const CODE_robots =
+"# fetch + cache robots.txt per host, then test each path\n" +
+"def allowed(url):\n" +
+"    rules = robots_cache.get_or_fetch(url.host)   # cache per host\n" +
+"    for pattern in rules.disallow:\n" +
+"        if url.path.startswith(pattern):\n" +
+"            return False\n" +
+"    return True";
+
+const CODE_bloom =
+"// space-efficient probabilistic set: no false negatives\n" +
+"class BloomFilter {\n" +
+"  private final BitSet bits; private final int m, k;\n" +
+"  void add(String s){ for (int i=0;i<k;i++) bits.set(hash(s,i)%m); }\n" +
+"  boolean mightContain(String s){\n" +
+"    for (int i=0;i<k;i++) if (!bits.get(hash(s,i)%m)) return false; // definitely new\n" +
+"    return true;   // probably seen (small false-positive rate)\n" +
+"  }\n" +
+"}";
+
+const CODE_dedup =
+"// canonicalize before checking, so URL variants collapse to one\n" +
+"String normalize(String raw){\n" +
+"  URI u = URI.create(raw).normalize();\n" +
+"  String host = u.getHost().toLowerCase();\n" +
+"  String path = u.getPath().replaceAll(\"/+$\", \"\");   // drop trailing /\n" +
+"  String query = sortAndFilterParams(u.getQuery());     // drop tracking params\n" +
+"  return u.getScheme() + \"://\" + host + path + (query.isEmpty()? \"\" : \"?\"+query);\n" +
+"}";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A web crawler systematically fetches pages and follows their links. At scale it's a <b>distributed, cyclic pipeline</b>: a scheduler feeds a huge URL frontier, pools of workers fetch pages politely, a parser extracts links, dedup + a Bloom filter drop URLs already seen, and content is stored and indexed — while newly discovered links loop back into the scheduler.",
+    problem:"The web is effectively infinite and full of traps, duplicates and fragile servers. You must crawl broadly and freshly, never re-crawl the same URL endlessly, never overload a host, and coordinate thousands of workers without a central bottleneck.",
+    how:["Seed URLs are scheduled into the frontier with priorities.","Workers pull URLs, honour robots.txt and per-host delays, and fetch.","The parser extracts and normalizes outbound links.","A Bloom filter / dedup step drops URLs already seen.","Pages are stored and indexed; new links loop back to the scheduler."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Workers scale horizontally for throughput","The frontier + Bloom filter bound revisits","Kafka/queues decouple fetch from parse/index"],
+    disadvantages:["Crawler traps & spider webs need guarding","Politeness limits per-host speed","Freshness vs coverage is a constant trade-off"],
+    interview:[["How would you design a distributed web crawler?","A scheduler assigns priorities and feeds a URL frontier (a distributed priority queue). Worker pools pull URLs, respect robots.txt and per-host crawl delays, fetch, and parse out links. Each link is normalized and checked against a Bloom filter to skip already-seen URLs; new ones are enqueued. Pages are stored and indexed, and URLs are sharded by host so politeness is enforced per host and load spreads evenly. The link discovery forms a cycle back into the scheduler."]] },
+
+  { id:"scheduling", num:2, icon:"🗓️", tag:"Frontier", title:"URL Scheduling", viz:SchedulingViz,
+    definition:"The scheduler decides <b>what to crawl next</b>. The frontier isn't a plain FIFO — it's a <b>priority queue</b> ordered by importance (PageRank), freshness need, and per-host budget, so valuable and stale-but-important pages are fetched first.",
+    problem:"You can't crawl everything at once. With a finite crawl budget you must prioritize high-value and time-sensitive pages while still covering the web broadly and fairly across hosts.",
+    how:["Assign each URL a score from importance, freshness and host budget.","Insert it into a priority queue (the frontier).","Workers always pull the highest-priority URL.","Re-schedule pages for re-crawl based on how often they change.","Balance host budgets so no single site dominates."],
+    code:{ "Scheduler":CODE_schedule },
+    advantages:["Crawls high-value pages first","Freshness-aware re-crawling","Per-host fairness/budgeting"],
+    disadvantages:["Priority scoring is complex to tune","Priority queue at web scale is hard to distribute","Starvation risk for low-priority URLs"],
+    interview:[["How do you decide crawl order / what to crawl next?","Treat the frontier as a priority queue, not FIFO. Score URLs by importance (PageRank/inlinks), expected freshness (how often the page changes), and per-host budget, then always fetch the highest-scoring URL. Re-crawl frequency adapts to change rate. This maximizes value from a limited crawl budget while keeping coverage broad."]] },
+
+  { id:"politeness", num:3, icon:"🤝", tag:"Good Citizen", title:"Politeness", viz:PolitenessViz,
+    definition:"Politeness means never overwhelming a server. Each host gets a <b>crawl-delay</b>: after fetching a page from a host, a worker must wait before hitting that host again. Delays are enforced <b>per host</b>, so many sites are crawled in parallel.",
+    problem:"Fire thousands of requests at one domain and you'll DDoS it, get IP-banned, and violate norms. But crawling one host at a time is far too slow for the whole web.",
+    how:["Track the last-access time per host.","Enforce a minimum gap (crawl-delay) between requests to that host.","Honour Crawl-delay from robots.txt where present.","Shard URLs by host so one component owns a host's rate.","Crawl different hosts concurrently to keep throughput high."],
+    code:{ "Politeness":CODE_politeness },
+    advantages:["Avoids overloading / getting banned","Respects site owners and norms","Per-host limits still allow high total throughput"],
+    disadvantages:["Caps per-host crawl speed","Needs per-host state coordination","Slow hosts can stall their shard"],
+    interview:[["What is crawler politeness and how do you implement it?","Politeness caps how often you hit a single host. Keep per-host last-access (or next-allowed) timestamps and enforce a minimum crawl-delay (honouring robots.txt) before re-requesting that host. Shard URLs by host so one worker/partition owns each host's rate limit, and crawl many different hosts in parallel so overall throughput stays high while no single server is overwhelmed."]] },
+
+  { id:"robots", num:4, icon:"🚦", tag:"Rules", title:"robots.txt", viz:RobotsViz,
+    definition:"robots.txt is a file at a site's root telling crawlers which paths they may or may not fetch (plus an optional crawl-delay). Well-behaved crawlers fetch it first, cache it per host, and strictly honour its <b>Allow/Disallow</b> rules.",
+    problem:"Site owners need a way to keep crawlers out of private, expensive or pointless areas (admin pages, infinite calendars, search results). Ignoring robots.txt is abusive and gets you blocked or sued.",
+    how:["On first contact with a host, fetch /robots.txt.","Parse the User-agent, Allow, Disallow and Crawl-delay directives.","Cache the rules per host (with a TTL).","Test every candidate URL's path against the rules.","Skip disallowed paths; apply the crawl-delay to allowed ones."],
+    code:{ "robots (Python)":CODE_robots },
+    advantages:["Respects site owners' wishes","Avoids crawler traps & wasted fetches","Cached per host — cheap to check"],
+    disadvantages:["Rules can be large/ambiguous","Must refresh cache as rules change","Not a security boundary — just a convention"],
+    interview:[["How does a crawler handle robots.txt?","Fetch /robots.txt once per host, parse its Allow/Disallow/Crawl-delay rules for your user-agent, and cache them (with a TTL). Before fetching any URL, test its path against the cached rules and skip anything disallowed; apply the crawl-delay to the rest. It's a strict, hard rule for good crawlers and also protects you from traps."]] },
+
+  { id:"dedup", num:5, icon:"🌸", tag:"Bloom Filter", title:"Duplicate Detection", viz:BloomViz,
+    definition:"With billions of URLs you can't keep a full set in memory to answer 'seen this?'. A <b>Bloom filter</b> is a compact, probabilistic set: each URL is hashed to k bits. If all k are set it's <i>probably</i> seen; if any is 0 it's <i>definitely</i> new. No false negatives — only rare false positives.",
+    problem:"Pages link to each other constantly, so the same URL is discovered again and again. A naive hash set of every URL seen would need enormous memory; you need a tiny, fast 'have I seen this?' check.",
+    how:["Normalize the URL to a canonical form first.","Hash it with k independent hash functions into a bit array.","If all k bits are already 1 → treat as duplicate, skip.","If any bit is 0 → it's new: set those bits and enqueue.","Tune size m and k for an acceptable false-positive rate."],
+    code:{ "Bloom":CODE_bloom, "Normalize":CODE_dedup },
+    advantages:["Massive memory savings vs a full set","O(k) constant-time membership checks","No false negatives (never re-crawls a new URL wrongly skipped)"],
+    disadvantages:["False positives skip some genuinely new URLs","Can't delete entries (basic Bloom)","Fills up — needs sizing / scalable variants"],
+    interview:[["Why use a Bloom filter for URL dedup, and what's the catch?","Storing every seen URL in a hash set costs too much memory at web scale. A Bloom filter uses a bit array + k hashes to test membership in constant time and tiny space. The catch is false positives: it may say 'seen' for a URL that's actually new (so you skip it), but never false negatives. You size m and k to keep the false-positive rate low, and normalize URLs first so variants collapse."]] },
+
+  { id:"traversal", num:6, icon:"🧭", tag:"Ordering", title:"BFS vs DFS", viz:TraversalViz,
+    definition:"How you order the frontier defines the traversal. A <b>FIFO queue</b> gives breadth-first search (explore level by level); a <b>LIFO stack</b> gives depth-first (follow one path deep). Crawlers favour BFS-like ordering for broad, fair coverage.",
+    problem:"DFS can dive endlessly into one site (or a trap) and starve the rest of the web; naive BFS ignores importance. The ordering strategy directly shapes coverage, freshness and fairness.",
+    how:["FIFO frontier ⇒ BFS: near/seed pages first, wide coverage.","LIFO frontier ⇒ DFS: goes deep down one branch quickly.","BFS bounds depth and spreads across many hosts.","Add priorities on top of BFS for importance/freshness.","Cap depth to avoid infinite dives and traps."],
+    code:{ "Flow":CODE_flow },
+    advantages:["BFS: broad coverage, natural politeness spread","BFS reaches important shallow pages fast","Predictable, bounded depth"],
+    disadvantages:["DFS risks traps & unbalanced coverage","Pure BFS ignores page importance","Very large frontier memory either way"],
+    interview:[["BFS or DFS for a web crawler, and why?","BFS (FIFO frontier). It gives broad, fair coverage, reaches important shallow pages quickly, naturally spreads requests across many hosts (helping politeness), and bounds depth so you don't fall into traps. DFS tends to dive deep into a single site and can get stuck. In practice it's BFS ordering augmented with priorities (PageRank/freshness)."]] },
+
+  { id:"queue", num:7, icon:"📈", tag:"Dynamics", title:"Queue Growth", viz:QueueViz,
+    definition:"The frontier's size is dynamic. Early in a crawl each fetched page yields several brand-new links, so the queue grows explosively. Over time, as more links turn out to be duplicates, discovery slows and the frontier stabilizes or shrinks.",
+    problem:"An unbounded, ever-growing frontier can exhaust memory/disk. You must store it durably, spill to disk, and manage back-pressure so growth doesn't crash the system.",
+    how:["Each crawl discovers B new links (branching factor).","Frontier grows while discovery outpaces crawl rate.","Duplicates (caught by the Bloom filter) rise over time.","Growth decays as the reachable web saturates.","Persist the frontier (disk/DB) and apply back-pressure."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Prioritized frontier keeps the useful part hot","Disk-backed frontier survives restarts","Back-pressure prevents runaway growth"],
+    disadvantages:["Frontier can dwarf memory","Must persist & shard it","Managing billions of pending URLs is hard"],
+    interview:[["The frontier grows huge — how do you manage it?","Persist it: keep hot, high-priority URLs in memory/Redis and spill the rest to disk or a distributed store, sharded by host. Deduplicate aggressively with a Bloom filter so duplicates never enter, apply back-pressure when workers fall behind, and cap per-host and total sizes. Growth naturally decays as the crawl saturates and more links become duplicates."]] },
+
+  { id:"workers", num:8, icon:"🤖", tag:"Scale", title:"Worker Scaling", viz:WorkerViz,
+    definition:"Crawl throughput scales with the number of workers. Adding stateless workers that all pull from the shared frontier increases pages/sec nearly linearly — until politeness or bandwidth becomes the bottleneck. URLs are <b>sharded by host</b> so each host's rate limit is enforced in one place.",
+    problem:"One machine can't crawl the web. You need thousands of coordinated workers that don't duplicate work, don't violate politeness, and don't create a central bottleneck.",
+    how:["Run many stateless workers pulling from the shared frontier.","Shard URLs by host (consistent hashing) across workers/partitions.","Each shard owns its hosts' politeness/rate limits.","Scale workers up/down with queue depth (autoscaling).","Add fault tolerance: re-queue URLs from failed workers."],
+    code:{ "Politeness":CODE_politeness, "Flow":CODE_flow },
+    advantages:["Near-linear throughput scaling","Host sharding localizes politeness state","Stateless workers are easy to autoscale"],
+    disadvantages:["Politeness caps effective parallelism per host","Coordination/dedup must stay consistent","Hotspot hosts can unbalance shards"],
+    interview:[["How do you partition work across crawler workers?","Shard by host (consistent hashing on the domain). All URLs for a host go to the same worker/partition, so that host's politeness delay and robots rules are enforced in one place and you avoid two workers hammering the same server. Workers are stateless and pull from the shared, host-sharded frontier, so you can autoscale on queue depth and re-queue a failed worker's URLs elsewhere."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["🌸","Bloom Filter","Compact probabilistic set for 'have I seen this URL?' — k hashes into a bit array, no false negatives, tiny memory."],
+  ["📥","Queues","The URL frontier is a (priority) queue; distributed, persisted and host-sharded to hold billions of pending URLs."],
+  ["🌗","BFS","FIFO frontier ⇒ breadth-first: broad, fair coverage that reaches shallow important pages first — the crawler default."],
+  ["🕳️","DFS","LIFO frontier ⇒ depth-first: dives deep down one path; risky for crawlers (traps) but useful for bounded, targeted crawls."],
+  ["🧩","Sharding","Partition URLs by host (consistent hashing) so politeness is enforced per host and load spreads across workers."],
+  ["🤝","Politeness","Per-host crawl-delay and rate limits so you never overload a server or get your crawler banned."],
+  ["🚦","robots.txt","Per-host Allow/Disallow/Crawl-delay rules that good crawlers fetch, cache and strictly obey."],
+  ["🔁","Deduplication","URL normalization + Bloom filter to collapse variants and skip already-seen links, bounding re-crawls."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   COMPARISON table
+   ===================================================================== */
+const CMP=[
+  ["BFS (FIFO queue)","Level by level","O(width) — large","Broad, fair, shallow-first","Ignores importance alone"],
+  ["DFS (LIFO stack)","Deep down one path","O(depth) — small","Targeted, bounded crawls","Traps, unbalanced coverage"],
+  ["Priority (best-first)","By score (PageRank…)","O(frontier) + heap","Crawls high-value pages first","Complex scoring, starvation"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Strategy</th><th>Order</th><th>Memory</th><th>Strengths</th><th>Weaknesses</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td style="color:var(--ok)">${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["Design a distributed web crawler (like Googlebot).","Clarify scale, freshness and politeness goals. Core: scheduler assigns priorities → URL frontier (distributed priority queue, host-sharded) → stateless workers fetch, honouring robots.txt and per-host delays → parser extracts + normalizes links → Bloom filter dedup drops seen URLs → new URLs enqueued; pages stored + indexed. Discuss BFS-with-priority ordering, frontier persistence, worker scaling, and trap/duplicate handling."],
+  ["How do you avoid crawling the same URL repeatedly?","Normalize URLs to a canonical form (lowercase host, strip trailing slashes and tracking params, sort query) then test membership in a Bloom filter. If it might contain the URL, skip; otherwise add it and enqueue. The Bloom filter gives constant-time checks in tiny memory with no false negatives."],
+  ["Why a Bloom filter and not a hash set?","At billions of URLs a full hash set needs far too much memory. A Bloom filter stores only a bit array and answers membership with k hashes in O(k) time and a fraction of the space. The trade-off is a small false-positive rate (may skip a few genuinely new URLs) but never false negatives."],
+  ["What is politeness and how do you enforce it?","Never overload a host. Keep per-host next-allowed timestamps and enforce a minimum crawl-delay (honouring robots.txt) between requests to the same host. Shard URLs by host so one partition owns each host's rate, and crawl many hosts concurrently to keep total throughput high."],
+  ["How do you handle robots.txt?","Fetch /robots.txt once per host, parse Allow/Disallow/Crawl-delay for your user-agent, cache with a TTL, and test each URL's path before fetching. Disallowed paths are skipped; allowed ones use the crawl-delay. It's a hard rule and also shields you from traps."],
+  ["BFS or DFS, and how does the frontier decide?","The frontier's data structure decides: FIFO ⇒ BFS (broad coverage, shallow-first, good politeness spread), LIFO ⇒ DFS (deep, trap-prone). Crawlers use BFS-like ordering augmented with a priority score (importance/freshness), so it's really a best-first priority queue."],
+  ["How do you scale to billions of pages?","Stateless workers pulling from a distributed, host-sharded frontier; persist the frontier to disk/DB with hot URLs in memory; dedup via Bloom filter; autoscale workers on queue depth; and separate fetch/parse/index stages with queues (Kafka). Politeness caps per-host speed, so scale comes from crawling many hosts in parallel."],
+  ["How do you keep crawled content fresh?","Track each page's change rate and schedule re-crawls adaptively — crawl frequently-changing, important pages more often (freshness score in the priority function). Use HTTP conditional requests (ETag / If-Modified-Since) to skip unchanged pages cheaply."],
+  ["How do you handle crawler traps and infinite spaces?","Cap crawl depth and per-host URL budgets, honour robots.txt, detect near-duplicate/parameter-explosion pages via URL normalization and content hashing, and blacklist patterns (infinite calendars, session-id params). The Bloom filter and normalization stop most duplicate loops."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Crawl loop":CODE_flow,
+  "Scheduler":CODE_schedule,
+  "Politeness":CODE_politeness,
+  "robots.txt":CODE_robots,
+  "Bloom filter":CODE_bloom,
+  "URL normalize":CODE_dedup
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Ride Sharing","🚕","Sharding & Redis","ride-sharing.html"],
+    ["Notification System","🔔","Queues & Kafka","notification-system.html"],
+    ["Twitter News Feed","🐦","Fan-out & Kafka","news-feed.html"],
+    ["Rate Limiting","🛡️","Politeness cousin","rate-limiting.html"],
+    ["Kafka","🪵","Event streaming","kafka.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — crawl simulator (frontier + workers + Bloom dedup loop)
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.crawled=0; this.dupes=0; this.unique=0; this.frontier=3;
+    this.playing=false; this.uid=3; this.seen=new Set([1,2,3]); this.oldIds=[1,2,3];
+    this.crawlTimes=[]; this.now=0; this.packets=[]; this.CAP=60;
+    this.host=$("pgViz"); this.svg=S("svg",{viewBox:"0 0 620 300"}); this.host.appendChild(this.svg);
+    this.buildStage();
+    this.bind(); this.syncWorkers();
+    this.last=performance.now();
+    const loop=nw=>{ const dt=Math.min(.05,(nw-this.last)/1000); this.last=nw; this.now+=dt;
+      if(this.playing) this.tick(dt);
+      this.frame(dt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+    this.updateStats();
+  }
+  b(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color,"stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11.5,"font-weight":600,"text-anchor":"middle"}));
+    if(sub)g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  buildStage(){
+    // frontier box with fill bar
+    this.b(24,96,116,110,"Frontier","#38bdf8");
+    this.fBar=S("rect",{x:34,y:190,width:96,height:0,rx:5,fill:"rgba(56,189,248,.35)"}); this.svg.appendChild(this.fBar);
+    this.fCount=T(82,150,"3",{fill:"#38bdf8","font-size":22,"text-anchor":"middle","font-weight":800,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.fCount);
+    this.fCenter=[82,151];
+    // workers (up to 8, 2 cols)
+    this.wpos=[]; const cols=[210,255], rows=[54,102,150,198];
+    for(let i=0;i<8;i++){ const x=cols[i%2], y=rows[Math.floor(i/2)];
+      const c=S("circle",{cx:x,cy:y,r:10,fill:"#161619",stroke:"#26262e","stroke-width":2}); this.svg.appendChild(c);
+      this.wpos.push({x,y,c,active:i<4,pulse:0}); }
+    this.svg.appendChild(T(232,232,"workers",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    // bloom bit grid
+    this.bits=new Array(18).fill(0); this.bcells=[];
+    const bx=360,by=54,bw=40,bh=34;
+    for(let i=0;i<18;i++){ const x=bx+(i%6)*bw, y=by+Math.floor(i/6)*bh;
+      const r=S("rect",{x,y,width:bw-6,height:bh-6,rx:5,fill:"#141416",stroke:"#26262e"}); this.svg.appendChild(r); this.bcells.push(r); }
+    this.svg.appendChild(T(360,44,"Bloom filter",{fill:"#fbbf24","font-size":11,"font-weight":700}));
+    this.svg.appendChild(T(360,196,"green = new · grey = duplicate",{fill:"#5b5b63","font-size":9.5}));
+    this.svg.appendChild(T(232,20,"pull URL → fetch → discover links",{fill:"#5b5b63","font-size":9.5,"text-anchor":"middle"}));
+    this.bloomReset=0;
+  }
+  mk(x,y,fill,r){ const c=S("circle",{cx:x,cy:y,r:r||4.5,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.4))"}); this.svg.appendChild(c); return c; }
+  bind(){
+    $("pgWorkers").addEventListener("input",()=>{ $("pgWorkersV").textContent=$("pgWorkers").value; this.syncWorkers(); });
+    $("pgBranch").addEventListener("input",()=>$("pgBranchV").textContent=$("pgBranch").value);
+    $("pgDup").addEventListener("input",()=>$("pgDupV").textContent=$("pgDup").value+"%");
+    $("pgSeed").onclick=()=>{ this.frontier+=5; for(let i=0;i<5;i++){ this.uid++; this.seen.add(this.uid); this.oldIds.push(this.uid); } this.unique+=5; this.updateStats(); };
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.playing=false; this.crawled=this.dupes=this.unique=0; this.frontier=3;
+      this.uid=3; this.seen=new Set([1,2,3]); this.oldIds=[1,2,3]; this.crawlTimes=[];
+      this.packets.forEach(p=>p.el.remove()); this.packets=[];
+      this.bits.fill(0); this.bcells.forEach(c=>{ c.setAttribute("fill","#141416"); c.setAttribute("stroke","#26262e"); });
+      this.updateStats(); };
+  }
+  syncWorkers(){ const n=+$("pgWorkers").value; this.wpos.forEach((w,i)=>{ w.active=i<n;
+    w.c.setAttribute("stroke",w.active?"#34d399":"#26262e"); w.c.setAttribute("opacity",w.active?1:.35); });
+    this.wActive=n; }
+  hashes(id){ return [(id*2654435761)%18,(id*40503+7)%18,(id*97+13)%18].map(v=>((v%18)+18)%18); }
+  tick(dt){
+    if(this.packets.length>360) return; // back-pressure on animation
+    const nW=this.wActive; const interval=0.45/nW;
+    this._acc=(this._acc||0)+dt;
+    while(this._acc>=interval){ this._acc-=interval;
+      if(this.frontier>0){ this.frontier--; const w=this.pickWorker();
+        if(w) this.packets.push({stage:"toWorker",x:this.fCenter[0],y:this.fCenter[1],tx:w.x,ty:w.y,w,el:this.mk(this.fCenter[0],this.fCenter[1],"#c4a2ff",4.5)}); }
+    }
+  }
+  pickWorker(){ const act=this.wpos.filter(w=>w.active); return act.length?act[randi(0,act.length-1)]:null; }
+  moveTo(p,dt,sp){ const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy); if(d<4){p.x=p.tx;p.y=p.ty;return true;}
+    const s=Math.min(d,(sp||170)*dt); p.x+=dx/d*s; p.y+=dy/d*s; p.el.setAttribute("cx",p.x); p.el.setAttribute("cy",p.y); return false; }
+  lightBits(id){ this.hashes(id).forEach(b=>{ this.bits[b]=1; this.bcells[b].setAttribute("fill","rgba(251,191,36,.30)"); this.bcells[b].setAttribute("stroke","#fbbf24"); }); }
+  frame(dt){
+    // bloom visual decay
+    this.bloomReset+=dt; if(this.bloomReset>=5){ this.bloomReset=0;
+      this.bcells.forEach(c=>{ c.setAttribute("fill","#141416"); c.setAttribute("stroke","#26262e"); }); }
+    // worker pulse
+    this.wpos.forEach(w=>{ if(w.pulse>0){ w.pulse-=dt*3; w.c.setAttribute("fill", w.pulse>0?"rgba(52,211,153,.5)":"#161619"); } });
+    const branch=+$("pgBranch").value, dupRate=+$("pgDup").value/100;
+    this.packets.forEach(p=>{ if(p.dead)return;
+      if(p.stage==="toWorker"){ if(this.moveTo(p,dt,180)){ // crawled a page
+          this.crawled++; this.crawlTimes.push(this.now); p.w.pulse=1;
+          // discover links -> bloom
+          for(let i=0;i<branch;i++){ if(this.packets.length>380)break;
+            let id, dup=Math.random()<dupRate && this.oldIds.length>0;
+            if(dup) id=this.oldIds[randi(0,this.oldIds.length-1)]; else { this.uid++; id=this.uid; }
+            const bidx=this.hashes(id)[0]; const bcx=360+(bidx%6)*40+17, bcy=54+Math.floor(bidx/6)*34+14;
+            this.packets.push({stage:"toBloom",id,x:p.w.x,y:p.w.y,tx:bcx,ty:bcy,el:this.mk(p.w.x,p.w.y,"#38bdf8",3.5)}); }
+          p.dead=true; p.el.remove(); this.updateStats();
+        } }
+      else if(p.stage==="toBloom"){ if(this.moveTo(p,dt,200)){ this.lightBits(p.id);
+          if(this.seen.has(p.id)){ this.dupes++; p.dead=true; p.el.remove(); }
+          else { this.seen.add(p.id); this.oldIds.push(p.id); if(this.oldIds.length>200)this.oldIds.shift();
+            p.stage="toFrontier"; p.tx=this.fCenter[0]; p.ty=this.fCenter[1]; p.el.setAttribute("fill","#34d399"); }
+          this.updateStats();
+        } }
+      else if(p.stage==="toFrontier"){ if(this.moveTo(p,dt,190)){ this.frontier++; this.unique++; p.dead=true; p.el.remove(); this.updateStats(); } }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+    // frontier bar
+    const h=clamp(this.frontier/this.CAP,0,1)*100; this.fBar.setAttribute("y",190-h); this.fBar.setAttribute("height",h);
+    this.fCount.textContent=fmt(this.frontier);
+    // pages/sec over last 1s
+    this.crawlTimes=this.crawlTimes.filter(t=>t>this.now-1);
+    this._rateSmoothed=(this._rateSmoothed||0)+((this.crawlTimes.length)-(this._rateSmoothed||0))*Math.min(1,dt*3);
+    this.updateStats();
+  }
+  updateStats(){
+    $("pgCrawled").textContent=fmt(this.crawled);
+    $("pgFrontier").textContent=fmt(this.frontier);
+    $("pgDupes").textContent=fmt(this.dupes);
+    $("pgRate").textContent=Math.round(this._rateSmoothed||0);
+    $("pgUnique").textContent=fmt(this.unique);
+  }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

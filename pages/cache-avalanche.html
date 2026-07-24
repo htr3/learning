@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cache Avalanche — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function keys(sameExpiry){for(let i=0;i<8;i++){const x=80+i*64,y=60;const exp=sameExpiry?"12:00":["11:58","12:03","12:00","12:07","11:55","12:10","12:01","12:08"][i];
+    const c=sameExpiry?"#f87171":"#34d399";g.appendChild(S("rect",{x:x-24,y:y-16,width:48,height:32,rx:5,fill:c+"22",stroke:c}));g.appendChild(TX(x,y-2,"k"+(i+1),{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));g.appendChild(TX(x,y+11,exp,{fill:c,"font-size":8,"text-anchor":"middle"}));}}
+  function render(){g.innerHTML="";
+    if(phase===0){keys(true);g.appendChild(S("rect",{x:230,y:120,width:180,height:34,rx:8,fill:"rgba(56,189,248,.2)",stroke:"#38bdf8"}));g.appendChild(TX(320,142,"🗄️ database (calm)",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="many keys were cached together with the SAME TTL";lbl.setAttribute("fill","#fbbf24");sub.textContent="e.g. warmed at startup → they will all expire at the same instant";}
+    else if(phase===1){keys(true);g.appendChild(S("rect",{x:230,y:118,width:180,height:38,rx:8,fill:"rgba(248,113,113,.25)",stroke:"#f87171","stroke-width":2}));g.appendChild(TX(320,142,"🗄️ DB OVERLOAD ✗",{fill:"#f87171","font-size":11,"text-anchor":"middle","font-weight":700}));
+      for(let i=0;i<8;i++)arrow(g,80+i*64,80,320,116,"#f87171");
+      lbl.textContent="AVALANCHE — all expire at once → mass miss → DB flood";lbl.setAttribute("fill","#f87171");sub.textContent="the whole keyspace misses simultaneously; the DB can't absorb it and falls over";}
+    else{keys(false);g.appendChild(S("rect",{x:230,y:120,width:180,height:34,rx:8,fill:"rgba(52,211,153,.2)",stroke:"#34d399"}));g.appendChild(TX(320,142,"🗄️ database (steady)",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="fix — jittered TTLs spread expiries over time";lbl.setAttribute("fill","#34d399");sub.textContent="misses trickle in gradually; the DB handles a smooth, steady load";}}
+  function step(){phase=(phase+1)%3;timer=3.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">You warm 10,000 keys into the cache with the <b>same TTL</b>. Watch what happens at expiry: with <b>fixed TTLs</b>, every key expires in the same instant and the resulting miss storm floods the database. Add <b>TTL jitter</b> to spread expiries over a window and the DB load flattens into a manageable trickle. Run the clock and compare.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Cached keys: <b id="pgKeysV">10000</b></label><input id="pgKeys" type="range" min="1000" max="50000" value="10000" step="1000"></div>
+      <div class="pg-field"><label>Base TTL (s): <b id="pgTtlV">30</b></label><input id="pgTtl" type="range" min="10" max="60" value="30" step="5"></div>
+      <div class="pg-field"><label>Jitter window (s): <b id="pgJitV">0</b></label><input id="pgJit" type="range" min="0" max="30" value="0" step="1"></div>
+      <button class="pg-btn" id="pgRun">▶ run clock</button>
+      <button class="pg-btn secondary" id="pgReset">reset</button>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">Set jitter to 0 to see the avalanche; increase it to spread expiries and flatten the DB spike.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Time</div><div class="v ac" id="pgT">0s</div></div>
+        <div class="pg-stat"><div class="k">Peak miss/s</div><div class="v wa" id="pgPeak">0</div></div>
+        <div class="pg-stat"><div class="k">DB status</div><div class="v ok" id="pgStat">warming</div></div>
+        <div class="pg-stat"><div class="k">Live keys</div><div class="v" id="pgLive">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=130;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const CAP=4000; // DB can handle this many misses/sec safely
+  let expiries=[],t=0,running=false,raf,last,peak=0,hist=[],overloaded=false;
+  function build(){const n=+$("pgKeys").value||10000,base=+$("pgTtl").value||30,jit=+$("pgJit").value||0;
+    expiries=[];for(let i=0;i<n;i++)expiries.push(base+Math.random()*jit);expiries.sort((a,b)=>a-b);
+    t=0;peak=0;hist=[];overloaded=false;}
+  function missesInSecond(sec){let c=0;for(const e of expiries){if(e>=sec&&e<sec+1)c++;}return c;}
+  function draw(){svg.innerHTML="";
+    svg.appendChild(TX(20,14,"DB misses/sec over time (red line = safe capacity "+CAP+"):",{fill:"#8b8b93","font-size":9.5}));
+    const maxT=Math.max(1,(+$("pgTtl").value||30)+(+$("pgJit").value||0)+2);const maxM=Math.max(CAP*1.2,...hist.map(h=>h.m),1);
+    const capY=110-100*(CAP/maxM);svg.appendChild(S("line",{x1:20,y1:capY,x2:W-10,y2:capY,stroke:"#f87171","stroke-dasharray":"4 4","stroke-width":1}));
+    hist.forEach(h=>{const x=20+(W-30)*(h.t/maxT);const bh=100*(h.m/maxM);const c=h.m>CAP?"#f87171":h.m>CAP*0.6?"#fbbf24":"#34d399";
+      svg.appendChild(S("rect",{x,y:110-bh,width:Math.max(1,(W-30)/maxT-1),height:Math.max(1,bh),fill:c}));});
+    svg.appendChild(S("line",{x1:20,y1:110,x2:W-10,y2:110,stroke:"#242a33"}));}
+  function stats(){$("pgT").textContent=Math.floor(t)+"s";$("pgPeak").textContent=peak;$("pgPeak").className="v "+(peak>CAP?"bad":peak>CAP*0.6?"wa":"ok");
+    $("pgLive").textContent=expiries.filter(e=>e>t).length;
+    $("pgStat").textContent=overloaded?"OVERLOADED":peak>CAP*0.6?"stressed":t>0?"steady":"warming";$("pgStat").className="v "+(overloaded?"bad":peak>CAP*0.6?"wa":"ok");draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function tick(now){if(!running)return;const dt=(now-last)/1000*4;last=now;const prev=Math.floor(t);t+=dt;
+    if(Math.floor(t)>prev){const m=missesInSecond(prev);hist.push({t:prev,m});if(m>peak)peak=m;if(m>CAP&&!overloaded){overloaded=true;log("💥 t="+prev+"s: "+m+" misses/s > capacity "+CAP+" → DATABASE OVERLOAD (avalanche!)","bad");}
+      else if(m>0&&m<=CAP)log("t="+prev+"s: "+m+" misses/s — DB handling it","ac");}
+    const maxT=(+$("pgTtl").value||30)+(+$("pgJit").value||0)+2;
+    if(t>=maxT){running=false;cancelAnimationFrame(raf);$("pgRun").textContent="▶ run clock";log(overloaded?"result: AVALANCHE — peak "+peak+"/s exceeded capacity":"result: smooth — peak "+peak+"/s stayed within capacity ✓",overloaded?"bad":"ok");}
+    stats();raf=requestAnimationFrame(tick);}
+  function run(){if(running)return;if(!expiries.length)build();running=true;$("pgRun").textContent="⏸ running";last=performance.now();
+    log("clock running — "+expiries.length+" keys, base TTL "+$("pgTtl").value+"s, jitter "+$("pgJit").value+"s","ac");raf=requestAnimationFrame(tick);}
+  $("pgRun").onclick=run;
+  $("pgReset").onclick=()=>{running=false;cancelAnimationFrame(raf);build();$("pgRun").textContent="▶ run clock";log("reset — adjust jitter and run again","ac");stats();};
+  ["pgKeys","pgTtl","pgJit"].forEach(id=>$(id).oninput=()=>{$(id+"V").textContent=$(id).value;if(!running)build();stats();});
+  build();stats();log("run with jitter=0 (avalanche), then raise jitter to flatten the spike","ac");
+}
+
+const DATA={
+  badge:"🏔️",title:"Cache Avalanche",category:"Caching",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Mass Simultaneous Cache Expiry",
+  tagline:"A cache avalanche is when a large number of keys expire (or the cache goes down) at nearly the <b>same time</b>, so a huge fraction of requests miss simultaneously and flood the database all at once — potentially crashing it. Fixes: <b>TTL jitter</b>, <b>high availability</b> for the cache, and <b>request throttling</b>.",
+  pills:["Mass <b>simultaneous expiry</b>","<b>TTL jitter</b> spreads load","<b>HA cache</b> (no single point)","<b>Circuit breaker</b> / throttle"],
+  overview:"A <b>cache avalanche</b> is a broad, correlated cache-miss storm. It has two common triggers. First, <b>synchronized TTL expiry</b>: if many keys were populated together (e.g. warmed at deploy/startup) with the <em>same</em> TTL, they all expire at the same instant, and suddenly a large fraction of the keyspace misses at once — every one of those misses falls through to the database simultaneously, spiking load far beyond what steady-state traffic would. Second, <b>cache unavailability</b>: if the cache node/cluster itself goes down (crash, restart, network partition, eviction under memory pressure), <em>all</em> reads miss and hit the database directly. Either way, the database faces a sudden multiple of its normal load precisely when the cache stops protecting it, and can be overwhelmed — and because an overloaded DB can't repopulate the cache, the outage can persist or cascade. Avalanche differs from a <b>stampede</b> (which is about a single hot key's concurrent recompute) and <b>penetration</b> (nonexistent keys) — avalanche is about <b>many</b> keys failing <b>at the same time</b>. The primary mitigation is <b>TTL jitter</b>: add a random offset to each key's expiry so they spread over a window instead of firing together, flattening the miss curve into a manageable trickle. Complementary defenses: make the cache <b>highly available</b> (replicas, clustering, no single point of failure) so a node loss doesn't wipe all caching; <b>multi-level caching</b> (local + distributed) so one layer's loss is partly absorbed; <b>request throttling / circuit breakers</b> to shed or queue load and protect the DB; <b>background/async refresh</b> so keys are renewed before expiry; and warming with staggered TTLs.",
+  problem:"Caches absorb the vast majority of read traffic, so the database is provisioned only for the small miss rate. If a large set of keys expires together — or the cache itself becomes unavailable — the miss rate instantly jumps toward 100%, and the database receives a sudden flood many times its normal load. Without smoothing or protection, it can't cope and fails, taking the system down and preventing recovery.",
+  diagram,diagramCaption:"Same-TTL keys expire together and flood the DB; jittered TTLs spread expiries into a steady load.",
+  how:[
+    "Many keys are cached together (warm-up/deploy) with identical TTLs.",
+    "At the shared expiry instant, a large fraction of requests miss simultaneously.",
+    "All those misses fall through to the database at once — a sudden load spike.",
+    "The database is overwhelmed and may fail, blocking cache repopulation (cascade).",
+    "Mitigate: jitter TTLs, make the cache HA, add multi-level caching, and throttle/circuit-break to protect the DB."
+  ],
+  complexity:[["Trigger","synchronized expiry / cache down"],["Jitter","spreads over window"],["HA cache","survives node loss"],["Throttle","caps DB load"]],
+  advantages:["TTL jitter is trivial and highly effective","HA cache removes the single-point-of-failure spike","Multi-level caching absorbs partial cache loss","Throttling/circuit breakers cap DB load","Background refresh avoids expiry-driven misses"],
+  disadvantages:["Jitter alone won't help if the cache node dies","HA caching adds infrastructure cost/complexity","Throttling sheds some user requests during incidents","Warm-up storms after a cold cache still need care","Requires monitoring to detect correlated expiries"],
+  tradeoffs:"Avalanche defenses trade <b>simplicity, cost, and user-facing degradation</b>. <b>TTL jitter</b> is nearly free and should always be applied — its only 'cost' is a tiny variance in freshness and the discipline to not warm everything with one TTL — but it addresses only the <em>expiry-synchronization</em> trigger; it does nothing if the cache <em>itself</em> disappears. Guarding against cache unavailability requires <b>high availability</b> (replication/clustering, e.g. Redis Sentinel/Cluster), which costs money and operational complexity, plus possibly <b>multi-level caching</b> (a local in-process cache in front of the distributed one) so losing the shared cache still leaves partial protection — at the cost of consistency headaches across layers. When a spike does happen, <b>throttling and circuit breakers</b> protect the database by <em>shedding or queuing</em> load — trading some failed/slow user requests for overall survival, which is the right call (a degraded service beats a crashed one) but is user-visible. <b>Background/async refresh</b> (renew before expiry) avoids miss-driven spikes entirely but adds machinery and can waste recomputes on rarely-read keys. The overarching principle is defense-in-depth: assume both correlated expiry <em>and</em> cache loss will happen, smooth what you can (jitter, refresh), remove single points of failure (HA), and cap the blast radius at the database (throttle/circuit-break) so a cache problem never becomes a database catastrophe.",
+  whenNot:"If your cache holds few keys, or keys are written continuously with naturally varied TTLs, correlated expiry is unlikely and jitter adds little. Full HA caching may be unjustified for non-critical systems where a brief database load bump is tolerable. Background refresh wastes work when most cached keys are read rarely. And none of these matter if the database can comfortably absorb 100% of traffic (then the cache is only a latency optimization, not a load shield) — though that's rare at scale. The key is to size defenses to how catastrophic a full cache miss would actually be.",
+  sim,
+  code:{
+"TTL jitter":`# Spread expiries so many keys don't die at the same instant.\n# BAD: every warmed key expires together -> avalanche.\nfor key, val in warm_set:\n    cache.set(key, val, ex=300)                 # all expire at t+300\n\n# GOOD: add a random offset to each TTL.\nimport random\nfor key, val in warm_set:\n    ttl = 300 + random.randint(0, 60)           # expiries spread over [300,360)\n    cache.set(key, val, ex=ttl)\n# The miss curve flattens from a spike into a manageable trickle.`,
+"HA cache + circuit breaker":`// 1) Highly-available cache so a single node loss doesn't wipe all caching.\n//    Redis Sentinel / Cluster with replicas + automatic failover.\n\n// 2) Protect the DB when misses spike anyway (breaker sheds load).\nconst breaker = new CircuitBreaker(loadFromDB, {\n  timeout: 500,\n  errorThresholdPercentage: 50,   // trip if DB is failing/overloaded\n  resetTimeout: 5000,\n});\nasync function get(key) {\n  const v = await cache.get(key);\n  if (v !== null) return v;\n  try { return await breaker.fire(key); }   // open circuit -> fail fast\n  catch { return staleOr(key, DEFAULT); }   // serve stale/default, don't pile on\n}`,
+"Multi-level cache + background refresh":`// L1 in-process (per node) in front of L2 distributed cache absorbs L2 loss.\nfunction get(key) {\n  return L1.get(key) ?? L2.get(key) ?? loadAndFill(key);\n}\n\n// Refresh hot keys BEFORE they expire (no expiry-driven miss at all).\nsetInterval(() => {\n  for (const key of hotKeys)\n    if (ttlRemaining(key) < REFRESH_AHEAD)\n      backgroundRecompute(key);      // renew ahead of expiry, staggered\n}, 1000);\n// Combine with jitter + HA so neither expiry nor node loss floods the DB.`
+  },
+  realWorld:[
+    ["Redis Sentinel / Cluster","HA caching so node loss doesn't wipe all caching."],
+    ["CDNs","Staggered TTLs + origin shielding to avoid origin floods."],
+    ["Netflix Hystrix / resilience4j","Circuit breakers to protect backends during spikes."],
+    ["E-commerce warm-ups","Staggered/jittered TTLs when pre-warming catalogs."],
+    ["Multi-tier caches","Local (Caffeine/Guava) + distributed (Redis) layering."]
+  ],
+  interview:[
+    ["basic","What is a cache avalanche?","When a large number of cached keys expire at nearly the same time — or the cache itself goes down — so a huge fraction of requests miss simultaneously and flood the database all at once. Because the DB is sized only for the normal small miss rate, this sudden multiple of load can overwhelm and crash it, and a crashed DB can't repopulate the cache, so the outage may persist or cascade."],
+    ["basic","How is avalanche different from stampede and penetration?","Avalanche is about many keys failing at the same time (mass simultaneous expiry or cache outage). Stampede is about a single hot key expiring and many concurrent requests recomputing it together. Penetration is about requests for keys that don't exist, so nothing ever caches and misses fall through forever. Avalanche is a correlated, whole-keyspace timing problem; the others are narrower."],
+    ["inter","How does TTL jitter prevent avalanche?","Instead of giving keys identical TTLs (so they all expire at the same instant), you add a random offset to each key's TTL, spreading expiries over a window. This turns a single massive miss spike into a gradual trickle the database can absorb at steady state. It's trivial to implement and highly effective — but it only addresses synchronized expiry, not the case where the cache node itself goes down."],
+    ["inter","What happens if the cache server goes down, and how do you protect against it?","Every read misses and hits the database directly — effectively a 100% miss rate — which is a severe avalanche. Protect against it with a highly-available cache (replication/clustering with automatic failover so a node loss doesn't wipe caching), multi-level caching (a local in-process cache absorbs some load if the distributed cache is unavailable), and circuit breakers/throttling to cap the load reaching the database so it degrades gracefully instead of crashing."],
+    ["adv","Why can an avalanche cause a cascading failure, and how do you break the cascade?","Because the flood of misses overloads the database, which slows or fails; a failing DB can't serve the very queries needed to repopulate the cache, so misses keep coming and the DB stays down — a self-reinforcing loop. You break it by capping load at the DB with circuit breakers (fail fast / serve stale or defaults instead of piling on), bulkheads and concurrency limits, request throttling/load shedding, and by recovering the cache (warm it gradually with jittered TTLs) so miss rate drops back to normal without re-spiking."],
+    ["adv","How do you safely warm a cold cache after a restart without causing an avalanche?","Warm gradually and with staggered/jittered TTLs rather than loading everything at once with one TTL. Prioritize hot keys, rate-limit the warm-up so the DB isn't flooded, and use request coalescing/single-flight so concurrent misses for the same key don't multiply queries. Protect the DB with circuit breakers and concurrency caps during the warm period, and consider serving stale data from a secondary/local cache while the primary refills. Monitor miss rate and DB load throughout."],
+    ["sd","Design a caching layer that is resilient to avalanche for a read-heavy service.","Use an HA distributed cache (Redis Cluster/Sentinel with replicas + failover) plus a small local L1 cache per node for defense in depth. Apply jittered TTLs to every key and background/refresh-ahead for hot keys so expiries never synchronize. Coalesce concurrent misses (single-flight) to avoid stampedes on individual keys. Put circuit breakers, timeouts, and concurrency limits between the app and DB so any residual miss spike is shed rather than crashing the DB (serve stale/defaults when the breaker is open). Warm caches gradually after restarts, and monitor miss rate, cache availability, and DB load with alerts."]
+  ],
+  mistakes:["Warming many keys with identical TTLs (synchronized expiry).","A single non-replicated cache node (one failure = 100% miss).","No circuit breaker/throttle, so a miss spike crashes the DB.","Cold-starting the cache by loading everything at once.","No monitoring to detect correlated expiries or rising miss rate."],
+  best:["Always jitter TTLs; refresh hot keys ahead of expiry.","Run the cache HA (replicas/cluster) with automatic failover.","Add a local L1 cache for multi-level protection.","Protect the DB with circuit breakers, timeouts, and concurrency caps.","Warm caches gradually with staggered TTLs; monitor miss rate + DB load."],
+  related:[["Cache Stampede","🐎","Single hot-key herd","cache-stampede.html"],["Cache Penetration","🕳️","Nonexistent-key misses","cache-penetration.html"],["High Availability","🟢","Redundant cache tier","high-availability.html"],["Circuit Breaker / Timeouts","⏱️","Protect the DB under spike","timeout.html"],["Memcached","🧊","Common cache backend","memcached.html"],["Backoff & Retry","🔁","Avoid retry-driven herds","backoff.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

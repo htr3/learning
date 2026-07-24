@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CORS — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:40,y:80,width:130,height:40,rx:8,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));g.appendChild(TX(105,98,"Browser",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));g.appendChild(TX(105,112,"app.com",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:450,y:80,width:130,height:40,rx:8,fill:"rgba(124,58,237,.18)",stroke:"#7C3AED","stroke-width":2}));g.appendChild(TX(515,98,"api.other.com",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));g.appendChild(TX(515,112,"(cross-origin)",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    if(phase===0){g.appendChild(S("line",{x1:170,y1:88,x2:450,y2:88,stroke:"#fbbf24","stroke-width":2,"marker-end":"url(#a)"}));g.appendChild(TX(310,80,"OPTIONS (preflight)",{fill:"#fbbf24","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(S("line",{x1:450,y1:112,x2:170,y2:112,stroke:"#fbbf24","stroke-width":1.6,"stroke-dasharray":"5 4","marker-end":"url(#a)"}));g.appendChild(TX(310,128,"Access-Control-Allow-*",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="1) preflight — 'may I make this request?'";lbl.setAttribute("fill","#fbbf24");sub.textContent="browser asks first for non-simple requests (PUT/DELETE, JSON, custom headers)";}
+    else{g.appendChild(S("line",{x1:170,y1:88,x2:450,y2:88,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));g.appendChild(TX(310,80,"actual request",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(S("line",{x1:450,y1:112,x2:170,y2:112,stroke:"#34d399","stroke-width":1.6,"stroke-dasharray":"5 4","marker-end":"url(#a)"}));g.appendChild(TX(310,128,"200 + ACAO header",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="2) if allowed, the real request proceeds";lbl.setAttribute("fill","#34d399");sub.textContent="server must return Access-Control-Allow-Origin or the browser blocks the response";}}
+  function step(){phase=(phase+1)%2;timer=2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Build a cross-origin request and see how the browser enforces CORS. Some combinations are "simple" (sent directly); others trigger a <b>preflight OPTIONS</b> first. The server must return the right <code>Access-Control-Allow-*</code> headers or the browser <b>blocks</b> the response — note the request may still reach the server.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Method</label><select id="pgM"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></div>
+      <div class="pg-field"><label>Content-Type</label><select id="pgCT"><option value="form">text/plain / form (simple)</option><option value="json">application/json</option></select></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgHdr">custom header (X-Auth)</label></div>
+      <hr style="border-color:var(--gray-border);margin:10px 0">
+      <div class="pg-field"><label>Server allows origin</label><select id="pgAllow"><option value="app">app.com (our origin)</option><option value="wild">* (any)</option><option value="other">only other.com</option><option value="none">no CORS header</option></select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgSend" class="go">Send request</button></div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Request kind</div><div class="v ac" id="pgKind">—</div></div>
+        <div class="pg-stat"><div class="k">Preflight?</div><div class="v" id="pgPre">—</div></div>
+        <div class="pg-stat"><div class="k">Server ACAO</div><div class="v wa" id="pgACAO">—</div></div>
+        <div class="pg-stat"><div class="k">Result</div><div class="v ok" id="pgRes">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=140;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function isSimple(){const m=$("pgM").value,ct=$("pgCT").value,hdr=$("pgHdr").checked;
+    const simpleMethod=(m==="GET"||m==="POST");const simpleCT=(ct==="form");
+    return simpleMethod&&simpleCT&&!hdr;}
+  function acao(){const a=$("pgAllow").value;return a==="app"?"https://app.com":a==="wild"?"*":a==="other"?"https://other.com":null;}
+  function allowsUs(){const v=acao();return v==="*"||v==="https://app.com";}
+  function send(){const simple=isSimple();const pre=!simple;
+    $("pgKind").textContent=simple?"simple":"non-simple";
+    $("pgPre").textContent=pre?"yes (OPTIONS)":"no";$("pgPre").className="v "+(pre?"wa":"ok");
+    const v=acao();$("pgACAO").textContent=v||"(none)";
+    $("pgLog").innerHTML="";
+    if(pre){log("→ OPTIONS preflight: Origin: https://app.com, Access-Control-Request-Method: "+$("pgM").value,"wa");
+      if(!allowsUs()){log("← preflight response missing/mismatched Access-Control-Allow-Origin → browser BLOCKS. Actual request never sent.","bad");
+        $("pgRes").textContent="BLOCKED";$("pgRes").className="v bad";draw(false,true);return;}
+      log("← preflight OK: Access-Control-Allow-Origin: "+v+", Allow-Methods, Allow-Headers","ok");}
+    log("→ "+$("pgM").value+" actual request sent to api.other.com","ac");
+    log("← 200 response with Access-Control-Allow-Origin: "+(v||"(none)"),(v?"ac":"bad"));
+    if(allowsUs()){log("browser sees matching ACAO → response DELIVERED to JS ✓","ok");$("pgRes").textContent="ALLOWED";$("pgRes").className="v ok";draw(true,false);}
+    else{log("no matching Access-Control-Allow-Origin → browser HIDES the response from JS (even though server processed it!) ✗","bad");$("pgRes").textContent="BLOCKED";$("pgRes").className="v bad";draw(false,false);}}
+  function draw(ok,preblock){svg.innerHTML="";
+    svg.appendChild(S("rect",{x:40,y:50,width:120,height:40,rx:8,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));svg.appendChild(TX(100,68,"Browser",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));svg.appendChild(TX(100,82,"app.com",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    svg.appendChild(S("rect",{x:400,y:50,width:130,height:40,rx:8,fill:"rgba(124,58,237,.18)",stroke:"#7C3AED","stroke-width":2}));svg.appendChild(TX(465,68,"api.other.com",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+    const col=ok?"#34d399":"#f87171";
+    svg.appendChild(S("line",{x1:160,y1:62,x2:preblock?280:400,y2:62,stroke:col,"stroke-width":2,"marker-end":"url(#a)"}));
+    if(!preblock)svg.appendChild(S("line",{x1:400,y1:80,x2:160,y2:80,stroke:col,"stroke-width":1.6,"stroke-dasharray":"5 4","marker-end":"url(#a)"}));
+    svg.appendChild(TX(W/2,120,ok?"✓ response delivered to JavaScript":preblock?"✗ preflight failed — request never sent":"✗ response blocked by browser (server still ran it)",{fill:col,"font-size":11,"text-anchor":"middle","font-weight":700}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgSend").onclick=send;
+  draw(true,false);log("configure the request and server, then Send","ac");
+}
+
+const DATA={
+  badge:"🔓",title:"CORS",category:"Networking",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Cross-Origin Resource Sharing",
+  tagline:"A browser security mechanism that lets a server explicitly allow web pages from <b>other origins</b> to read its responses. It relaxes the Same-Origin Policy safely — using response headers and, for risky requests, a <b>preflight</b> check.",
+  pills:["<b>Browser-enforced</b>","<b>Same-Origin Policy</b>","<b>Preflight</b> OPTIONS","<b>ACAO</b> header"],
+  overview:"By default the browser's <b>Same-Origin Policy</b> stops JavaScript on one origin (scheme + host + port) from reading responses fetched from a <b>different</b> origin. CORS is the standard by which a server <b>opts in</b> to sharing, via <code>Access-Control-*</code> response headers. For <b>simple requests</b> (GET/POST with basic content types and no custom headers) the browser sends the request and then checks the response's <code>Access-Control-Allow-Origin</code> (ACAO); if it doesn't match the caller's origin, the browser <b>hides the response</b> from JS (the server may still have executed it). For <b>non-simple requests</b> (PUT/DELETE, JSON bodies, custom headers), the browser first sends a <b>preflight</b> <code>OPTIONS</code> asking permission; only if the server approves the method/headers does the real request go out. Crucially, CORS is enforced by the <b>browser</b> — it's not server-side authorization and doesn't protect non-browser clients.",
+  problem:"The web needs pages to call APIs on other domains (a frontend on app.com calling api.other.com), but blindly allowing any site to read any other site's authenticated responses would be a massive security hole. CORS provides a controlled way for servers to declare exactly which origins, methods, and headers are permitted to read their responses.",
+  diagram,diagramCaption:"Non-simple requests trigger a preflight; the real request proceeds only if the server allows the origin.",
+  how:[
+    "Browser determines if the request is 'simple' (GET/POST, safe content types, no custom headers) or not.",
+    "Simple: send the request; then check the response's Access-Control-Allow-Origin against the caller's origin.",
+    "Non-simple: first send an OPTIONS preflight with Origin, Access-Control-Request-Method/-Headers.",
+    "Server responds with Access-Control-Allow-Origin/-Methods/-Headers (and Max-Age to cache the preflight).",
+    "If the response headers permit the origin/method/headers, the browser exposes the response to JS; otherwise it blocks it."
+  ],
+  complexity:[["Enforced by","the browser"],["Simple request","direct + ACAO check"],["Non-simple","preflight OPTIONS first"],["Key header","Access-Control-Allow-Origin"]],
+  advantages:["Enables safe cross-origin API access","Fine-grained: per origin/method/header control","Preflight caching (Max-Age) limits overhead","Standardized and universally supported","Keeps the Same-Origin Policy protections intact"],
+  disadvantages:["Confusing (errors look like server failures)","Preflights add a round trip (latency)","Only protects browser clients, not APIs generally","Credentialed requests have strict extra rules","Easy to misconfigure (wildcard + credentials)"],
+  tradeoffs:"CORS balances openness and safety: servers decide precisely who may read their responses, but the enforcement is client-side, so it's not a substitute for real authorization (any non-browser client — curl, server-to-server — ignores CORS entirely). Preflights protect state-changing requests but cost a round trip; caching them with Access-Control-Max-Age reduces the hit. The tightest gotcha is credentials: with cookies/authorization, you cannot use ACAO: * and must echo a specific origin plus Access-Control-Allow-Credentials: true. Loosening CORS (wildcards) for convenience can expose authenticated endpoints to any site.",
+  whenNot:"CORS isn't something you 'use or not' — it's always active in browsers. But don't rely on it for security: it doesn't authorize requests or protect non-browser clients, so always enforce real auth server-side. Avoid it entirely by serving frontend and API from the same origin (or via a reverse-proxy path) — then requests are same-origin and CORS never applies.",
+  sim,
+  code:{
+"Server headers":`# The server opts in with response headers. Reflect a specific origin\n# (required when credentials are involved):\nAccess-Control-Allow-Origin: https://app.com\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE\nAccess-Control-Allow-Headers: Content-Type, X-Auth\nAccess-Control-Allow-Credentials: true      # cookies/auth allowed\nAccess-Control-Max-Age: 600                 # cache preflight 10 min\nVary: Origin                                # so caches key per origin`,
+"Preflight":`# Browser sends this automatically for a non-simple request (e.g. PUT + JSON):\nOPTIONS /orders/42 HTTP/1.1\nOrigin: https://app.com\nAccess-Control-Request-Method: PUT\nAccess-Control-Request-Headers: content-type, x-auth\n\n# Server must approve, or the real PUT is never sent:\nHTTP/1.1 204 No Content\nAccess-Control-Allow-Origin: https://app.com\nAccess-Control-Allow-Methods: PUT\nAccess-Control-Allow-Headers: content-type, x-auth`,
+"Express + credentials":`import cors from "cors";\napp.use(cors({\n  origin: ["https://app.com"],   // NEVER "*" when credentials: true\n  methods: ["GET","POST","PUT","DELETE"],\n  allowedHeaders: ["Content-Type","X-Auth"],\n  credentials: true,             // allow cookies / Authorization\n  maxAge: 600,\n}));\n// Client must also opt in to send cookies:\nfetch("https://api.other.com/orders/42", { method:"PUT", credentials:"include" })`
+  },
+  realWorld:[
+    ["SPA + API on different domains","app.com frontend calling api.company.com needs CORS headers."],
+    ["Public/open APIs","Set Access-Control-Allow-Origin: * so any site can read (no credentials)."],
+    ["Third-party widgets/SDKs","Maps, payments, and analytics scripts rely on correct CORS."],
+    ["CDN-hosted fonts/assets","Fonts often require CORS headers to load cross-origin."],
+    ["OAuth flows","Token endpoints must set CORS carefully for browser-based clients."]
+  ],
+  interview:[
+    ["basic","What is CORS and what problem does it solve?","CORS (Cross-Origin Resource Sharing) is a browser mechanism that lets servers declare which other origins may read their responses. It safely relaxes the Same-Origin Policy so a page on one origin can call an API on another, without opening every site's authenticated data to every other site."],
+    ["basic","What defines an 'origin'?","The combination of scheme (http/https), host (domain), and port. If any of these differ between the page and the resource, it's cross-origin — e.g., https://app.com and https://api.app.com are different origins, as are http vs https and different ports."],
+    ["inter","When does the browser send a preflight, and what is it?","For 'non-simple' requests — methods other than GET/POST/HEAD, content types other than form/text/plain, or with custom headers. The browser first sends an OPTIONS request with Origin, Access-Control-Request-Method, and -Headers. Only if the server responds with matching Access-Control-Allow-* headers does the actual request proceed. Preflights can be cached via Access-Control-Max-Age."],
+    ["inter","A CORS request 'fails' but the server logs show it ran. Why?","CORS is enforced by the browser on the response, not by preventing the request (for simple requests). The server may fully process a request, but if the response lacks a matching Access-Control-Allow-Origin, the browser refuses to expose the response to JavaScript and reports a CORS error. This is why CORS is not a security/authorization mechanism for the server."],
+    ["adv","What are the rules for credentialed (cookie/auth) CORS requests?","With credentials, Access-Control-Allow-Origin cannot be the wildcard *; it must echo the exact requesting origin, and the server must also send Access-Control-Allow-Credentials: true. The client must opt in (fetch with credentials: 'include' or XHR withCredentials). Additionally, allowed headers/methods can't be wildcarded when credentials are used. Add Vary: Origin so caches don't serve the wrong ACAO."],
+    ["adv","Is CORS a security feature? What does it and doesn't it protect?","It protects users by preventing malicious sites from reading responses from other origins using the victim's browser context — but it's enforced client-side only. It does not authorize requests, doesn't stop non-browser clients (curl, servers) from calling your API, and doesn't by itself prevent CSRF (state-changing requests can still be sent). Real protection requires server-side authentication/authorization and CSRF defenses."],
+    ["sd","How do you avoid CORS complexity in a web app architecture?","Serve the frontend and API from the same origin — e.g., host the SPA and route /api through the same domain via a reverse proxy — so requests are same-origin and CORS never triggers. If cross-origin is required, configure precise allowed origins/methods/headers, use credentials rules correctly, cache preflights with Max-Age, and never rely on CORS for authorization (enforce auth server-side)."]
+  ],
+  mistakes:["Thinking CORS secures the API (it only governs what browsers expose).","Using Access-Control-Allow-Origin: * together with credentials (invalid/insecure).","Forgetting to handle the OPTIONS preflight, so non-simple requests fail.","Omitting Vary: Origin, causing caches to serve the wrong ACAO.","Debugging a 'CORS error' as a server bug when headers are just missing."],
+  best:["Echo specific allowed origins; avoid wildcards for credentialed requests.","Handle OPTIONS preflights and set Allow-Methods/-Headers correctly.","Cache preflights with Access-Control-Max-Age to cut latency.","Add Vary: Origin and keep an explicit allow-list of origins.","Never depend on CORS for auth — enforce authentication/authorization server-side."],
+  related:[["REST API","🌐","What the browser calls","rest.html"],["CSRF","🎭","Related browser attack","../interview-quetions/index.html"],["Forward & Reverse Proxy","🔁","Same-origin via proxy","forward-proxy.html"],["TLS Handshake","🔐","https origin component","tls-handshake.html"],["OAuth2 & JWT","🔑","Credentialed CORS","system-designed.html"],["API Gateway","🚪","Centralize CORS","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

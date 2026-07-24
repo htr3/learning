@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Merkle Tree — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+const h32=str=>{let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return (h>>>0).toString(16).padStart(8,"0").slice(0,6);};
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 220"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  // 4 leaves -> 2 -> root
+  const nodes={};
+  const mk=(id,x,y,w)=>{const r=S("rect",{x:x-w/2,y,width:w,height:28,rx:6,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    const t=TX(x,y+18,"",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle","font-family":"monospace"});svg.appendChild(t);nodes[id]={r,t,x,y};};
+  const line=(a,b)=>{const l=S("line",{x1:nodes[a].x,y1:nodes[a].y,x2:nodes[b].x,y2:nodes[b].y+28,stroke:"#3a3a42","stroke-width":1.5});svg.insertBefore(l,svg.firstChild.nextSibling);return l;};
+  ["L0","L1","L2","L3"].forEach((id,i)=>mk(id,90+i*145,170,90));
+  mk("H01",162,100,110);mk("H23",452,100,110);mk("ROOT",310,44,120);
+  const lines=[line("H01","L0"),line("H01","L1"),line("H23","L2"),line("H23","L3"),line("ROOT","H01"),line("ROOT","H23")];
+  let data=["tx-A","tx-B","tx-C","tx-D"];
+  function recompute(hi){
+    for(let i=0;i<4;i++)nodes["L"+i].t.textContent=h32(data[i]);
+    nodes.H01.t.textContent=h32(nodes.L0.t.textContent+nodes.L1.t.textContent);
+    nodes.H23.t.textContent=h32(nodes.L2.t.textContent+nodes.L3.t.textContent);
+    nodes.ROOT.t.textContent=h32(nodes.H01.t.textContent+nodes.H23.t.textContent);
+  }
+  recompute();
+  const path={0:["L0","H01","ROOT"],1:["L1","H01","ROOT"],2:["L2","H23","ROOT"],3:["L3","H23","ROOT"]};
+  let phase=0,timer=0,running=false,raf,last,leaf=0;
+  function reset(){Object.values(nodes).forEach(n=>{n.r.setAttribute("fill","#161619");n.r.setAttribute("stroke","#2a2a32");});}
+  function step(){phase=(phase+1)%3;timer=1.9;
+    if(phase===0){reset();leaf=Math.floor(Math.random()*4);data[leaf]="tx-"+Math.random().toString(36).slice(2,4).toUpperCase();recompute();
+      lbl.textContent="a block ("+["L0","L1","L2","L3"][leaf]+") changed";nodes["L"+leaf].r.setAttribute("fill","rgba(248,113,113,.3)");nodes["L"+leaf].r.setAttribute("stroke","#f87171");}
+    else if(phase===1){lbl.textContent="only its path to the root re-hashes";path[leaf].forEach(id=>{nodes[id].r.setAttribute("fill","rgba(124,58,237,.3)");nodes[id].r.setAttribute("stroke","#7C3AED");});}
+    else{lbl.textContent="root hash changed → tamper detected";lbl.setAttribute("fill","#f87171");nodes.ROOT.r.setAttribute("fill","rgba(248,113,113,.35)");nodes.ROOT.r.setAttribute("stroke","#f87171");}}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);step();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Two replicas each hold 8 blocks and build a Merkle tree. Corrupt a block on one side and click <b>Sync</b> — the trees compare roots, then walk down only the mismatching branches, pinpointing the bad block in O(log n) hash comparisons instead of scanning all data.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Corrupt a random block on replica B</label>
+        <div class="pg-btns"><button id="pgCorrupt" class="go">Corrupt block</button></div></div>
+      <div class="pg-field"><label>Reconcile the two replicas</label>
+        <div class="pg-btns"><button id="pgSync">Sync (diff trees)</button></div></div>
+      <div class="pg-btns" style="margin-top:4px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Matching subtrees are skipped instantly. This is how Git, Cassandra, and Dynamo find differences cheaply.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Root match</div><div class="v ac" id="pgRoot">✓</div></div>
+        <div class="pg-stat"><div class="k">Hashes compared</div><div class="v" id="pgCmp">0</div></div>
+        <div class="pg-stat"><div class="k">Blocks scanned</div><div class="v wa" id="pgScan">0/8</div></div>
+        <div class="pg-stat"><div class="k">Bad block</div><div class="v bad" id="pgBad">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=8;
+  const svg=S("svg",{viewBox:"0 0 640 240"});$("pgViz").appendChild(svg);
+  // build node layout: level0 = 8 leaves, level1=4, level2=2, level3=root
+  const levels=[8,4,2,1];const yOf=[190,135,80,30];const nodes=[];
+  const layers=[];
+  levels.forEach((cnt,li)=>{const row=[];const gap=640/cnt;for(let i=0;i<cnt;i++){const x=gap*i+gap/2,w=Math.min(gap-8,74);
+    const r=S("rect",{x:x-w/2,y:yOf[li],width:w,height:24,rx:5,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    const t=TX(x,yOf[li]+16,"",{fill:"#c9c9d1","font-size":9,"text-anchor":"middle","font-family":"monospace"});svg.appendChild(t);
+    row.push({r,t,x,y:yOf[li]});}layers.push(row);});
+  // edges
+  for(let li=0;li<3;li++){layers[li].forEach((n,i)=>{const parent=layers[li+1][i>>1];
+    const l=S("line",{x1:n.x,y1:n.y,x2:parent.x,y2:parent.y+24,stroke:"#2f2f37","stroke-width":1});svg.insertBefore(l,svg.firstChild);});}
+
+  let dataA,dataB,badIdx;
+  function build(data){const leaves=data.map(h32);const tree=[leaves];while(tree[tree.length-1].length>1){const cur=tree[tree.length-1],nx=[];for(let i=0;i<cur.length;i+=2)nx.push(h32(cur[i]+cur[i+1]));tree.push(nx);}return tree;}
+  function paint(){const tA=build(dataA);
+    for(let li=0;li<4;li++)layers[li].forEach((n,i)=>{n.t.textContent=tA[li]?tA[li][i]:"";});}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+  function clearHi(){layers.forEach(row=>row.forEach(n=>{n.r.setAttribute("fill","#161619");n.r.setAttribute("stroke","#2a2a32");}));}
+  function reset(){dataA=Array.from({length:N},(_,i)=>"block-"+i+"-v1");dataB=dataA.slice();badIdx=-1;
+    clearHi();paint();$("pgRoot").textContent="✓";$("pgRoot").className="v ac";$("pgCmp").textContent="0";$("pgScan").textContent="0/8";$("pgBad").textContent="—";$("pgLog").innerHTML="";log("both replicas in sync","ac");}
+  function corrupt(){badIdx=Math.floor(Math.random()*N);dataB[badIdx]="block-"+badIdx+"-CORRUPT"+Math.random().toString(36).slice(2,4);
+    layers[0][badIdx].r.setAttribute("fill","rgba(248,113,113,.25)");layers[0][badIdx].r.setAttribute("stroke","#f87171");
+    log("replica B block "+badIdx+" corrupted (root now differs)","bad");$("pgRoot").textContent="✗";$("pgRoot").className="v bad";}
+  function sync(){if(badIdx<0){log("nothing to reconcile — roots match","ac");return;}
+    const tA=build(dataA),tB=build(dataB);let cmp=0,scan=0;clearHi();
+    // walk from root; at each level compare the child on the differing path
+    let idx=0;// index within current level (root level = top)
+    cmp++; // compare roots
+    layers[3][0].r.setAttribute("fill","rgba(124,58,237,.3)");layers[3][0].r.setAttribute("stroke","#7C3AED");
+    log("compare ROOT: differs → descend","wa");
+    let node=0;// node index at level li
+    for(let li=3;li>0;li--){const childBase=node*2;const c0=childBase,c1=childBase+1;
+      cmp+=2;const level=li-1;
+      const d0=tA[level][c0]!==tB[level][c0],d1=tA[level][c1]!==tB[level][c1];
+      layers[level][c0].r.setAttribute("stroke",d0?"#f87171":"#34d399");
+      layers[level][c1].r.setAttribute("stroke",d1?"#f87171":"#34d399");
+      const go=d0?c0:c1;
+      layers[level][go].r.setAttribute("fill","rgba(124,58,237,.3)");
+      log("level "+level+": compare 2 hashes → branch "+go+(level===0?" is the bad block":" differs"),d0||d1?"wa":"ok");
+      node=go;}
+    scan=1;$("pgCmp").textContent=cmp;$("pgScan").textContent=scan+"/8";$("pgBad").textContent="#"+node;
+    log("✓ found bad block "+node+" after "+cmp+" hash compares (not 8 block scans)","ok");}
+
+  $("pgCorrupt").onclick=corrupt;$("pgSync").onclick=sync;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🌳",title:"Merkle Tree",category:"Algorithms",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Hash Tree / Tamper-Evident Structure",
+  tagline:"A tree of hashes where every parent is the hash of its children, so a single <b>root hash</b> fingerprints an entire dataset — letting you verify integrity and find differences in <b>O(log n)</b>.",
+  pills:["<b>O(log n)</b> proof","<b>Tamper-evident</b>","<b>Efficient diff</b>","<b>Powers Git & blockchains</b>"],
+  overview:"A Merkle tree (hash tree) hashes each data block into a leaf, then repeatedly hashes pairs of nodes upward until a single <b>Merkle root</b> remains. Because each node depends on all descendants, the root is a compact fingerprint of the whole dataset: change any block and the root changes. You can prove a block belongs to the set with just the O(log n) sibling hashes along its path (a 'Merkle proof'), and two parties can find exactly which blocks differ by comparing subtree hashes top-down instead of transferring all the data.",
+  problem:"How do you verify a huge dataset hasn't been tampered with, or sync only the parts that changed between replicas, without hashing/transferring everything? A flat checksum tells you something changed but not what. A Merkle tree localizes the difference in logarithmic work and gives compact inclusion proofs.",
+  diagram,diagramCaption:"Change one leaf and only the hashes on its path to the root recompute — the new root reveals tampering.",
+  how:[
+    "Split data into blocks; hash each block → leaf nodes.",
+    "Hash each adjacent pair of nodes together → parent nodes.",
+    "Repeat level by level until one node remains: the Merkle root.",
+    "Verify inclusion: recompute the root from a block + its O(log n) sibling hashes.",
+    "Diff/sync: compare roots; if they differ, recurse only into mismatching subtrees."
+  ],
+  complexity:[["Build","O(n)"],["Inclusion proof","O(log n)"],["Verify proof","O(log n)"],["Diff two trees","O(d·log n)"]],
+  advantages:["Tamper-evident: root fingerprints all data","Compact O(log n) inclusion proofs","Efficient diff/sync (anti-entropy)","Parallelizable hashing"],
+  disadvantages:["Rebuild cost when data reorders/inserts","Extra storage for internal hashes","Needs a trusted/consistent root","Second-preimage pitfalls if built naïvely"],
+  tradeoffs:"Bigger blocks → shallower tree, cheaper proofs, but coarser diffs (a change touches a whole block). Smaller blocks → finer diffs but more nodes and bigger proofs. Balanced binary trees give clean O(log n); wide trees (more children) trade proof size for depth. Always domain-separate leaf vs internal hashes to prevent second-preimage attacks.",
+  whenNot:"Skip Merkle trees when the dataset is tiny (a plain hash/checksum suffices), when data changes constantly and rebuilds dominate, or when you don't need integrity proofs or partial sync — the extra structure isn't worth it.",
+  sim,
+  code:{
+"Java":`// build a Merkle tree and produce an inclusion proof\nString sha(String s){ /* return hex of SHA-256(s) */ }\nList<String> buildLevel(List<String> nodes){\n  List<String> up = new ArrayList<>();\n  for(int i=0;i<nodes.size();i+=2){\n    String l=nodes.get(i), r=(i+1<nodes.size())?nodes.get(i+1):l;\n    up.add(sha("N"+l+r));              // domain-separate internal nodes\n  }\n  return up;\n}\nString root(List<String> blocks){\n  List<String> lvl=new ArrayList<>();\n  for(String b: blocks) lvl.add(sha("L"+b));  // domain-separate leaves\n  while(lvl.size()>1) lvl=buildLevel(lvl);\n  return lvl.get(0);\n}`,
+"Python":`import hashlib\ndef h(tag, *parts):\n    m = hashlib.sha256(tag)\n    for p in parts: m.update(p)\n    return m.digest()\ndef merkle_root(blocks):\n    level = [h(b'\\x00', b) for b in blocks]   # leaves\n    while len(level) > 1:\n        nxt = []\n        for i in range(0, len(level), 2):\n            l = level[i]; r = level[i+1] if i+1 < len(level) else l\n            nxt.append(h(b'\\x01', l, r))       # internal\n        level = nxt\n    return level[0]`,
+"Proof":`// verify a block is in the tree using its sibling hashes\nboolean verify(byte[] leaf, List<byte[]> siblings,\n               List<Boolean> isRight, byte[] root){\n  byte[] cur = sha(concat(LEAF_TAG, leaf));\n  for(int i=0;i<siblings.size();i++){\n    cur = isRight.get(i)\n        ? sha(concat(NODE_TAG, cur, siblings.get(i)))\n        : sha(concat(NODE_TAG, siblings.get(i), cur));\n  }\n  return Arrays.equals(cur, root);   // recomputed root must match\n}`
+  },
+  realWorld:[
+    ["Git","Every commit/tree/blob is content-addressed; a tree object is essentially a Merkle DAG of the repo state."],
+    ["Bitcoin / Ethereum","Block headers store a Merkle root of transactions; SPV clients verify a tx with a small proof."],
+    ["Cassandra / DynamoDB","Anti-entropy repair compares Merkle trees between replicas to sync only diverged ranges."],
+    ["IPFS / Content addressing","Merkle DAGs deduplicate and verify chunked content by hash."],
+    ["Certificate Transparency","Append-only Merkle logs prove a certificate was publicly logged."]
+  ],
+  interview:[
+    ["basic","What is a Merkle tree and its root?","A tree where leaves are hashes of data blocks and each internal node is the hash of its children. The single top hash — the Merkle root — is a fingerprint of the entire dataset; any change to any block changes the root."],
+    ["basic","What is a Merkle proof?","The set of sibling hashes along the path from a leaf to the root. Given the block and these O(log n) hashes, anyone can recompute the root and confirm the block is part of the committed dataset without seeing all other blocks."],
+    ["inter","How do Merkle trees make replica sync efficient?","Two replicas compare root hashes; if equal, they're identical. If not, they recurse only into the subtrees whose hashes differ, ignoring matching branches. This localizes divergence in O(log n) comparisons — anti-entropy repair in Cassandra/Dynamo works this way."],
+    ["inter","How do blockchains use Merkle trees?","A block header contains the Merkle root of its transactions. Light (SPV) clients can verify that a specific transaction is included in a block using just the header and a short proof, without downloading the full block."],
+    ["adv","What is the second-preimage attack and how do you prevent it?","Without distinguishing leaves from internal nodes, an attacker can present internal-node hashes as if they were leaf data (or reshape the tree) to forge a root. Prevent it by domain-separating: prefix leaves and internal nodes with different tags before hashing (e.g., 0x00 vs 0x01), as RFC 6962 does."],
+    ["adv","What happens with an odd number of leaves?","Implementations must define behavior — commonly duplicate the last node, or promote it unchanged. Naïve duplication (as in early Bitcoin) enabled the CVE-2012-2459 malleability bug, so the rule must be explicit and consistent."],
+    ["sd","When would you choose a Merkle tree in a design?","For integrity verification of large/chunked data, efficient replica reconciliation (anti-entropy), compact inclusion proofs to untrusted clients, content-addressed dedup storage, and tamper-evident append-only logs. It's the go-to when you need to detect and localize changes cheaply."]
+  ],
+  mistakes:["Not domain-separating leaves vs internal nodes (second-preimage attacks).","Undefined odd-leaf handling causing malleability bugs.","Rebuilding the whole tree on every small change instead of updating one path.","Trusting the root without authenticating its source.","Choosing block size poorly — too coarse hurts diffs, too fine bloats the tree."],
+  best:["Tag leaf and internal hashes differently (RFC 6962 style).","Use a strong hash (SHA-256/BLAKE3) and a fixed, documented odd-node rule.","Update only the affected root-path on block changes.","Pick block size to balance proof size against diff granularity.","Authenticate the root out-of-band (signed header, trusted anchor)."],
+  related:[["Bloom Filter","🌸","Probabilistic membership","bloom-filter.html"],["Cloud File Storage","☁️","Dedup + integrity","cloud-file-storage.html"],["Consistent Hashing","🔁","Replica placement","system-designed.html"],["Replication","📑","Anti-entropy sync","system-designed.html"],["HyperLogLog","🔢","Probabilistic counting","hyperloglog.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

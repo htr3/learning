@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cache Stampede — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function box(x,y,w,h,t,c){g.appendChild(S("rect",{x:x-w/2,y:y-h/2,width:w,height:h,rx:8,fill:c+"22",stroke:c,"stroke-width":2}));g.appendChild(TX(x,y+4,t,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    box(500,105,120,42,"🗄️ database","#f472b6");box(300,105,110,42,"⚡ cache","#38bdf8");
+    for(let i=0;i<5;i++){const y=50+i*24;g.appendChild(TX(70,y+4,"req "+(i+1),{fill:"#8b8b93","font-size":9}));}
+    if(phase===0){box(300,105,110,42,"⚡ key EXPIRED","#f87171");
+      for(let i=0;i<5;i++){const y=50+i*24;arrow(g,110,y,245,y,"#f87171");}
+      lbl.textContent="a hot key expires → all requests miss at once";lbl.setAttribute("fill","#f87171");sub.textContent="every concurrent request finds the cache empty for the same key";}
+    else if(phase===1){for(let i=0;i<5;i++){const y=50+i*24;arrow(g,355,y,440,y,"#f87171");}
+      g.appendChild(TX(500,175,"5 identical expensive queries!",{fill:"#f87171","font-size":10,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="STAMPEDE — all misses hit the DB simultaneously";lbl.setAttribute("fill","#f87171");sub.textContent="the DB is hammered by duplicate recomputes; it can overload & fall over";}
+    else{box(300,105,110,42,"⚡ cache","#38bdf8");
+      g.appendChild(S("rect",{x:355,y:96,width:30,height:18,rx:4,fill:"rgba(52,211,153,.3)",stroke:"#34d399"}));g.appendChild(TX(370,109,"🔒",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      arrow(g,110,50,245,50,"#34d399");arrow(g,355,50,440,50,"#34d399");
+      for(let i=1;i<5;i++){const y=50+i*24;g.appendChild(TX(180,y+4,"⏳ wait for result",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));}
+      lbl.textContent="fix — a single lock lets ONE request recompute";lbl.setAttribute("fill","#34d399");sub.textContent="others wait or serve stale; only one DB query runs, then all share it";}}
+  function step(){phase=(phase+1)%3;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">A very popular key expires while thousands of requests per second are reading it. Without protection, every concurrent miss stampedes the database with the same expensive query. Compare <b>no protection</b>, a <b>lock (single-flight)</b>, and <b>early recomputation</b>, and fire a burst to see how many queries actually hit the DB.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Concurrent requests: <b id="pgReqV">500</b></label><input id="pgReq" type="range" min="50" max="2000" value="500" step="50"></div>
+      <div class="pg-field"><label>Recompute time (ms): <b id="pgCostV">200</b></label><input id="pgCost" type="range" min="50" max="800" value="200" step="50"></div>
+      <div class="pg-field"><label>Strategy</label><select id="pgMode">
+        <option value="none">no protection (naive)</option>
+        <option value="lock">lock / single-flight</option>
+        <option value="early">probabilistic early recompute</option>
+      </select></div>
+      <button class="pg-btn" id="pgFire">💥 expire key + fire burst</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">DB queries</div><div class="v wa" id="pgQ">0</div></div>
+        <div class="pg-stat"><div class="k">DB load</div><div class="v" id="pgLoad">idle</div></div>
+        <div class="pg-stat"><div class="k">Served stale</div><div class="v ac" id="pgStale">0</div></div>
+        <div class="pg-stat"><div class="k">Outcome</div><div class="v ok" id="pgOut">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=70;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function draw(q,cap){svg.innerHTML="";
+    svg.appendChild(TX(20,16,"DB query load (DB capacity ≈ "+cap+" concurrent):",{fill:"#8b8b93","font-size":10}));
+    const bw=W-40;const frac=Math.min(1,q/cap);const c=q>cap?"#f87171":q>cap*0.6?"#fbbf24":"#34d399";
+    svg.appendChild(S("rect",{x:20,y:24,width:bw,height:24,rx:5,fill:"#141416",stroke:"#242a33"}));
+    svg.appendChild(S("rect",{x:20,y:24,width:Math.max(3,bw*frac),height:24,rx:5,fill:c}));
+    svg.appendChild(TX(24,60,q+" queries",{fill:c,"font-size":10}));
+    if(q>cap)svg.appendChild(TX(W-20,60,"OVERLOAD ✗",{fill:"#f87171","font-size":10,"text-anchor":"end","font-weight":700}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  const CAP=100;
+  function fire(){const n=+$("pgReq").value||500,mode=$("pgMode").value;let q,stale=0,out;
+    if(mode==="none"){q=n;out="stampede!";}
+    else if(mode==="lock"){q=1;stale=0;out="single query";}
+    else{q=1;stale=n-1;out="stale + 1 refresh";}
+    $("pgQ").textContent=q;$("pgStale").textContent=stale;
+    const overload=q>CAP;$("pgLoad").textContent=overload?"OVERLOADED":q>CAP*0.6?"high":"healthy";$("pgLoad").className="v "+(overload?"bad":q>CAP*0.6?"wa":"ok");
+    $("pgOut").textContent=out;$("pgOut").className="v "+(overload?"bad":"ok");
+    draw(q,CAP);
+    if(mode==="none")log("💥 "+n+" requests missed → "+n+" identical DB queries fired at once → "+(overload?"DB OVERLOAD":"heavy load"),"bad");
+    else if(mode==="lock")log("🔒 one request acquired the lock and recomputed; "+(n-1)+" others waited, then shared the single result → 1 DB query","ok");
+    else log("⏱ one request refreshed early (before expiry) while "+(n-1)+" served slightly-stale cache → 1 DB query, no thundering herd","ok");}
+  $("pgFire").onclick=fire;
+  $("pgReq").oninput=()=>{$("pgReqV").textContent=$("pgReq").value;};
+  $("pgCost").oninput=()=>{$("pgCostV").textContent=$("pgCost").value;};
+  draw(0,CAP);log("pick a strategy and fire a burst against a just-expired hot key","ac");
+}
+
+const DATA={
+  badge:"🐎",title:"Cache Stampede",category:"Caching",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Thundering Herd on Cache Miss",
+  tagline:"A cache stampede (a.k.a. <b>thundering herd</b> or <b>dog-piling</b>) happens when a hot key expires and many concurrent requests all miss at once, firing identical expensive recomputes at the backing store simultaneously — potentially overloading it. Fixes: <b>locking/single-flight</b>, <b>early recomputation</b>, and <b>stale-while-revalidate</b>.",
+  pills:["Hot key <b>expiry</b> → mass miss","<b>Single-flight</b> lock","<b>Probabilistic</b> early refresh","<b>Stale-while-revalidate</b>"],
+  overview:"A <b>cache stampede</b> occurs when a frequently-requested cache entry expires (or is evicted) and, in the brief moment before it's repopulated, a flood of concurrent requests all find a <b>miss</b> and independently try to regenerate the same value — each running the same expensive database query or computation. Instead of one recompute, you get hundreds or thousands at once, spiking load on the backing store and sometimes causing it to fall over (which prevents repopulation, prolonging the outage). It's the caching-specific form of the <b>thundering herd</b> problem. Several well-known mitigations exist. <b>Locking / single-flight</b>: only the first request that misses acquires a lock and recomputes the value; the others either wait for it to finish and then read the fresh value, or serve the last-known stale value — collapsing N recomputes into one. <b>Probabilistic early recomputation</b> (the XFetch algorithm): before the TTL expires, requests probabilistically decide to refresh the value early — the probability rising as expiry approaches — so exactly one refresh typically happens <em>ahead</em> of expiry with no gap and no herd. <b>Stale-while-revalidate</b>: serve the stale value immediately while a single background task refreshes it, so users never block and the store sees one refresh. Other tactics include never letting hot keys hard-expire (background refresh), <b>request coalescing</b> at the cache layer, and adding <b>jitter</b> to TTLs so many keys don't expire simultaneously (which also helps avoid cache avalanche).",
+  problem:"Caches speed up reads by holding precomputed values with a TTL. But TTL expiry creates a race: at the instant a hot key expires, every in-flight request for it misses simultaneously and tries to regenerate it. The redundant, concurrent recomputes hammer the backing store precisely when the cache isn't absorbing load — the opposite of what the cache is for — and can overwhelm the database, causing latency spikes or an outage.",
+  diagram,diagramCaption:"On hot-key expiry, all requests miss and stampede the DB; a single-flight lock collapses them to one query.",
+  how:[
+    "A hot key expires or is evicted; concurrent requests for it all miss.",
+    "Each miss independently triggers the same expensive recompute against the backing store.",
+    "Duplicate concurrent queries spike backend load, risking overload and cascading failure.",
+    "Mitigate with single-flight locking: one request recomputes; others wait or serve stale.",
+    "Or refresh early/in-background (XFetch, stale-while-revalidate) so there's no simultaneous miss."
+  ],
+  complexity:[["Naive misses","O(concurrent reqs)"],["Single-flight","1 recompute"],["Early refresh","≈1 ahead of expiry"],["TTL jitter","spreads expiries"]],
+  advantages:["Single-flight collapses N recomputes into 1","Early recompute avoids the miss gap entirely","Stale-while-revalidate keeps latency low (never blocks)","TTL jitter spreads expiries, avoiding synchronized herds","Protects the backing store from overload"],
+  disadvantages:["Locking adds latency for waiters (or requires serving stale)","Distributed locks add complexity & failure modes","Serving stale trades freshness for stability","Early recompute needs metadata (delta, last-compute time)","Mis-tuned params can still leak small herds"],
+  tradeoffs:"Stampede mitigations trade <b>freshness, latency, and complexity</b>. <b>Locking (single-flight)</b> guarantees exactly one recompute but forces the other requests to either <b>block</b> (adding tail latency while they wait for the lock holder) or <b>serve stale</b> data — and in a distributed cache the lock itself needs a distributed implementation (Redis SET NX with a TTL, plus care around the lock holder dying, fencing, and lease expiry), which introduces its own failure modes. <b>Serving stale</b> (stale-while-revalidate) is the lowest-latency option — no one ever blocks — but explicitly sacrifices <b>freshness</b> for a short window, acceptable for many read-heavy workloads but not for strongly-consistent data. <b>Probabilistic early recomputation</b> is elegant because it eliminates the miss gap entirely (the value is refreshed just before it would expire), but it requires tracking the recompute cost/last-computed time and tuning a beta parameter, and it slightly increases total recomputes (some happen a bit early). <b>TTL jitter</b> is nearly free and important, but it addresses <em>synchronized</em> expiry (many keys at once, i.e. avalanche) more than a single super-hot key. The overarching choice is how much staleness you'll tolerate to protect the backend: strict freshness pushes you toward locking-with-wait (higher latency), while availability pushes you toward stale-while-revalidate (bounded staleness).",
+  whenNot:"You don't need stampede protection for keys that are cheap to recompute (the herd is harmless), keys with low concurrency (few simultaneous misses), or data that isn't cached under a TTL at all. Locking is overkill when serving slightly stale data is fine — stale-while-revalidate is simpler and faster there. Conversely, for strongly-consistent values you can't serve stale, so you must use locking-with-wait and accept the latency. Very hot single keys may also warrant not expiring them at all (background refresh) rather than any race-based scheme.",
+  sim,
+  code:{
+"Single-flight (lock)":`# Only ONE request recomputes; others wait for the result and share it.\nasync def get(key):\n    val = cache.get(key)\n    if val is not None:\n        return val\n    # try to become the single recomputer (atomic set-if-absent + TTL)\n    if cache.set(lock_key(key), 1, nx=True, ex=10):\n        try:\n            val = expensive_recompute(key)     # ONE query hits the DB\n            cache.set(key, val, ex=TTL)\n            return val\n        finally:\n            cache.delete(lock_key(key))\n    else:\n        await wait_for(key)                     # others block briefly...\n        return cache.get(key) or serve_stale(key)  # ...then read fresh/stale`,
+"Probabilistic early recompute (XFetch)":`# Refresh a bit BEFORE expiry so there's never a simultaneous miss.\n# Store value + its recompute cost (delta) + when it was computed.\ndef get(key, beta=1.0):\n    v, delta, computed_at, ttl = cache.get_with_meta(key)\n    now = time()\n    # probability of early refresh rises as expiry approaches\n    if v is None or now - delta * beta * math.log(random()) >= computed_at + ttl:\n        start = time()\n        v = expensive_recompute(key)\n        delta = time() - start                 # how long it took\n        cache.set_with_meta(key, v, delta, now, ttl)\n    return v`,
+"Stale-while-revalidate + TTL jitter":`// Serve stale instantly; refresh once in the background. Never block users.\nfunction get(key) {\n  const e = cache.get(key);                 // { value, expiresAt }\n  if (e && Date.now() < e.expiresAt) return e.value;         // fresh\n  if (e) { refreshInBackground(key); return e.value; }       // STALE served now\n  return recompute(key);                                     // cold miss\n}\n// Add JITTER to TTLs so many keys don't expire at the same instant\n// (this also prevents cache AVALANCHE):\nconst ttl = base + Math.floor(Math.random() * jitter);      // e.g. 300 + [0,60)`
+  },
+  realWorld:[
+    ["Redis / Memcached apps","Single-flight locks (SET NX) around expensive recomputes."],
+    ["Go singleflight / groupcache","Standard library-level request coalescing."],
+    ["HTTP stale-while-revalidate","Cache-Control directive for CDNs/browsers."],
+    ["XFetch (research/industry)","Probabilistic early recomputation to avoid the herd."],
+    ["CDNs","Origin shielding + request collapsing to protect the origin."]
+  ],
+  interview:[
+    ["basic","What is a cache stampede?","When a popular cached key expires and many concurrent requests all miss at the same instant, each independently recomputing the same expensive value and hammering the backing store simultaneously. It's the caching form of the thundering herd: instead of one recompute you get hundreds, spiking backend load exactly when the cache stops absorbing it — sometimes overwhelming the database."],
+    ["basic","How does locking (single-flight) prevent it?","Only the first request that misses acquires a lock and performs the recompute; all other concurrent requests either wait for it to finish and then read the freshly-cached value, or serve the last-known stale value. This collapses N duplicate recomputes into exactly one query to the backend, protecting it from the herd. In a distributed cache the lock is implemented atomically, e.g. Redis SET NX with a TTL."],
+    ["inter","What is stale-while-revalidate and when is it appropriate?","A strategy where, on expiry, the cache immediately serves the stale value while a single background task refreshes it. Users never block on the recompute, and the backend sees just one refresh. It's appropriate for read-heavy data that tolerates brief staleness (feeds, product listings, dashboards) but not for strongly-consistent data where serving stale is unacceptable. It's the lowest-latency mitigation."],
+    ["inter","What is probabilistic early recomputation (XFetch)?","An approach that refreshes a value slightly before its TTL expires, chosen probabilistically with the probability increasing as expiry approaches, using the recorded recompute cost. Typically exactly one request refreshes ahead of expiry, so there's never a moment where the key is absent and everyone misses together — eliminating the stampede without locks and without serving stale, at the cost of tracking a little metadata and occasionally recomputing a bit early."],
+    ["adv","How does TTL jitter help, and what problem does it primarily address?","Adding a random offset to each key's TTL desynchronizes expirations so many keys don't expire at the exact same time. This primarily addresses cache avalanche — a mass simultaneous expiry (or cache restart) causing a wide miss storm across many keys — rather than a single super-hot key. For one hot key you still need single-flight or early refresh; jitter complements those by preventing correlated expiries across the keyspace."],
+    ["adv","What are the failure modes of using a distributed lock for single-flight?","The lock holder can die after acquiring the lock and before repopulating, so you need the lock to auto-expire (TTL) — but then a slow recompute can outlive the lock, letting a second recomputer start (needs fencing tokens or bounded work). Waiters must have a timeout and a fallback (serve stale or proceed) to avoid blocking indefinitely if the holder stalls. Clock skew and Redis failover can also cause two holders. Because of this, many prefer serving stale or early recompute over strict distributed locking."],
+    ["sd","Design cache access for a very hot, expensive-to-compute key under heavy traffic.","Avoid hard expiry for the hottest keys: use stale-while-revalidate so reads never block, with a single background refresher (single-flight) so only one recompute runs. Add probabilistic early recomputation to refresh just before TTL and eliminate the miss gap, and apply TTL jitter across keys to prevent correlated expiries (avalanche). Implement single-flight with an atomic Redis SET NX lock that has a TTL and a fallback-to-stale for waiters. Cap recompute concurrency, add circuit breakers/timeouts to the backend, and monitor miss rate and backend QPS to detect herds."]
+  ],
+  mistakes:["No coalescing — every concurrent miss recomputes independently.","Synchronized TTLs so many hot keys expire at once (→ avalanche).","Distributed lock with no TTL/fallback → deadlock if holder dies.","Serving stale for data that must be strongly consistent.","Letting the backend have no timeout/circuit breaker during a herd."],
+  best:["Coalesce concurrent misses via single-flight (one recompute).","Prefer stale-while-revalidate when brief staleness is acceptable.","Use probabilistic early recomputation to avoid the miss gap.","Add TTL jitter to desynchronize expiries across keys.","Protect the backend with timeouts, circuit breakers, and concurrency caps."],
+  related:[["Cache Avalanche","🏔️","Mass simultaneous expiry","cache-avalanche.html"],["Cache Penetration","🕳️","Misses for nonexistent keys","cache-penetration.html"],["Backoff & Retry","🔁","Thundering herd on retries","backoff.html"],["Distributed Locking","🔒","Single-flight coordination","distributed-lock.html"],["Memcached","🧊","Common cache backend","memcached.html"],["Bloom Filter","🌸","Avoids penetration lookups","bloom-filter.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

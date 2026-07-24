@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>H3 Indexing — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+// flat-top hexagon helpers (axial q,r)
+function hexPoly(cx,cy,size){let p="";for(let i=0;i<6;i++){const a=Math.PI/180*(60*i);p+=(cx+size*Math.cos(a))+","+(cy+size*Math.sin(a))+" ";}return p.trim();}
+const hexDist=(a,b)=>{const dq=a.q-b.q,dr=a.r-b.r;return (Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2;};
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 210"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,196,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("polygon,rect,line,circle,text.n").forEach(n=>n.remove());
+    if(phase===0){ // square grid — neighbor distances differ
+      const gx=210,gy=50,c=34;
+      for(let i=0;i<3;i++)for(let j=0;j<3;j++){const on=(i===1&&j===1);svg.appendChild(S("rect",{x:gx+i*c,y:gy+j*c,width:c-2,height:c-2,fill:on?"rgba(124,58,237,.3)":"#161619",stroke:"#3a3a42"}));}
+      lbl.textContent="square cells: 8 neighbors, unequal distances";lbl.setAttribute("fill","#c4a2ff");sub.textContent="edge neighbors are closer than diagonal neighbors — ambiguous";}
+    else{ // hex grid — 6 equidistant neighbors
+      const cx=310,cy=95,sz=30,dirs=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
+      function px(q,r){return [cx+sz*1.5*q, cy+sz*Math.sqrt(3)*(r+q/2)];}
+      const [x0,y0]=px(0,0);svg.appendChild(S("polygon",{points:hexPoly(x0,y0,sz),fill:"rgba(124,58,237,.3)",stroke:"#7C3AED","stroke-width":1.5}));
+      dirs.forEach(([q,r])=>{const[x,y]=px(q,r);svg.appendChild(S("polygon",{points:hexPoly(x,y,sz),fill:"rgba(52,211,153,.16)",stroke:"#34d399","stroke-width":1.2}));});
+      lbl.textContent="hexagons: 6 neighbors, all equidistant";lbl.setAttribute("fill","#34d399");sub.textContent="uniform adjacency → cleaner distance, movement & coverage models";}}
+  function step(){phase=(phase+1)%2;timer=2.3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Click any hexagon to select it as the center, then adjust the k-ring radius. H3 (Uber's hierarchical hexagonal grid) makes "cells within k steps" a clean, uniform query — every neighbor is the same distance away, unlike a square grid. Change resolution to see finer or coarser cells.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Resolution (cell size) <b id="pgResV">med</b></label><input id="pgRes" type="range" min="18" max="46" value="30"></div>
+      <div class="pg-field"><label>k-ring radius <b id="pgKV">1</b></label><input id="pgK" type="range" min="0" max="4" value="1"></div>
+      <div class="pg-btns"><button id="pgReset" class="go">↺ Reset center</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">k-ring size grows as 3k(k+1)+1: k=1→7 cells, k=2→19, k=3→37. Uber uses this to expand a search area evenly for driver matching & surge pricing.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Total cells</div><div class="v ac" id="pgTotal">0</div></div>
+        <div class="pg-stat"><div class="k">k-ring cells</div><div class="v ok" id="pgRing">1</div></div>
+        <div class="pg-stat"><div class="k">Neighbors/cell</div><div class="v" id="pgNb">6</div></div>
+        <div class="pg-stat"><div class="k">Formula</div><div class="v wa" id="pgForm">1</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=340;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let size=30,k=1,center={q:0,r:0},cells;
+  function px(q,r){return [W/2+size*1.5*q, H/2+size*Math.sqrt(3)*(r+q/2)];}
+  function build(){cells=[];const R=Math.ceil(W/(size*1.5)/2)+1;
+    for(let q=-R;q<=R;q++)for(let r=-R;r<=R;r++){const[x,y]=px(q,r);if(x>size&&x<W-size&&y>size&&y<H-size)cells.push({q,r,x,y});}}
+  function draw(){svg.innerHTML="";
+    cells.forEach(c=>{const d=hexDist(c,center);const inRing=d<=k;const isC=d===0;
+      const poly=S("polygon",{points:hexPoly(c.x,c.y,size-1.5),
+        fill:isC?"rgba(124,58,237,.4)":inRing?"rgba(52,211,153,.18)":"#141416",
+        stroke:isC?"#7C3AED":inRing?"#34d399":"#2a2a32","stroke-width":isC?2:1.2,cursor:"pointer"});
+      poly.addEventListener("click",()=>{center={q:c.q,r:c.r};draw();stats();log("center → ("+c.q+","+c.r+"), k-ring "+k+" = "+ringCount()+" cells","ok");});
+      svg.appendChild(poly);});}
+  function ringCount(){return cells.filter(c=>hexDist(c,center)<=k).length;}
+  function stats(){$("pgTotal").textContent=cells.length;$("pgRing").textContent=ringCount();$("pgForm").textContent=3*k*(k+1)+1;$("pgK").value;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>20)l.removeChild(l.lastChild);}
+  function rebuild(){build();draw();stats();}
+
+  $("pgRes").addEventListener("input",()=>{size=+$("pgRes").value;$("pgResV").textContent=size<24?"fine":size>38?"coarse":"med";center={q:0,r:0};rebuild();});
+  $("pgK").addEventListener("input",()=>{k=+$("pgK").value;$("pgKV").textContent=k;draw();stats();log("k-ring = "+k+" → "+(3*k*(k+1)+1)+" cells (ideal)","ac");});
+  $("pgReset").onclick=()=>{center={q:0,r:0};draw();stats();log("center reset to origin","ac");};
+  rebuild();log("click a hexagon to move the center","ac");
+}
+
+const DATA={
+  badge:"⬡",title:"H3 Indexing",category:"Algorithms",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Hierarchical Hexagonal Geospatial Index",
+  tagline:"Uber's open-source grid that tiles the Earth with <b>hexagons</b> at 16 resolutions — giving uniform neighbor distances, clean k-ring searches, and a single 64-bit cell ID for any location.",
+  pills:["<b>Hexagons</b> = uniform neighbors","<b>16</b> resolutions","<b>64-bit</b> cell ID","<b>Hierarchical</b>"],
+  overview:"H3 partitions the globe into hexagonal cells at 16 nested resolutions (plus 12 pentagons to close the sphere). Hexagons are special: unlike squares (which have both near edge-neighbors and far diagonal-neighbors) every hexagon has exactly 6 neighbors all at the same distance. That uniform adjacency makes distance, coverage, and flow modeling much cleaner. Each cell is a compact 64-bit index encoding its resolution and position; you can convert lat/lng ↔ cell, get k-ring neighbors, and move up/down resolutions — ideal for bucketing moving objects and aggregating geospatial data.",
+  problem:"Square/geohash grids have uneven neighbor distances and boundary ambiguity, which distorts proximity, smoothing, and 'expand the search radius' operations. H3's hexagons give uniform adjacency and a hierarchical, indexable ID, so ride matching, surge zones, and spatial analytics behave consistently and expand evenly.",
+  diagram,diagramCaption:"Squares have 8 unequal neighbors; hexagons have 6 equidistant ones — cleaner spatial reasoning.",
+  how:[
+    "Project the sphere onto an icosahedron and tile each face with hexagons (12 pentagons cover the vertices).",
+    "Pick a resolution 0–15; higher = smaller cells (res 0 ≈ 4.3M km², res 9 ≈ 0.1 km²).",
+    "Encode each cell as a 64-bit H3 index (base cell + child digits + resolution).",
+    "latLngToCell(lat,lng,res) gives the containing cell; cellToLatLng gives its center.",
+    "gridDisk(cell,k) returns the k-ring: all cells within k steps (3k(k+1)+1 cells)."
+  ],
+  complexity:[["lat/lng → cell","O(1)"],["k-ring (gridDisk)","O(k²)"],["Cell ID","64-bit int"],["Resolutions","16 (0–15)"]],
+  advantages:["Uniform neighbor distance (all 6 equal)","Hierarchical: aggregate by lowering resolution","Compact 64-bit indexable IDs","Great for coverage, flows, and smoothing"],
+  disadvantages:["12 pentagons are special-cased","Hexagons don't perfectly nest across resolutions","Slightly more complex math than geohash","Library dependency vs a few lines of geohash"],
+  tradeoffs:"H3 gives geometric quality (uniform adjacency, even k-ring expansion) at the cost of a library and imperfect hierarchical nesting — a parent hexagon's children don't tile it exactly (they overlap edges), so roll-ups are approximate. Geohash is simpler and trivially indexable as a string but has rectangular cells and edge artifacts. Quadtrees adapt to density but aren't a fixed global grid. Pick H3 when uniform distance and clean neighbor expansion matter (movement, coverage, surge zones).",
+  whenNot:"Skip H3 when a couple of lines of geohash on an existing string index suffice, when you need exact hierarchical containment (children exactly tiling parents), when point density is extremely skewed (a quadtree adapts better), or when you can't take on the H3 library dependency.",
+  sim,
+  code:{
+"Java":`// Uber H3 (com.uber:h3) core operations\nimport com.uber.h3core.H3Core;\nH3Core h3 = H3Core.newInstance();\nlong cell = h3.latLngToCell(37.7749, -122.4194, 9);   // res 9 cell id\nString hex = h3.h3ToString(cell);                      // "8928308280fffff"\nLatLng center = h3.cellToLatLng(cell);                  // cell centroid\nList<Long> ring = h3.gridDisk(cell, 1);                 // 7 cells (k=1)\nlong parent = h3.cellToParent(cell, 7);                 // coarser cell\nList<Long> kids = h3.cellToChildren(cell, 11);          // finer cells`,
+"Python":`import h3\ncell = h3.latlng_to_cell(37.7749, -122.4194, 9)   # '8928308280fffff'\nh3.cell_to_latlng(cell)                            # (lat, lng) centroid\nring = h3.grid_disk(cell, 2)                       # 19 cells within k=2\nh3.grid_distance(cell_a, cell_b)                   # hex steps between cells\nh3.cell_to_parent(cell, 7)                         # aggregate to coarser res\n# bucket events by cell for a heatmap\nfrom collections import Counter\nheat = Counter(h3.latlng_to_cell(la, lo, 8) for la, lo in points)`,
+"SQL":`-- store the H3 cell as an indexed bigint for fast bucketed queries\nALTER TABLE rides ADD COLUMN h3_r9 BIGINT;\nUPDATE rides SET h3_r9 = h3_latlng_to_cell(lat, lng, 9);  -- via extension\nCREATE INDEX idx_rides_h3 ON rides(h3_r9);\n-- demand per cell in the last hour (surge input)\nSELECT h3_r9, COUNT(*) AS demand\nFROM rides WHERE ts > NOW() - INTERVAL '1 hour'\nGROUP BY h3_r9 ORDER BY demand DESC;`
+  },
+  realWorld:[
+    ["Uber","Created H3 to bucket riders/drivers, model surge pricing zones, and analyze trips uniformly."],
+    ["Ride-hailing & delivery","Match supply and demand per cell and expand search via k-rings evenly."],
+    ["Analytics / heatmaps","Aggregate events into hex cells for even, artifact-free density maps."],
+    ["Logistics & telecom","Coverage planning and signal/flow modeling benefit from uniform adjacency."],
+    ["Data platforms (BigQuery, Databricks, Spark)","H3 UDFs bucket massive geospatial datasets for roll-ups."]
+  ],
+  interview:[
+    ["basic","What is H3 and why hexagons?","H3 is Uber's hierarchical hexagonal geospatial index. Hexagons are used because every cell has exactly 6 neighbors all at the same distance, unlike squares whose edge and diagonal neighbors differ — giving cleaner distance, coverage, and neighbor-expansion behavior."],
+    ["basic","What is a k-ring (grid disk)?","The set of all cells within k grid steps of a center cell. For hexagons it contains 3k(k+1)+1 cells (k=1→7, k=2→19). It's used to expand a search area evenly, e.g., 'find drivers within k cells of the rider'."],
+    ["inter","How does resolution work in H3?","H3 has 16 resolutions (0–15). Lower resolutions are large cells; each step to a finer resolution subdivides cells into ~7 children. You choose resolution to match your query scale — coarse for city-level aggregation, fine for block-level matching — and can move up/down for roll-ups."],
+    ["inter","H3 vs geohash?","Geohash produces rectangular cells and a base32 string that's trivially indexable, but has uneven neighbor distances and edge artifacts. H3 produces hexagonal cells with uniform adjacency and a 64-bit ID, better for movement/coverage/expansion, at the cost of a library and imperfect hierarchical nesting. Geohash wins on simplicity; H3 wins on geometric quality."],
+    ["adv","What are the pentagons and why do they matter?","You can't tile a sphere with only hexagons — H3 includes 12 pentagon cells (at icosahedron vertices) to close the surface. Pentagons have 5 neighbors and slight distortions, so code that assumes exactly 6 neighbors must handle them as edge cases (they sit over oceans in the standard orientation to minimize impact)."],
+    ["adv","Do H3 children exactly tile their parent?","No — because hexagons don't nest perfectly, a parent cell's 7 children overlap its edges rather than partitioning it exactly. This makes hierarchical aggregation approximate at boundaries, which you must account for when rolling data up/down resolutions."],
+    ["sd","How would you use H3 in a ride-sharing backend?","Encode each driver/rider location to an H3 cell (e.g., res 8–9) and index it. To match, take the rider's cell and expand via k-ring until enough drivers are found, then rank by ETA. Aggregate demand per cell over time windows to compute surge multipliers. H3's uniform expansion and cheap bucketing make supply/demand modeling and geospatial analytics consistent."]
+  ],
+  mistakes:["Assuming every cell has 6 neighbors — pentagons have 5.","Expecting children to exactly tile parents (they don't — roll-ups are approximate).","Picking a resolution mismatched to the query scale.","Comparing H3 index integers numerically as if they were distances.","Reimplementing H3 math instead of using the maintained library."],
+  best:["Use the official H3 library (Java/Python/JS/Go) — don't hand-roll it.","Choose resolution per use case; store the cell ID as an indexed bigint.","Expand searches with gridDisk/k-ring instead of ad-hoc radii.","Handle pentagon edge cases explicitly.","Precompute cell IDs at ingest to make queries simple GROUP BYs."],
+  related:[["Geohash","🌐","String-based spatial index","geohash.html"],["QuadTree","🗺️","Density-adaptive index","quadtree.html"],["Ride Sharing","🚗","Matching & surge","ride-sharing.html"],["Consistent Hashing","🔁","Uniform partitioning","system-designed.html"],["Redis","🧠","GEO / spatial data","system-designed.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

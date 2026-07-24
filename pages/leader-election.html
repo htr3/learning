@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Leader Election — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,22,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,186,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const ids=[2,4,7,5,6];const y=105;const xs=ids.map((_,i)=>90+i*110);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("g,line,circle,rect,text.n").forEach(n=>n.remove());
+    const leaderIdx=phase===0?4:phase===1?-1:3; // node id7 leader; then dead; then id6 wins
+    ids.forEach((id,i)=>{const dead=(phase>=1&&i===4);const isL=i===leaderIdx;
+      svg.appendChild(S("circle",{cx:xs[i],cy:y,r:26,fill:dead?"rgba(120,120,130,.1)":isL?"rgba(124,58,237,.3)":"rgba(52,211,153,.14)",stroke:dead?"#4a4a52":isL?"#7C3AED":"#34d399","stroke-width":2,"stroke-dasharray":dead?"4 4":"none"}));
+      svg.appendChild(TX(xs[i],y-2,dead?"✕":"id "+id,{fill:dead?"#6b6b73":"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":isL?700:400}));
+      if(isL)svg.appendChild(TX(xs[i],y+14,"👑",{fill:"#fbbf24","font-size":12,"text-anchor":"middle"}));});
+    if(phase===0){lbl.textContent="highest id (7) is the leader";lbl.setAttribute("fill","#c4a2ff");sub.textContent="all nodes agree on one coordinator";}
+    else if(phase===1){lbl.textContent="leader crashes — others detect it";lbl.setAttribute("fill","#f87171");sub.textContent="a node notices missing heartbeats and starts an election";}
+    else{lbl.textContent="highest surviving id (6) wins";lbl.setAttribute("fill","#34d399");sub.textContent="Bully: the largest alive id becomes the new leader";}}
+  function step(){phase=(phase+1)%3;timer=2.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Six nodes with unique ids run the <b>Bully algorithm</b>. Kill the leader and start an election: the node that notices contacts all higher ids; whoever is the <b>highest alive id</b> takes over and announces itself coordinator. Revive nodes to see a higher id "bully" its way back to leadership.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Algorithm</label>
+        <select id="pgAlg"><option value="bully">Bully (highest id wins)</option><option value="ring">Ring (token around ring)</option></select></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgElect" class="go">Start election</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgKill">Kill leader</button><button id="pgHeal">Revive node</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Bully favours the highest id and is chatty (O(n²) messages worst case). Ring passes a token collecting ids, then the max becomes leader in O(n) messages.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Leader</div><div class="v ok" id="pgLeader">—</div></div>
+        <div class="pg-stat"><div class="k">Alive</div><div class="v" id="pgAlive">6/6</div></div>
+        <div class="pg-stat"><div class="k">Messages</div><div class="v ac" id="pgMsg">0</div></div>
+        <div class="pg-stat"><div class="k">Algorithm</div><div class="v wa" id="pgAlgV">bully</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const IDS=[3,1,5,2,6,4],N=IDS.length,W=560,H=250,cx=230,cy=125,R=100;
+  const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const pos=i=>[cx+R*Math.cos(-Math.PI/2+i*2*Math.PI/N),cy+R*Math.sin(-Math.PI/2+i*2*Math.PI/N)];
+  let alive,leader,msgs;
+  function reset(){alive=IDS.map(()=>true);leader=highest();msgs=0;draw();stats();$("pgLog").innerHTML="";log("start — highest id ("+IDS[leader]+") is leader","ac");}
+  function highest(){let best=-1,bi=-1;for(let i=0;i<N;i++)if(alive[i]&&IDS[i]>best){best=IDS[i];bi=i;}return bi;}
+  function aliveCount(){return alive.filter(Boolean).length;}
+  function elect(){if(aliveCount()===0){log("no nodes alive","bad");return;}
+    const alg=$("pgAlg").value;
+    if(alg==="bully"){
+      // node that notices = lowest alive index; it messages all higher ids
+      const starter=alive.findIndex(Boolean);
+      log("node id "+IDS[starter]+" starts a Bully election","ac");
+      let m=0;for(let i=0;i<N;i++){if(IDS[i]>IDS[starter]){m++;/*ELECTION msg*/}}
+      const winner=highest();
+      // higher alive nodes respond, eventually the max announces
+      for(let i=0;i<N;i++)if(alive[i]&&IDS[i]>IDS[starter])m++; // OK responses
+      m+=aliveCount()-1; // coordinator announcement
+      msgs+=m;leader=winner;
+      log("id "+IDS[winner]+" is highest alive → announces COORDINATOR ("+m+" msgs)","ok");
+    } else {
+      // ring: token travels around collecting ids, max wins
+      const start=alive.findIndex(Boolean);let m=0,ids=[];
+      for(let k=0;k<N;k++){const i=(start+k)%N;if(alive[i]){ids.push(IDS[i]);m++;}}
+      const winner=highest();m+=aliveCount(); // announce round
+      msgs+=m;leader=winner;
+      log("ring token collected ["+ids.join(",")+"] → max id "+IDS[winner]+" is leader ("+m+" msgs)","ok");
+    }
+    draw();stats();}
+  function kill(){if(leader<0){const a=alive.findIndex(Boolean);if(a>=0){alive[a]=false;log("killed id "+IDS[a],"bad");}}
+    else{log("💀 killed LEADER id "+IDS[leader]+" — election needed","bad");alive[leader]=false;leader=-1;}
+    stats();draw();}
+  function heal(){const d=alive.findIndex(a=>!a);if(d>=0){alive[d]=true;log("revived id "+IDS[d]+" — start an election to let it bully back if higher","ac");}stats();draw();}
+  function draw(){svg.innerHTML="";
+    for(let i=0;i<N;i++){if(!alive[i])continue;const[x,y]=pos(i);
+      if(leader>=0&&i!==leader&&alive[leader]){const[lx,ly]=pos(leader);svg.appendChild(S("line",{x1:lx,y1:ly,x2:x,y2:y,stroke:"#2f3742","stroke-width":1.3}));}}
+    for(let i=0;i<N;i++){const[x,y]=pos(i);const isL=i===leader&&alive[i];
+      svg.appendChild(S("circle",{cx:x,cy:y,r:26,fill:!alive[i]?"rgba(120,120,130,.1)":isL?"rgba(124,58,237,.3)":"rgba(52,211,153,.14)",stroke:!alive[i]?"#4a4a52":isL?"#7C3AED":"#34d399","stroke-width":2,"stroke-dasharray":alive[i]?"none":"4 4"}));
+      svg.appendChild(TX(x,y-2,!alive[i]?"✕":"id "+IDS[i],{fill:!alive[i]?"#6b6b73":"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":isL?700:400}));
+      if(isL)svg.appendChild(TX(x,y+15,"👑 leader",{fill:"#fbbf24","font-size":8.5,"text-anchor":"middle"}));}
+    svg.appendChild(TX(430,120,leader>=0?"leader: id "+IDS[leader]:"no leader",{fill:"#c4a2ff","font-size":12,"text-anchor":"middle","font-weight":700}));}
+  function stats(){$("pgLeader").textContent=leader>=0?"id "+IDS[leader]:"none";$("pgAlive").textContent=aliveCount()+"/"+N;$("pgMsg").textContent=msgs;$("pgAlgV").textContent=$("pgAlg").value;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgElect").onclick=elect;$("pgKill").onclick=kill;$("pgHeal").onclick=heal;$("pgReset").onclick=reset;
+  $("pgAlg").onchange=()=>{stats();log("algorithm → "+$("pgAlg").value,"ac");};
+  reset();
+}
+
+const DATA={
+  badge:"👑",title:"Leader Election",category:"Distributed Systems",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Choosing a Coordinator",
+  tagline:"How a group of nodes agrees on <b>one</b> node to act as coordinator — for ordering writes, assigning work, or owning a resource — and how it re-elects automatically when that leader fails. Classic algorithms: <b>Bully</b>, <b>Ring</b>, and lease/consensus-based election.",
+  pills:["<b>Exactly one</b> leader","<b>Auto</b> failover","<b>Bully / Ring</b>","<b>Lease-based</b> in practice"],
+  overview:"Many distributed systems need a single coordinator: a primary database replica, a job scheduler, the node that assigns partitions, or the holder of a resource. Leader election is the process of picking that node and detecting when it dies so a replacement takes over. Textbook algorithms include the <b>Bully algorithm</b> (the highest-id reachable node wins by 'bullying' lower ones) and the <b>Ring algorithm</b> (a token circulates collecting ids; the max becomes leader). In production, election is usually built on a consensus/coordination service — a <b>lease</b> or lock in etcd/ZooKeeper/Consul, or a Raft/Paxos leader — because those guarantee safety (never two leaders) even under partitions, which naïve timeout-based election cannot.",
+  problem:"Without a single coordinator, nodes duplicate work, apply conflicting writes, or leave a resource unowned. But naïvely picking a leader risks two dangers: no leader (unavailable) or two leaders at once (split-brain, data corruption). Leader election must reliably produce exactly one leader and safely fail over — ideally with fencing so a stale leader can't keep acting.",
+  diagram,diagramCaption:"When the leader crashes, the highest-id surviving node wins the election (Bully algorithm).",
+  how:[
+    "Detect failure: nodes exchange heartbeats; a missing heartbeat past a timeout signals the leader is (maybe) dead.",
+    "Bully: the detecting node sends ELECTION to all higher ids; if any respond, it steps back; the highest alive id announces itself coordinator.",
+    "Ring: nodes are ordered in a logical ring; an election message circulates collecting ids, and the maximum becomes leader.",
+    "Lease-based (production): candidates try to acquire a short-lived lease/lock in a consensus store; the holder is leader and must renew it before expiry.",
+    "Fencing: give each new leader a monotonically increasing token so downstream systems reject a resurrected old leader's requests."
+  ],
+  complexity:[["Bully messages","O(n²) worst case"],["Ring messages","O(n)"],["Guarantee","exactly 1 leader"],["Failover","on lease expiry / timeout"]],
+  advantages:["Simplifies design (one coordinator for ordering/ownership)","Automatic failover on leader death","Lease-based election is simple to build on etcd/ZK","Fencing tokens prevent stale-leader damage"],
+  disadvantages:["Leader is a bottleneck & single failure point","Naïve timeout election risks split-brain","Failover gap = brief unavailability","Bully is message-heavy; needs known ids"],
+  tradeoffs:"Timeout-only algorithms (Bully/Ring) are simple but unsafe under network partitions — both sides can elect a leader (split-brain). Consensus/lease-based election is safe because a lease requires a quorum, but it needs a coordination service and adds a renewal/failover delay. Shorter leases detect failure faster but increase renewal traffic and risk false failovers under transient latency; longer leases reduce churn but lengthen the unavailability window. Always pair election with fencing tokens so a paused-then-resumed old leader can't corrupt state.",
+  whenNot:"Skip a single leader when work is embarrassingly parallel and needs no coordination (use stateless workers + a queue), or when you can use leaderless/multi-master designs (Dynamo-style, CRDTs). Don't hand-roll timeout-based election for correctness-critical systems — lean on etcd/ZooKeeper/Consul or a Raft library instead.",
+  sim,
+  code:{
+"etcd lease":`// Leader election via an etcd lease (Go client) — safe, quorum-backed.\nsession, _ := concurrency.NewSession(cli, concurrency.WithTTL(10))\nelection := concurrency.NewElection(session, "/leader/my-service")\n\n// Campaign blocks until THIS node becomes leader (only one can hold it)\nif err := election.Campaign(ctx, myNodeID); err == nil {\n    runAsLeader(ctx)          // do leader-only work here\n}\n// If the session's lease expires (node dies / network gone), leadership\n// is released automatically and another node wins the campaign.`,
+"Bully":`# Bully algorithm (pseudocode)\ndef start_election(self):\n    higher = [n for n in nodes if n.id > self.id and n.alive]\n    if not higher:\n        self.become_leader()                 # I'm the highest -> coordinator\n        broadcast(COORDINATOR, self.id)\n    else:\n        for n in higher: send(n, ELECTION)   # ask higher ids\n        if not any_response(timeout):\n            self.become_leader()             # nobody higher answered\n        # else: a higher node takes over; I wait for COORDINATOR`,
+"Fencing":`// Fencing token stops a stale leader from corrupting state.\nlong token = store.acquireLeadership();   // monotonically increasing\n// ... leader pauses (GC / network) and lease expires; new leader gets token+1\nresource.write(data, token);              // storage rejects if token < latest\n// => a resurrected old leader's writes (old token) are refused.`
+  },
+  realWorld:[
+    ["Kafka controller","One broker is elected controller (via KRaft/ZooKeeper) to manage partition leadership."],
+    ["Kubernetes controllers","Components use lease objects (leader election) so only one replica is active at a time."],
+    ["HDFS / YARN","Active–standby NameNode/ResourceManager use ZooKeeper for automatic failover."],
+    ["Redis Sentinel","Elects a new master among replicas when the primary fails."],
+    ["Databases (Postgres/Mongo)","Primary election picks the node that accepts writes; replicas follow."]
+  ],
+  interview:[
+    ["basic","What is leader election and why is it needed?","It's the process of selecting a single node to coordinate an activity (ordering writes, scheduling, owning a resource) and re-selecting one when it fails. It prevents conflicting actions and gives a clear owner, while allowing automatic failover for availability."],
+    ["basic","Explain the Bully algorithm.","Each node has a unique id. When a node notices the leader is gone, it sends ELECTION to all higher-id nodes. If none respond, it becomes leader and announces COORDINATOR. If a higher node responds, it takes over the election. The highest-id living node always wins — hence 'bully'."],
+    ["inter","Bully vs Ring algorithm?","Bully picks the highest id directly but can send O(n²) messages and needs to know all ids. Ring arranges nodes in a logical ring and passes an election token that accumulates ids; the maximum becomes leader in O(n) messages, but it's slower to converge and sensitive to nodes failing mid-circulation."],
+    ["inter","How is leader election done in real systems?","Rarely with raw Bully/Ring. Instead nodes acquire a short-lived lease/lock in a consensus-backed store (etcd, ZooKeeper, Consul) or rely on a Raft/Paxos leader. The lease holder is the leader and must renew before it expires; if it dies, the lease lapses and another node acquires it — safe because the store requires a quorum."],
+    ["adv","How do you prevent two leaders (split-brain)?","Base election on a quorum so only the majority side can win, and use fencing tokens: each new leader gets a strictly increasing token, and downstream resources reject requests carrying an older token. This stops a paused/partitioned old leader from acting after a new one is elected."],
+    ["adv","What are the trade-offs in lease TTL?","Short TTLs detect a dead leader quickly but generate more renewal traffic and can trigger false failovers during transient latency/GC pauses. Long TTLs reduce churn but lengthen the window with no leader. Choose based on acceptable failover time and pair with fencing to tolerate late renewals safely."],
+    ["sd","Design leader election for a job scheduler that must run singletons.","Use a coordination service: each scheduler instance campaigns for a lease at /scheduler/leader in etcd/ZooKeeper. The lease holder runs jobs; others stand by watching. On leader death the lease expires and a standby wins within the TTL. Attach a fencing token to job-claim writes so a revived old leader can't double-run jobs. Keep leader-only work idempotent to survive brief overlaps."]
+  ],
+  mistakes:["Relying on timeouts alone → split-brain during partitions.","Electing a leader without fencing, so a resurrected old leader corrupts state.","Setting lease TTL too low, causing flapping under transient latency/GC.","Assuming the elected leader is instantly known to everyone (there's a convergence delay).","Making leader-only operations non-idempotent, so brief dual-leadership causes duplicates."],
+  best:["Build election on a quorum-backed store (etcd/ZooKeeper/Consul) or Raft.","Always use monotonically increasing fencing tokens downstream.","Tune lease TTL to your failover SLA; renew well before expiry.","Keep leader work idempotent to tolerate overlap during failover.","Expose the current leader clearly (e.g., in the store) so clients route correctly."],
+  related:[["Consensus / Raft","🧭","Raft leader is elected","consensus-raft.html"],["Paxos","📜","Distinguished proposer","paxos.html"],["ZooKeeper","🐘","Ephemeral-node election","zookeeper.html"],["Distributed Locking","🔒","Leases & fencing tokens","distributed-lock.html"],["Split Brain","🧠","The failure to avoid","split-brain.html"],["Quorum","🗳️","Majority makes it safe","quorum.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

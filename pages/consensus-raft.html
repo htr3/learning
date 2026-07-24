@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Consensus & Raft — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,22,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,186,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const cx=310,cy=105,R=62;const pos=i=>[cx+R*Math.cos(-Math.PI/2+i*2*Math.PI/5),cy+R*Math.sin(-Math.PI/2+i*2*Math.PI/5)];
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){svg.querySelectorAll("circle,line,text.n").forEach(n=>n.remove());
+    const leader=0;
+    for(let i=0;i<5;i++){const[x,y]=pos(i);
+      if(phase>=1&&i!==leader){const[lx,ly]=pos(leader);svg.appendChild(S("line",{x1:lx,y1:ly,x2:x,y2:y,stroke:phase===2?"#34d399":"#7C3AED","stroke-width":1.6}));}}
+    for(let i=0;i<5;i++){const[x,y]=pos(i);const isL=i===leader;
+      const c=S("circle",{cx:x,cy:y,r:22,fill:isL?"rgba(124,58,237,.3)":"rgba(52,211,153,.14)",stroke:isL?"#7C3AED":"#34d399","stroke-width":2});c.setAttribute("class","n");svg.appendChild(c);
+      const t=TX(x,y+4,isL?"L":"F",{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700});t.setAttribute("class","n");svg.appendChild(t);}
+    if(phase===0){lbl.textContent="one leader, four followers";lbl.setAttribute("fill","#c4a2ff");sub.textContent="the leader handles all client writes";}
+    else if(phase===1){lbl.textContent="leader replicates the log entry";sub.textContent="AppendEntries sent to every follower";}
+    else{lbl.textContent="majority acked → entry committed";lbl.setAttribute("fill","#34d399");sub.textContent="3 of 5 is a majority → safe to apply to the state machine";}}
+  function step(){phase=(phase+1)%3;timer=2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">A live 5-node Raft cluster. It auto-elects a leader; send client commands to replicate log entries (committed once a majority acks). Kill the leader and watch a new election bump the term and pick a new leader — the essence of fault-tolerant consensus.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-btns"><button id="pgCmd" class="go">Client command</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgKill">Kill leader</button><button id="pgHeal">Revive node</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">A leader needs votes from a majority (3 of 5). With ≥3 nodes alive the cluster keeps working; kill enough that fewer than 3 remain and it can't elect a leader — no progress, but never inconsistent.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Term</div><div class="v ac" id="pgTerm">0</div></div>
+        <div class="pg-stat"><div class="k">Leader</div><div class="v ok" id="pgLeader">—</div></div>
+        <div class="pg-stat"><div class="k">Alive</div><div class="v" id="pgAlive">5/5</div></div>
+        <div class="pg-stat"><div class="k">Committed</div><div class="v wa" id="pgCommit">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=5,W=560,H=250,cx=200,cy=125,R=95;
+  const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const pos=i=>[cx+R*Math.cos(-Math.PI/2+i*2*Math.PI/N),cy+R*Math.sin(-Math.PI/2+i*2*Math.PI/N)];
+  let nodes,term,leader,commit,timeout;
+  function reset(){nodes=[];for(let i=0;i<N;i++)nodes.push({id:i,role:"follower",alive:true,log:0});
+    term=0;leader=-1;commit=0;timeout=1;draw();stats();$("pgLog").innerHTML="";log("cluster started — waiting for election","ac");}
+  function aliveCount(){return nodes.filter(n=>n.alive).length;}
+  function elect(){if(leader>=0&&nodes[leader].alive)return;
+    const cands=nodes.filter(n=>n.alive);if(cands.length< Math.floor(N/2)+1){log("only "+cands.length+"/"+N+" alive — no majority, cannot elect (safe: no split brain)","bad");leader=-1;stats();draw();return;}
+    term++;const c=cands[Math.floor(Math.random()*cands.length)];
+    nodes.forEach(n=>{if(n.role==="leader")n.role="follower";});
+    // candidate collects votes from majority
+    c.role="leader";leader=c.id;
+    // new leader's log becomes source of truth; followers converge
+    nodes.forEach(n=>{if(n.alive)n.log=nodes[leader].log;});
+    log("election: term "+term+" → node "+c.id+" wins majority ("+cands.length+" votes) → LEADER","ok");stats();draw();}
+  function cmd(){if(leader<0||!nodes[leader].alive){log("no leader yet — wait for election","wa");return;}
+    nodes[leader].log++;const entry=nodes[leader].log;
+    const acks=nodes.filter(n=>n.alive).length;   // followers replicate
+    nodes.forEach(n=>{if(n.alive)n.log=entry;});
+    if(acks>=Math.floor(N/2)+1){commit=entry;log("cmd → entry #"+entry+" replicated to "+acks+" nodes → COMMITTED (majority)","ok");}
+    else log("cmd → entry #"+entry+" written but NOT committed ("+acks+" < majority)","wa");
+    stats();draw();}
+  function kill(){if(leader<0){ // kill a random alive
+      const a=nodes.filter(n=>n.alive);if(a.length){a[0].alive=false;log("killed node "+a[0].id,"bad");}}
+    else{nodes[leader].alive=false;log("💀 killed LEADER (node "+leader+") — followers time out & start election","bad");leader=-1;}
+    stats();draw();}
+  function heal(){const d=nodes.find(n=>!n.alive);if(d){d.alive=true;d.role="follower";if(leader>=0)d.log=nodes[leader].log;log("revived node "+d.id+" (rejoins as follower, catches up log)","ac");}stats();draw();}
+  function draw(){svg.innerHTML="";
+    for(let i=0;i<N;i++){if(!nodes[i].alive)continue;const[x,y]=pos(i);
+      if(leader>=0&&i!==leader&&nodes[leader].alive){const[lx,ly]=pos(leader);svg.appendChild(S("line",{x1:lx,y1:ly,x2:x,y2:y,stroke:"#2f3742","stroke-width":1.4}));}}
+    nodes.forEach((n,i)=>{const[x,y]=pos(i);const isL=n.role==="leader"&&n.alive;
+      svg.appendChild(S("circle",{cx:x,cy:y,r:28,
+        fill:!n.alive?"rgba(120,120,130,.1)":isL?"rgba(124,58,237,.3)":"rgba(52,211,153,.14)",
+        stroke:!n.alive?"#4a4a52":isL?"#7C3AED":"#34d399","stroke-width":2,"stroke-dasharray":n.alive?"none":"4 4"}));
+      svg.appendChild(TX(x,y-4,!n.alive?"✕":isL?"LEADER":"follower",{fill:!n.alive?"#6b6b73":"#e4e4e7","font-size":9,"text-anchor":"middle","font-weight":isL?700:400}));
+      svg.appendChild(TX(x,y+10,"log "+n.log,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));});
+    // legend
+    svg.appendChild(TX(390,40,"● leader",{fill:"#c4a2ff","font-size":11}));
+    svg.appendChild(TX(390,60,"● follower",{fill:"#34d399","font-size":11}));
+    svg.appendChild(TX(390,80,"✕ dead",{fill:"#6b6b73","font-size":11}));
+    svg.appendChild(TX(390,118,"majority = 3 / 5",{fill:"#8b8b93","font-size":11}));
+    svg.appendChild(TX(390,138,"committed idx: "+commit,{fill:"#fbbf24","font-size":11}));}
+  function stats(){$("pgTerm").textContent=term;$("pgLeader").textContent=leader<0?"none":"node "+leader;$("pgAlive").textContent=aliveCount()+"/"+N;$("pgCommit").textContent=commit;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgCmd").onclick=cmd;$("pgKill").onclick=kill;$("pgHeal").onclick=heal;$("pgReset").onclick=reset;
+  reset();
+  // auto election loop
+  let acc=0,lastT=performance.now();
+  function tick(now){const dt=(now-lastT)/1000;lastT=now;acc+=dt;if(acc>1.4){acc=0;if(leader<0)elect();}requestAnimationFrame(tick);}
+  requestAnimationFrame(tick);
+}
+
+const DATA={
+  badge:"🧭",title:"Consensus & Raft",category:"Distributed Systems",difficulty:"Hard",readingTime:"11 min",
+  eyebrow:"Fault-Tolerant Agreement",
+  tagline:"How a cluster of unreliable machines agrees on a single, consistent sequence of operations. <b>Raft</b> makes consensus understandable via a strong leader, terms, and majority voting — the backbone of etcd, Consul, and Kafka's KRaft.",
+  pills:["<b>Leader-based</b>","<b>Majority</b> quorum","<b>Tolerates ⌊n/2⌋</b> failures","<b>Replicated log</b>"],
+  overview:"Consensus is the problem of getting multiple nodes to agree on a value (or an ordered log of commands) despite crashes and network delays. <b>Raft</b> solves it with a strong leader: time is divided into <b>terms</b>, and in each term nodes elect one leader by majority vote. All client writes go to the leader, which appends them to its log and replicates via <b>AppendEntries</b> RPCs; once a <b>majority</b> of nodes have stored an entry, the leader marks it <b>committed</b> and applies it. If the leader crashes, followers whose election timeout fires become candidates, increment the term, and a new leader is elected — guaranteeing at most one leader per term and a consistent, linearizable log.",
+  problem:"Replicated state machines (databases, config stores, queues) need every replica to apply the same commands in the same order, even when nodes crash or messages are lost. Naïve replication diverges. Consensus provides a single agreed log; Raft provides it in a way engineers can actually implement and reason about (unlike Paxos's reputation for opacity).",
+  diagram,diagramCaption:"The leader replicates each entry to followers; once a majority acknowledges, the entry is committed.",
+  how:[
+    "Terms: logical time divided into numbered terms, each beginning with an election.",
+    "Election: a follower that hears no heartbeat before its randomized timeout becomes a candidate, votes for itself, and requests votes; a majority makes it leader.",
+    "Log replication: clients send commands to the leader, which appends them and sends AppendEntries to followers.",
+    "Commit: once a majority has stored an entry, the leader commits it and tells followers to apply it.",
+    "Safety: a node grants at most one vote per term and only to candidates with an up-to-date log, so there's ≤1 leader per term and committed entries never disappear."
+  ],
+  complexity:[["Fault tolerance","⌊n/2⌋ failures"],["Nodes for f failures","2f + 1"],["Commit latency","1 round trip to majority"],["Leader","exactly 1 / term"]],
+  advantages:["Understandable, widely implemented","Strong consistency (linearizable log)","Tolerates minority failures automatically","Clear leader simplifies reads/writes"],
+  disadvantages:["Needs a majority — minority partitions stall","Leader is a throughput bottleneck","Not Byzantine-fault-tolerant","Cross-region latency hurts (quorum round trips)"],
+  tradeoffs:"Consensus buys strong consistency at the cost of availability under partition (it's a CP system): a minority side cannot make progress, which is the correct, safe behavior. More nodes tolerate more failures (2f+1 survives f) but enlarge the quorum, raising commit latency. A single leader simplifies reasoning but caps write throughput and adds a failover gap. Raft vs Paxos: same guarantees, but Raft trades a little theoretical generality for far greater clarity; Multi-Paxos and Raft are performance-comparable.",
+  whenNot:"Don't use leader-based consensus for high-throughput, latency-sensitive writes that don't need a total order (use eventual consistency / CRDTs), for very large clusters where quorum latency dominates, across high-latency WAN links without hierarchy, or where Byzantine actors exist (you'd need PBFT-class protocols).",
+  sim,
+  code:{
+"Java":`// Raft RequestVote handling (simplified, safety-critical checks)\nsynchronized VoteResponse requestVote(VoteRequest r){\n  if (r.term > currentTerm){ currentTerm = r.term; votedFor = null; role = FOLLOWER; }\n  boolean logOk = r.lastLogTerm > lastLogTerm()\n      || (r.lastLogTerm == lastLogTerm() && r.lastLogIndex >= lastLogIndex());\n  boolean canVote = (votedFor == null || votedFor == r.candidateId);\n  if (r.term == currentTerm && canVote && logOk){\n    votedFor = r.candidateId; resetElectionTimeout();\n    return new VoteResponse(currentTerm, true);      // grant\n  }\n  return new VoteResponse(currentTerm, false);        // deny\n}`,
+"Go":`// leader commits an entry once a majority has replicated it\nfunc (rf *Raft) advanceCommitIndex() {\n    for n := rf.commitIndex + 1; n <= rf.lastLogIndex(); n++ {\n        count := 1 // leader itself\n        for i := range rf.peers {\n            if i != rf.me && rf.matchIndex[i] >= n {\n                count++\n            }\n        }\n        // majority AND entry is from current term (Raft safety rule)\n        if count > len(rf.peers)/2 && rf.log[n].Term == rf.currentTerm {\n            rf.commitIndex = n\n        }\n    }\n    rf.applyCommitted()\n}`,
+"etcd":`# etcd is a Raft-backed consistent key-value store\netcdctl put /config/feature_x "on"     # goes through Raft, committed by majority\netcdctl get /config/feature_x           # linearizable read by default\netcdctl member list                      # 3 or 5 members => tolerate 1 or 2 down\n# leader election for your app via a lease + campaign:\netcdctl lock my-service /bin/do-work     # only one holder cluster-wide`
+  },
+  realWorld:[
+    ["etcd (Kubernetes)","Raft-backed KV store holds all cluster state; a 3- or 5-node quorum keeps K8s consistent."],
+    ["HashiCorp Consul / Nomad","Use Raft for service catalog, KV, and leader election."],
+    ["Kafka KRaft mode","Replaces ZooKeeper with a Raft metadata quorum for controllers."],
+    ["CockroachDB / TiKV / YugabyteDB","Per-range Raft groups replicate data consistently across nodes."],
+    ["Google Chubby / Spanner","Paxos-based consensus underpins locks, metadata, and TrueTime transactions."]
+  ],
+  interview:[
+    ["basic","What problem does consensus solve?","Getting multiple nodes to agree on a single value or an ordered log of commands despite crashes and network issues, so all replicas of a state machine apply the same operations in the same order."],
+    ["basic","How does Raft elect a leader?","Time is split into terms. A follower that receives no heartbeat before its randomized election timeout becomes a candidate, increments the term, votes for itself, and requests votes. If it receives votes from a majority, it becomes leader; randomized timeouts make split votes rare."],
+    ["inter","Why does Raft require a majority (quorum)?","Any two majorities of a set overlap in at least one node. That overlap guarantees a newly elected leader's votes include someone who saw the latest committed entries, so committed data is never lost and there can't be two leaders acting in the same term."],
+    ["inter","How many failures can a 5-node cluster tolerate?","Two. Consensus needs a majority (3 of 5) to make progress, so it survives the loss of ⌊n/2⌋ = 2 nodes. In general, 2f+1 nodes tolerate f failures. A 3-node cluster tolerates 1."],
+    ["adv","What happens during a network partition?","Only the side with a majority can elect a leader and commit entries; the minority side cannot make progress and rejects writes. This keeps the system consistent (CP) — it sacrifices availability on the minority side rather than risk split-brain or divergence."],
+    ["adv","How does Raft guarantee log safety across leader changes?","Nodes only vote for candidates whose log is at least as up-to-date as their own (higher last term, or same term and longer). A leader never overwrites or deletes its own entries and only commits entries from its current term. Together these rules ensure a committed entry is present in every future leader's log."],
+    ["sd","When would you use Raft/consensus in a system design?","For strongly consistent coordination: cluster metadata and configuration (etcd/Consul), leader election for singleton jobs, distributed locks, and replicating the control plane or per-shard data (CockroachDB). Keep the consensus group small (3–5), off the hot data path when possible, and use eventual consistency for high-volume application data."]
+  ],
+  mistakes:["Using an even number of nodes (no better fault tolerance, easier to tie).","Putting all consensus members in one AZ/region (correlated failure or WAN latency).","Routing high-throughput data writes through a single Raft leader.","Assuming Raft tolerates Byzantine/malicious nodes (it only handles crashes).","Ignoring the failover gap — brief unavailability during re-election."],
+  best:["Run 3 or 5 members (odd) across failure domains for real fault tolerance.","Keep the replicated state small; snapshot logs to bound growth.","Use randomized election timeouts to avoid repeated split votes.","Separate the consensus/control plane from bulk data where possible.","Pin leadership near clients or shard into many Raft groups for throughput."],
+  related:[["Paxos","📜","The original consensus protocol","paxos.html"],["Leader Election","👑","Choosing a coordinator","leader-election.html"],["Quorum","🗳️","Majority intersection","quorum.html"],["Split Brain","🧠","What quorum prevents","split-brain.html"],["ZooKeeper","🐘","Consensus-backed coordination","zookeeper.html"],["CAP Theorem","🔺","Why consensus is CP","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sidecar Pattern — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function pod(x,label){g.appendChild(S("rect",{x,y:52,width:190,height:96,rx:12,fill:"rgba(124,58,237,.08)",stroke:"#7C3AED","stroke-dasharray":"5 4"}));g.appendChild(TX(x+95,y0(46),label,{fill:"#a78bfa","font-size":9,"text-anchor":"middle"}));
+    function y0(v){return v;}}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:225,y:52,width:190,height:96,rx:12,fill:"rgba(124,58,237,.08)",stroke:"#7C3AED","stroke-dasharray":"5 4"}));g.appendChild(TX(320,66,"pod / host (shared lifecycle)",{fill:"#a78bfa","font-size":9,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:240,y:80,width:76,height:52,rx:8,fill:"rgba(56,189,248,.22)",stroke:"#38bdf8","stroke-width":2}));g.appendChild(TX(278,102,"app",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));g.appendChild(TX(278,118,"business logic",{fill:"#8b8b93","font-size":7,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:324,y:80,width:76,height:52,rx:8,fill:"rgba(52,211,153,.22)",stroke:"#34d399","stroke-width":2}));g.appendChild(TX(362,100,"🏍️ sidecar",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle","font-weight":700}));
+    const jobs=["proxy · mTLS","retries · LB","metrics · logs","config · secrets"];g.appendChild(TX(362,118,jobs[phase%4],{fill:"#34d399","font-size":6.5,"text-anchor":"middle"}));
+    arrow(g,318,106,322,106,"#a78bfa");g.appendChild(TX(320,140,"localhost",{fill:"#8b8b93","font-size":7,"text-anchor":"middle"}));
+    if(phase===0){arrow(g,400,106,470,106,"#34d399");g.appendChild(TX(500,106,"network",{fill:"#8b8b93","font-size":9})); 
+      lbl.textContent="the sidecar runs beside the app, sharing its lifecycle";lbl.setAttribute("fill","#34d399");sub.textContent="all traffic flows through the sidecar — the app talks only to localhost";}
+    else if(phase===1){lbl.textContent="cross-cutting concerns move OUT of the app";lbl.setAttribute("fill","#38bdf8");sub.textContent="TLS, retries, load balancing, rate limiting — handled by the sidecar";}
+    else if(phase===2){lbl.textContent="observability for free: metrics, logs, traces";lbl.setAttribute("fill","#fbbf24");sub.textContent="the sidecar emits telemetry without changing the app code";}
+    else{lbl.textContent="language-agnostic: same sidecar for any app";lbl.setAttribute("fill","#a78bfa");sub.textContent="update the sidecar to change behavior everywhere — no app redeploy";}}
+  function step(){phase=(phase+1)%4;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Cross-cutting concerns (TLS, retries, metrics, rate limiting) can live <b>inside every app</b> as a library — or be extracted into a <b>sidecar</b> that runs beside each app and handles them transparently. Toggle capabilities and see the difference in <b>code you maintain</b> per service versus the <b>overhead</b> of running a sidecar per instance.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Deployment</label><select id="pgMode">
+        <option value="lib">In-app library (per language)</option>
+        <option value="sidecar">Sidecar (out of process)</option>
+      </select></div>
+      <div class="pg-field"><label>Services (languages)</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgGo" checked> Go</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgJava" checked> Java</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgPy"> Python</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgNode"> Node</label>
+      </div>
+      <div class="pg-field"><label>Capabilities</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgMtls" checked> mTLS</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgRetry" checked> retries</label>
+        <label style="font-weight:400"><input type="checkbox" id="pgMetrics"> metrics</label>
+      </div>
+      <button class="pg-btn" id="pgGo2">evaluate</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Impls to maintain</div><div class="v wa" id="pgImpl">0</div></div>
+        <div class="pg-stat"><div class="k">Extra containers</div><div class="v ac" id="pgCont">0</div></div>
+        <div class="pg-stat"><div class="k">Extra RAM / latency</div><div class="v" id="pgOh">—</div></div>
+        <div class="pg-stat"><div class="k">Update to change all</div><div class="v ok" id="pgUpd">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=110;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function langs(){const l=[];if($("pgGo").checked)l.push("Go");if($("pgJava").checked)l.push("Java");if($("pgPy").checked)l.push("Python");if($("pgNode").checked)l.push("Node");return l;}
+  function caps(){const c=[];if($("pgMtls").checked)c.push("mTLS");if($("pgRetry").checked)c.push("retries");if($("pgMetrics").checked)c.push("metrics");return c;}
+  function draw(mode,L){svg.innerHTML="";
+    L.forEach((lang,i)=>{const x=20+i*135;
+      svg.appendChild(S("rect",{x,y:20,width:120,height:70,rx:10,fill:"rgba(124,58,237,.06)",stroke:"#7C3AED","stroke-dasharray":"4 3"}));
+      svg.appendChild(S("rect",{x:x+8,y:34,width:mode==="sidecar"?52:104,height:44,rx:6,fill:"rgba(56,189,248,.2)",stroke:"#38bdf8"}));
+      svg.appendChild(TX(x+(mode==="sidecar"?34:60),52,lang,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle","font-weight":700}));
+      if(mode==="lib")svg.appendChild(TX(x+60,68,"+lib",{fill:"#fbbf24","font-size":8,"text-anchor":"middle"}));
+      if(mode==="sidecar"){svg.appendChild(S("rect",{x:x+64,y:34,width:48,height:44,rx:6,fill:"rgba(52,211,153,.2)",stroke:"#34d399"}));svg.appendChild(TX(x+88,54,"🏍️",{fill:"#34d399","font-size":12,"text-anchor":"middle"}));svg.appendChild(TX(x+88,70,"sidecar",{fill:"#34d399","font-size":6.5,"text-anchor":"middle"}));}});}
+  function stats(){const mode=$("pgMode").value,L=langs(),C=caps();
+    if(mode==="lib"){$("pgImpl").textContent=(L.length*C.length)+" ("+L.length+" langs × "+C.length+" caps)";$("pgCont").textContent="0";$("pgOh").textContent="none";$("pgUpd").textContent="redeploy every service";$("pgUpd").className="v bad";}
+    else{$("pgImpl").textContent=C.length+" (once, any lang)";$("pgCont").textContent=L.length+" sidecars";$("pgOh").textContent="~"+(20*L.length)+"MB + 1 hop";$("pgUpd").textContent="update sidecar only";$("pgUpd").className="v ok";}
+    draw(mode,L);}
+  function go(){const mode=$("pgMode").value,L=langs(),C=caps();stats();
+    if(mode==="lib")log("in-app: each of "+L.length+" languages needs its own implementation of "+C.length+" capabilities = "+(L.length*C.length)+" code paths to build, test & keep in sync","wa");
+    else log("sidecar: "+C.length+" capabilities implemented ONCE, deployed as "+L.length+" sidecar(s) — any language, update centrally (costs "+L.length+" extra containers + a localhost hop)","ok");}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  $("pgGo2").onclick=go;$("pgMode").onchange=stats;
+  ["pgGo","pgJava","pgPy","pgNode","pgMtls","pgRetry","pgMetrics"].forEach(id=>$(id).onchange=stats);
+  stats();log("compare in-app library vs sidecar for cross-cutting concerns","ac");
+}
+
+const DATA={
+  badge:"🏍️",title:"Sidecar Pattern",category:"Microservices",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Extracting Cross-Cutting Concerns",
+  tagline:"A sidecar is a helper process/container deployed <b>alongside</b> each application instance, sharing its lifecycle, to handle <b>cross-cutting concerns</b> — TLS, retries, load balancing, metrics, logging, config — <b>outside the app</b>. It keeps services focused on business logic and lets platform behavior be language-agnostic and centrally managed.",
+  pills:["Runs <b>beside</b> the app (same pod/host)","Handles <b>cross-cutting</b> concerns","<b>Language-agnostic</b>","Basis of the <b>service mesh</b>"],
+  overview:"The <b>sidecar pattern</b> attaches a secondary component — a separate process or container — to a primary application, deploying them <b>together</b> so they share the same host/pod, lifecycle, and often network and storage. The sidecar handles <b>cross-cutting concerns</b>: functionality every service needs but that isn't its core business logic, such as mutual TLS, retries, timeouts, circuit breaking, load balancing, service discovery, rate limiting, metrics/logging/tracing, configuration, and secret injection. Instead of baking these into each application (as libraries that must be reimplemented and kept in sync across every language and service), you extract them into the sidecar, and the app simply talks to <b>localhost</b> while the sidecar intercepts and manages all inbound/outbound traffic. The most famous application is the <b>service mesh</b> (Istio, Linkerd), where a proxy sidecar (e.g. Envoy) is injected next to every service to transparently provide secure, observable, resilient service-to-service communication controlled from a central <b>control plane</b> — no application code changes required. Other examples: log/metric shippers (Fluentd, Prometheus exporters), config reloaders, and secret agents (Vault agent). The key benefits are <b>separation of concerns</b> (apps stay small and focused), <b>language/runtime agnosticism</b> (the same sidecar works for a Go, Java, or Python service), <b>independent evolution</b> (upgrade the sidecar to change platform behavior everywhere without touching or redeploying app code), and <b>consistency</b> (uniform policy across a fleet). The costs are <b>resource overhead</b> (a sidecar per instance consumes CPU/RAM) and <b>added latency</b> (an extra network hop through the proxy), plus operational complexity in deploying and managing thousands of sidecars — which is why lighter alternatives like <b>eBPF-based</b> or <b>proxyless</b> meshes and shared node agents are emerging.",
+  problem:"Every microservice needs the same non-business capabilities — encryption, retries, observability, config — but embedding them as in-process libraries means implementing and maintaining them separately for each language and service, keeping versions in sync, and redeploying every service to change behavior. This bloats services, couples them to platform concerns, and makes fleet-wide consistency hard. The sidecar externalizes these concerns into a reusable, language-agnostic companion.",
+  diagram,diagramCaption:"A sidecar runs beside the app in the same pod, transparently handling traffic, security, and telemetry.",
+  how:[
+    "Deploy a helper container/process in the same pod/host as the app (shared lifecycle & localhost).",
+    "Route the app's inbound/outbound traffic through the sidecar (often transparently via iptables).",
+    "The sidecar handles cross-cutting concerns: mTLS, retries, LB, rate limiting, metrics, config, secrets.",
+    "The app talks only to localhost and stays focused on business logic — no platform code.",
+    "A control plane configures all sidecars centrally; upgrade the sidecar to change behavior fleet-wide."
+  ],
+  complexity:[["Placement","same pod/host"],["Coupling","shared lifecycle"],["Overhead","+CPU/RAM per instance"],["Latency","+1 proxy hop"]],
+  advantages:["Separation of concerns — apps stay focused","Language/runtime agnostic (works for any service)","Central, consistent policy across the fleet","Upgrade platform behavior without touching app code","Enables service mesh: mTLS, resilience, observability"],
+  disadvantages:["Resource overhead: a sidecar per instance","Added latency (extra network hop through the proxy)","Operational complexity at scale (thousands of sidecars)","Startup ordering / lifecycle coupling issues","Debugging spans two processes per instance"],
+  tradeoffs:"The sidecar trades <b>resource/latency overhead and operational complexity for decoupling and consistency</b>. Compared to an <b>in-process library</b>, a sidecar avoids the multiplicative maintenance burden of reimplementing cross-cutting concerns in every language (a library approach means N languages × M capabilities of code to build, test, and keep in version-sync, plus a redeploy of every service to change anything) — the sidecar implements each concern <b>once</b> and applies it to any app, upgradable centrally. But this decoupling isn't free: you run <b>one extra container per application instance</b>, so at fleet scale the aggregate CPU/RAM cost is significant, and every request pays an <b>extra network hop</b> through the proxy (typically sub-millisecond, but real for latency-sensitive paths). There's also <b>lifecycle coupling</b>: the sidecar and app share a pod, so you must handle startup ordering (the app shouldn't send traffic before the proxy is ready) and shutdown draining, and a crashed sidecar can take down the app's connectivity. Operationally, managing thousands of sidecars and their configuration is complex enough that it created the <b>control plane</b> tier (and the whole service-mesh category). These costs are why the industry is exploring alternatives that keep the benefits with less overhead: <b>per-node shared agents</b> (one proxy per node instead of per pod), <b>eBPF</b>-based data planes that intercept in the kernel, and <b>proxyless</b> meshes (gRPC clients that get config from the control plane directly). The right choice depends on scale and latency sensitivity: sidecars shine when you have many services in many languages needing uniform, evolvable platform behavior; a library or shared agent may be leaner for small, homogeneous, latency-critical systems.",
+  whenNot:"Skip sidecars for a monolith or a small, single-language system where a shared in-process library is simpler and avoids the overhead and extra hop. Avoid them on extremely latency-sensitive hot paths where an added proxy hop is unacceptable, or in tightly resource-constrained environments where a sidecar per instance doubles container count. If you don't need language-agnostic, centrally-managed, evolvable platform behavior across many services, the complexity of a mesh/sidecar fleet isn't justified — consider a per-node agent, an SDK, or proxyless approaches instead.",
+  sim,
+  code:{
+"Sidecar in a Kubernetes pod":`# App and sidecar share the pod: same lifecycle, localhost networking.\napiVersion: v1\nkind: Pod\nspec:\n  containers:\n    - name: app                       # your business logic (any language)\n      image: my-service:1.0\n      ports: [{ containerPort: 8080 }]\n    - name: envoy                     # the SIDECAR proxy\n      image: envoyproxy/envoy:v1.30\n      # intercepts all inbound/outbound traffic (mTLS, retries, metrics...)\n# The app calls http://localhost:15001; the sidecar handles the network.\n# Upgrade the sidecar image -> change platform behavior, no app rebuild.`,
+"What the sidecar handles (not the app)":`// WITHOUT sidecar: every service embeds this (per language, kept in sync):\nhttpClient.withMTLS(cert).withRetries(3).withTimeout("500ms")\n          .withCircuitBreaker().withMetrics().call(peer);\n\n// WITH sidecar: the app just calls a peer over localhost, plainly:\nfetch("http://localhost:15001/inventory/check");   // sidecar adds mTLS,\n//   retries, timeouts, circuit breaking, load balancing, tracing, metrics\n//   -> configured centrally by the control plane, identical across services.`,
+"Service mesh (sidecars + control plane)":`# A service mesh = a data plane of sidecar proxies + a central control plane.\n#\n#   [control plane]  (Istio/Linkerd)  --- pushes config/policy --->\n#        |                 |                    |\n#   [app|sidecar]     [app|sidecar]       [app|sidecar]    (data plane)\n#        \\_______ mTLS, retries, LB, telemetry ________/\n#\n# Auto-injection adds the sidecar to every pod:\nkubectl label namespace prod istio-injection=enabled\n# Now policy (e.g. "retry 3x, mTLS strict, 10% canary") is set once, centrally,\n# and enforced by all sidecars WITHOUT any application code change.`
+  },
+  realWorld:[
+    ["Istio / Linkerd","Service meshes that inject a proxy sidecar per pod."],
+    ["Envoy","The de-facto sidecar proxy for meshes and API gateways."],
+    ["Fluentd / Fluent Bit","Log-shipping sidecars collecting app logs."],
+    ["Vault Agent","Secret-injection sidecar fetching & renewing secrets."],
+    ["Dapr","Sidecar runtime providing building blocks (pub/sub, state, bindings)."]
+  ],
+  interview:[
+    ["basic","What is the sidecar pattern?","Deploying a helper process or container alongside an application instance — in the same pod/host, sharing its lifecycle — to handle cross-cutting concerns like TLS, retries, load balancing, metrics, logging, and config, outside the application. The app talks to localhost while the sidecar transparently manages its network traffic and platform behavior, keeping the app focused on business logic."],
+    ["basic","Why use a sidecar instead of a library inside the app?","A library must be reimplemented and maintained for each language and kept in version-sync across every service, and changing behavior requires redeploying all services. A sidecar implements each concern once, works with any language/runtime, and can be upgraded centrally to change platform behavior fleet-wide without touching or redeploying application code. It gives separation of concerns and consistency at the cost of extra resources and a network hop."],
+    ["inter","How does the sidecar pattern relate to a service mesh?","A service mesh is the canonical large-scale use of the sidecar pattern: it injects a proxy sidecar (like Envoy) next to every service to form the data plane that handles secure (mTLS), resilient (retries, timeouts, circuit breaking), and observable service-to-service communication. A central control plane configures all the sidecars. So the mesh = many sidecar proxies + a control plane, delivering platform capabilities transparently without app code changes."],
+    ["inter","What are the main costs of the sidecar pattern?","Resource overhead — one extra container per application instance consumes CPU and memory, which adds up across a large fleet. Added latency — requests pass through the proxy, incurring an extra (usually sub-millisecond) network hop. Operational complexity — deploying, configuring, and upgrading thousands of sidecars requires tooling (the control plane). And lifecycle coupling — startup ordering (app shouldn't send traffic before the proxy is ready), shutdown draining, and the fact that a failing sidecar can disrupt the app's connectivity."],
+    ["adv","What alternatives to the sidecar model are emerging and why?","Because per-pod sidecars are costly at scale, alternatives aim to keep the benefits with less overhead: per-node shared agents (one proxy per node instead of per pod, e.g. Istio ambient mesh's ztunnel), eBPF-based data planes (Cilium) that intercept traffic in the kernel without a userspace proxy per pod, and proxyless meshes where the client library (e.g. gRPC xDS) gets config from the control plane directly. These reduce resource use and latency hops while retaining central policy and observability, trading some isolation and flexibility."],
+    ["adv","How do you handle lifecycle and failure coupling between an app and its sidecar?","Ensure ordering: the app must not send traffic until the sidecar proxy is ready (use readiness gates / init containers / startup dependencies), and on shutdown drain connections and stop the app before the sidecar so in-flight requests complete. Design for sidecar failure: health-check the sidecar, restart it independently, and decide the failure mode (fail-open vs fail-closed) since a dead proxy can cut the app's connectivity. Kubernetes native sidecar containers (restartPolicy on init containers) address much of the ordering/lifecycle problem."],
+    ["sd","Design platform capabilities (security, resilience, observability) for a polyglot microservices fleet.","Adopt a service mesh: inject an Envoy sidecar per pod (data plane) managed by a control plane (Istio/Linkerd). The sidecars provide mTLS between services, retries/timeouts/circuit breaking, load balancing and service discovery, rate limiting, and automatic metrics/traces/logs — uniformly across Go, Java, Python, etc., with no per-language code. Policy (routing, canary weights, security) is set centrally and enforced everywhere. Budget for the CPU/RAM overhead and one extra hop, handle sidecar lifecycle/ordering, and monitor the control plane as critical infrastructure. At very large scale or for latency-critical paths, evaluate per-node agents, eBPF, or proxyless approaches to cut overhead."]
+  ],
+  mistakes:["Using sidecars for a monolith/small single-language system (overkill).","Ignoring startup ordering — app sends traffic before proxy is ready.","Underestimating aggregate CPU/RAM of a sidecar per instance.","Adding a proxy hop to latency-critical paths without measuring.","No plan for sidecar failure mode (fail-open vs fail-closed)."],
+  best:["Extract cross-cutting concerns into the sidecar; keep apps focused.","Use a control plane for central, consistent policy.","Handle lifecycle: readiness ordering + graceful shutdown/draining.","Budget resources and measure the added latency hop.","At scale, consider per-node agents / eBPF / proxyless to cut overhead."],
+  related:[["Service Mesh","🕸️","Sidecars + control plane","service-mesh.html"],["Monolith vs Microservices","🏗️","Where sidecars apply","monolith-vs-microservices.html"],["Health Checks","❤️","Sidecar readiness/liveness","health-checks.html"],["Circuit Breaker / Timeouts","⏱️","Handled by the sidecar","timeout.html"],["mTLS / TLS Handshake","🔒","Sidecar-terminated security","tls-handshake.html"],["Backoff & Retry","🔁","Sidecar retry policy","backoff.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

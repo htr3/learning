@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Session Management — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function box(x,y,w,t,c){g.appendChild(S("rect",{x:x-w/2,y:y-19,width:w,height:38,rx:8,fill:c+"22",stroke:c,"stroke-width":2}));g.appendChild(TX(x,y+5,t,{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";box(110,95,150,"🧑 browser","#38bdf8");box(530,95,150,"💾 server","#34d399");
+    if(phase===0){arrow(g,187,80,453,80,"#fbbf24");g.appendChild(TX(320,72,"POST /login  (user + pass)",{fill:"#fbbf24","font-size":9.5,"text-anchor":"middle"}));
+      lbl.textContent="1 — user logs in with credentials";lbl.setAttribute("fill","#fbbf24");sub.textContent="credentials are verified ONCE; then we need to remember them";}
+    else if(phase===1){arrow(g,453,110,187,110,"#34d399");g.appendChild(TX(320,124,"Set-Cookie: sid=… HttpOnly Secure",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="2 — server issues a session ID (or signed token)";lbl.setAttribute("fill","#34d399");sub.textContent="stateful: stored server-side  •  stateless: self-contained signed JWT";}
+    else if(phase===2){arrow(g,187,88,453,88,"#38bdf8");g.appendChild(TX(320,80,"GET /account   Cookie: sid=… 🍪",{fill:"#38bdf8","font-size":9,"text-anchor":"middle"}));
+      arrow(g,453,116,187,116,"#34d399");g.appendChild(TX(320,130,"200 OK — recognized, no re-login",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="3 — every request carries the ID → user stays logged in";lbl.setAttribute("fill","#38bdf8");sub.textContent="HTTP is stateless; the session ID is what ties requests to a user";}
+    else{box(530,95,150,"💾 server","#34d399");
+      g.appendChild(TX(530,150,"expire • rotate • revoke",{fill:"#c4a2ff","font-size":10,"text-anchor":"middle"}));
+      arrow(g,187,95,453,95,"#f87171");g.appendChild(TX(320,86,"stolen sid replayed ✗",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="lifecycle — idle/absolute timeout, rotate on login, revoke on logout";lbl.setAttribute("fill","#c4a2ff");sub.textContent="short-lived + rotation limits the damage of a stolen session ID";}}
+  function step(){phase=(phase+1)%4;timer=phase===2?3.4:3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Compare the two ways to remember a logged-in user. <b>Stateful sessions</b>: the server stores session data and the cookie holds only an opaque ID — easy to revoke instantly, but the store must be shared/looked-up on every request. <b>Stateless JWT</b>: the token itself carries signed claims — no lookup, scales freely, but you can't instantly revoke it until it expires. Log in, make requests, then try to <b>revoke</b>.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Strategy</label><select id="pgMode">
+        <option value="stateful">Stateful (server-side session store)</option>
+        <option value="jwt">Stateless (signed JWT)</option>
+      </select></div>
+      <div class="pg-field"><label>Token TTL (min): <b id="pgTtlV">15</b></label><input id="pgTtl" type="range" min="1" max="60" value="15" step="1"></div>
+      <button class="pg-btn" id="pgLogin">log in</button>
+      <button class="pg-btn secondary" id="pgReq">make request</button>
+      <button class="pg-btn secondary" id="pgRevoke">revoke session (server)</button>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">Watch how revoke behaves differently: stateful drops the record instantly; a stateless JWT stays valid until it expires unless you maintain a denylist.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Logged in</div><div class="v ac" id="pgIn">no</div></div>
+        <div class="pg-stat"><div class="k">Requests served</div><div class="v ok" id="pgReqs">0</div></div>
+        <div class="pg-stat"><div class="k">Server store</div><div class="v" id="pgStore">1 session</div></div>
+        <div class="pg-stat"><div class="k">Revoked but usable</div><div class="v wa" id="pgLeak">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=120;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let loggedIn=false,reqs=0,leak=0,revoked=false,mode="stateful";
+  function draw(){svg.innerHTML="";
+    const m=$("pgMode").value;
+    svg.appendChild(TX(20,20,mode==="jwt"?"cookie holds a self-contained signed token:":"cookie holds only an opaque session id:",{fill:"#8b8b93","font-size":10}));
+    svg.appendChild(S("rect",{x:20,y:30,width:mode==="jwt"?400:180,height:26,rx:5,fill:"rgba(56,189,248,.15)",stroke:"#38bdf8"}));
+    svg.appendChild(TX(28,47,mode==="jwt"?"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWxpY2Ui...":"sid=8f2a…c1",{fill:"#38bdf8","font-size":10,"font-family":"monospace"}));
+    svg.appendChild(TX(20,80,"server:",{fill:"#8b8b93","font-size":10}));
+    if(mode==="jwt"){svg.appendChild(TX(70,80,revoked?"denylist { jti } — must be checked to revoke":"no per-session state — just verifies the signature",{fill:revoked?"#fbbf24":"#34d399","font-size":10}));}
+    else{svg.appendChild(TX(70,80,revoked?"session store: { } (record deleted)":"session store: { 8f2a…c1 → alice }",{fill:revoked?"#f87171":"#34d399","font-size":10}));}}
+  function stats(){$("pgIn").textContent=loggedIn?"yes":"no";$("pgReqs").textContent=reqs;
+    $("pgStore").textContent=mode==="jwt"?(revoked?"denylist(1)":"0 (stateless)"):(loggedIn&&!revoked?"1 session":"0 sessions");
+    $("pgLeak").textContent=leak;draw();}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function login(){mode=$("pgMode").value;loggedIn=true;revoked=false;reqs=0;leak=0;
+    log(mode==="jwt"?"logged in — server signed a JWT; nothing stored server-side":"logged in — server created a session record and set an opaque cookie","ac");stats();}
+  function req(){if(!loggedIn){log("not logged in — request rejected (401)","bad");return;}
+    if(revoked){
+      if(mode==="stateful"){log("request rejected — session record was deleted (instant revoke)","ok");return;}
+      else{leak++;reqs++;log("⚠ JWT still ACCEPTED after 'revoke' — valid until it expires (no denylist check)","bad");stats();return;}}
+    reqs++;log("request served — session id/token verified, user recognized","ok");stats();}
+  function revoke(){if(!loggedIn){log("nothing to revoke","ac");return;}revoked=true;
+    if(mode==="stateful")log("revoked — deleted the server session record; next request fails immediately","ok");
+    else log("revoke requested — but a stateless JWT can't be un-signed; it works until TTL unless denylisted","wa");stats();}
+  $("pgLogin").onclick=login;$("pgReq").onclick=req;$("pgRevoke").onclick=revoke;
+  $("pgMode").onchange=()=>{mode=$("pgMode").value;loggedIn=false;revoked=false;reqs=0;leak=0;log("strategy: "+(mode==="jwt"?"stateless JWT":"stateful session"),"ac");stats();};
+  $("pgTtl").oninput=()=>{$("pgTtlV").textContent=$("pgTtl").value;};
+  stats();log("choose a strategy, log in, make requests, then revoke to see the difference","ac");
+}
+
+const DATA={
+  badge:"🎫",title:"Session Management",category:"Security",difficulty:"Medium",readingTime:"10 min",
+  eyebrow:"Keeping Users Logged In",
+  tagline:"HTTP is stateless, so after login the server issues a credential the browser replays on every request. <b>Stateful sessions</b> store state server-side behind an opaque ID (easy to revoke); <b>stateless JWTs</b> carry signed claims (scale freely, hard to revoke). Managing their <b>lifecycle</b> securely is the whole game.",
+  pills:["<b>Stateful</b> vs <b>stateless</b> (JWT)","Cookie flags: <b>HttpOnly/Secure/SameSite</b>","<b>Rotate</b> on login, <b>expire</b>, <b>revoke</b>","Guard fixation & hijacking"],
+  overview:"HTTP is <b>stateless</b> — the server doesn't inherently remember who made the last request. <b>Session management</b> bridges that gap: after a user authenticates once, the server issues a credential (typically stored in a cookie) that the browser sends on every subsequent request, so the user stays logged in. There are two dominant models. <b>Stateful (server-side) sessions</b>: the server generates a large random <b>session ID</b>, stores the associated data (user, roles, expiry) in a store (memory, Redis, DB), and puts only the opaque ID in the cookie. Every request looks up the ID. This makes <b>instant revocation</b> trivial (delete the record) but requires a shared/consistent session store as you scale horizontally. <b>Stateless tokens (JWT)</b>: the server signs a token containing the claims themselves; the server stores nothing and simply <b>verifies the signature</b> on each request. This scales effortlessly and works across services, but you <b>cannot instantly revoke</b> a valid token before it expires unless you add a denylist (reintroducing state). Regardless of model, security lives in the <b>lifecycle and transport</b>: set cookies <b>HttpOnly</b> (JS can't read them → XSS can't steal them), <b>Secure</b> (HTTPS only), and <b>SameSite</b> (CSRF defense); use long, unpredictable IDs; <b>regenerate</b> the ID on privilege change (login) to prevent <b>session fixation</b>; enforce <b>idle and absolute timeouts</b>; and support <b>logout/revocation</b>. Keep tokens short-lived and use <b>refresh tokens</b> to balance security and UX.",
+  problem:"Requiring a password on every request is unusable, but 'remembering' a user across stateless HTTP requests means holding a credential that, if stolen or forged, grants an attacker the user's identity. Session management must let legitimate users stay authenticated seamlessly while making the session credential hard to steal, forge, fixate, or replay — and must allow the server to end a session when needed.",
+  diagram,diagramCaption:"Login issues a session credential; the browser replays it each request; lifecycle controls limit misuse.",
+  how:[
+    "User authenticates once; the server verifies credentials.",
+    "Server issues a session credential: an opaque ID (stateful) or a signed token/JWT (stateless).",
+    "Browser stores it (cookie) and sends it on every request; the server recognizes the user.",
+    "Server enforces lifecycle: idle + absolute timeouts, ID rotation on login, and revocation on logout.",
+    "Transport hardening: HttpOnly, Secure, SameSite cookies over HTTPS to resist theft, CSRF, and MITM."
+  ],
+  complexity:[["Stateful lookup","O(1) per request"],["Stateless verify","signature check"],["Session ID","≥128-bit random"],["Revoke JWT","needs denylist"]],
+  advantages:["Stateful: instant revocation & server-side control","Stateless JWT: no store, scales across services","Cookies (HttpOnly) resist XSS token theft","Standardized flags mitigate CSRF/MITM","Refresh tokens balance security and UX"],
+  disadvantages:["Stateful needs a shared session store to scale","Stateless can't be instantly revoked (until expiry)","JWTs in localStorage are exposed to XSS","Long-lived tokens widen the theft window","Fixation/hijacking risks if IDs aren't rotated/protected"],
+  tradeoffs:"The central trade-off is <b>revocability vs. scalability</b>. Stateful sessions give you <b>authoritative control</b> — you can revoke, list, and inspect sessions instantly — at the cost of a session store that every request (across every server) must reach, which becomes a scaling and availability concern (mitigated by Redis and sticky routing, but still shared state). Stateless JWTs flip it: <b>zero server state</b> means any node can verify a request and it works cleanly across microservices, but the token is valid until it expires and you <b>can't take it back</b> without reintroducing state (a denylist/short TTLs + refresh tokens), which erodes the stateless benefit. A second trade-off is <b>storage/transport</b>: cookies with HttpOnly protect the credential from XSS but require CSRF defenses; storing a JWT in localStorage sidesteps CSRF but exposes it to XSS theft — so the 'stateless is simpler' story hides a real security cost. Finally, <b>token lifetime</b> trades UX against exposure: short TTLs limit the damage of a stolen token but force frequent refresh; the common resolution is short-lived access tokens plus a revocable, longer-lived refresh token.",
+  whenNot:"Prefer stateful sessions when you need immediate, reliable revocation and central control (banking, admin consoles) or when everything runs behind one app with a handy Redis. Reach for stateless JWTs when you have many services/APIs that must independently verify auth at scale and can tolerate revocation lag with short TTLs. Avoid putting long-lived JWTs in localStorage for sensitive apps (XSS risk); avoid stateful sessions when a shared store would be an availability bottleneck you can't justify. For pure machine-to-machine APIs, tokens (OAuth client credentials) are the norm rather than cookie sessions.",
+  sim,
+  code:{
+"Stateful session":`// Server stores state; cookie holds only an opaque, random id.\napp.post("/login", (req, res) => {\n  const user = verifyCredentials(req.body);\n  const sid = crypto.randomBytes(32).toString("hex");   // >=128-bit\n  sessions.set(sid, { userId: user.id, exp: Date.now() + 15*60*1000 });\n  res.cookie("sid", sid, { httpOnly:true, secure:true, sameSite:"Lax" });\n});\napp.use((req, res, next) => {\n  const s = sessions.get(req.cookies.sid);\n  if (!s || s.exp < Date.now()) return res.status(401).end();\n  req.user = s.userId; next();\n});\n// Revoke instantly: sessions.delete(sid)  ->  next request is 401.`,
+"Stateless JWT":`// Server stores NOTHING; the signed token carries the claims.\nconst token = jwt.sign({ sub: user.id, role: "user" },\n                       SECRET, { expiresIn: "15m" });        // short TTL\nres.cookie("jwt", token, { httpOnly:true, secure:true, sameSite:"Lax" });\n\n// Verify on each request — no lookup, any node can do it:\nconst claims = jwt.verify(req.cookies.jwt, SECRET);   // throws if bad/expired\nreq.user = claims.sub;\n\n// Revocation problem: a valid JWT works until it expires. Mitigate with\n// short TTL + refresh tokens, or a denylist of jti (reintroduces state).`,
+"Hardening the lifecycle":`// 1) Regenerate the session id on privilege change -> stops FIXATION\napp.post("/login", (req,res)=>{ regenerateSession(req);  /* new sid */ });\n\n// 2) Timeouts\n//    idle timeout: expire after N minutes of inactivity\n//    absolute timeout: hard cap regardless of activity (e.g. 8h)\n\n// 3) Cookie flags (defense in depth)\nSet-Cookie: sid=...; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900\n//   HttpOnly -> JS can't read it (XSS)   Secure -> HTTPS only (MITM)\n//   SameSite -> not sent cross-site (CSRF)\n\n// 4) Logout -> delete server session (and clear cookie / denylist token)`
+  },
+  realWorld:[
+    ["Express / Django / Rails","Built-in server-side session middleware with signed cookies."],
+    ["Redis session store","Fast shared store enabling stateful sessions across many app servers."],
+    ["JWT / OAuth access tokens","Stateless bearer tokens for APIs and microservices."],
+    ["Refresh-token rotation","Short access tokens + revocable long-lived refresh tokens."],
+    ["Browser cookie policies","HttpOnly/Secure/SameSite enforced by all modern browsers."]
+  ],
+  interview:[
+    ["basic","Why do we need session management?","Because HTTP is stateless — the server doesn't remember prior requests. After a user logs in once, session management issues a credential the browser replays on each request, so the server can recognize the user without asking for the password every time. It keeps users seamlessly authenticated while giving the server a handle to identify and control that logged-in state."],
+    ["basic","What's the difference between stateful sessions and JWTs?","Stateful sessions store session data server-side and put only an opaque random ID in the cookie; each request looks the ID up. JWTs are stateless — the signed token itself carries the claims, and the server just verifies the signature with no lookup. Stateful is easy to revoke but needs a shared store to scale; JWTs scale effortlessly and work across services but can't be instantly revoked before expiry."],
+    ["inter","Why can't you easily revoke a JWT, and how do you deal with it?","Because a JWT is self-contained and verified purely by signature — the server keeps no record, so there's nothing to delete; any node will accept a valid, unexpired token. You mitigate this with short TTLs (limit the window) plus revocable refresh tokens, or by maintaining a denylist of token IDs (jti) checked on each request — but that reintroduces the server-side state JWTs were meant to avoid."],
+    ["inter","What cookie flags secure a session and what does each do?","HttpOnly prevents JavaScript from reading the cookie, so XSS can't steal the session. Secure ensures it's only sent over HTTPS, preventing interception. SameSite (Lax/Strict) stops the browser sending it on cross-site requests, mitigating CSRF. Together with a short Max-Age/expiry and Path scoping, they harden the cookie against the main theft and forgery vectors."],
+    ["adv","What is session fixation and how do you prevent it?","Session fixation is when an attacker sets or knows a victim's session ID before login (e.g. by seeding a cookie), then the victim authenticates and the ID becomes privileged — letting the attacker reuse it. Prevent it by regenerating a fresh, random session ID at every privilege change, especially right after login, so any pre-login ID the attacker planted becomes worthless."],
+    ["adv","Where should you store a token on the client — cookie vs localStorage?","HttpOnly cookies keep the token unreadable to JavaScript, protecting it from XSS theft, but require CSRF defenses (SameSite/tokens) because cookies are sent automatically. localStorage avoids CSRF (JS must attach the token) but is fully readable by any injected script, so XSS can exfiltrate it. For sensitive apps, prefer HttpOnly cookies with CSRF protection; short TTLs limit exposure either way."],
+    ["sd","Design session management for a horizontally-scaled web app.","Issue an opaque session ID in an HttpOnly, Secure, SameSite cookie and store session data in a shared low-latency store (Redis) so any app server can serve any request; set idle + absolute timeouts and regenerate the ID on login. For a microservice/API tier, use short-lived signed access tokens plus revocable refresh tokens with rotation, and a denylist for emergency revocation. Enforce HTTPS everywhere, log session events, and support explicit logout that clears the cookie and server record."]
+  ],
+  mistakes:["Predictable or short session IDs an attacker can guess.","Not regenerating the ID on login (session fixation).","Storing sensitive JWTs in localStorage exposed to XSS.","No idle/absolute timeout — sessions live forever.","Assuming JWTs can be revoked instantly (they can't without state)."],
+  best:["Use long, cryptographically-random session IDs; sign/verify tokens properly.","Set cookies HttpOnly + Secure + SameSite; serve only over HTTPS.","Regenerate the session ID on login; enforce idle + absolute timeouts.","Prefer short-lived access tokens + revocable refresh tokens.","Support real logout/revocation; store server sessions in a shared store (Redis)."],
+  related:[["CSRF","🎭","Attacks the session cookie","csrf.html"],["XSS","💉","Steals session tokens","xss.html"],["OAuth2 / OIDC","🔑","Issues tokens & sessions","oauth2-oidc.html"],["Secrets Management","🔐","Protect signing keys","secrets-management.html"],["Redis / Caching","⚡","Common session store","system-designed.html"],["SQL Injection","🗄️","Can bypass auth entirely","sql-injection.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

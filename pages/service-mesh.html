@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Service Mesh — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function pod(x,y,name){g.appendChild(S("rect",{x:x-52,y:y-26,width:104,height:52,rx:10,fill:"#141416",stroke:"#3a3a42","stroke-width":1.6}));
+    g.appendChild(S("rect",{x:x-46,y:y-20,width:44,height:40,rx:6,fill:"rgba(56,189,248,.14)",stroke:"#38bdf8"}));g.appendChild(TX(x-24,y+3,name,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:x+4,y:y-20,width:44,height:40,rx:6,fill:"rgba(124,58,237,.2)",stroke:"#7C3AED"}));g.appendChild(TX(x+26,y+3,"proxy",{fill:"#c4a2ff","font-size":8,"text-anchor":"middle"}));}
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:220,y:38,width:180,height:26,rx:6,fill:"rgba(52,211,153,.12)",stroke:"#34d399"}));g.appendChild(TX(310,55,"control plane (Istio/Linkerd)",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+    pod(120,130,"A");pod(310,130,"B");pod(500,130,"C");
+    [120,310,500].forEach(x=>g.appendChild(S("line",{x1:x+26,y1:104,x2:x+26,y2:64,stroke:"#34d399","stroke-width":1,"stroke-dasharray":"3 3"})));
+    g.appendChild(S("line",{x1:146,y1:130,x2:284,y2:130,stroke:"#7C3AED","stroke-width":2,"marker-end":"url(#a)"}));
+    g.appendChild(S("line",{x1:336,y1:130,x2:474,y2:130,stroke:"#7C3AED","stroke-width":2,"marker-end":"url(#a)"}));
+    lbl.textContent="every pod has a sidecar proxy; a control plane configures them";lbl.setAttribute("fill","#c4a2ff");
+    sub.textContent="all service-to-service traffic flows proxy→proxy (mTLS, retries, metrics) with no app code changes";}
+  function step(){render();timer=3;}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Traffic from A→B→C flows through <b>sidecar proxies</b>, not directly. Make service B flaky, then toggle mesh features — <b>mTLS</b>, <b>retries</b>, <b>circuit breaking</b> — and watch the sidecars handle it transparently, with <b>zero application code changes</b>. That's the whole point of a service mesh.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>B failure rate: <b id="pgFV">0%</b></label><input id="pgFail" type="range" min="0" max="100" value="0"></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgMtls" checked>mTLS (encrypt proxy↔proxy)</label></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgRetry">retries (3x)</label></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgCB">circuit breaker</label></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgSend" class="go">Send A→B→C</button><button id="pgReset">↺ Reset</button></div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Requests</div><div class="v ac" id="pgReq">0</div></div>
+        <div class="pg-stat"><div class="k">Succeeded</div><div class="v ok" id="pgOk">0</div></div>
+        <div class="pg-stat"><div class="k">Failed</div><div class="v bad" id="pgErr">0</div></div>
+        <div class="pg-stat"><div class="k">Circuit</div><div class="v wa" id="pgCirc">closed</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=150;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let reqs,ok,err,recentFails,circuitOpen;
+  function reset(){reqs=0;ok=0;err=0;recentFails=0;circuitOpen=false;draw();stats();$("pgLog").innerHTML="";log("send a request through the mesh","ac");}
+  function bFails(){return Math.random()*100 < (+$("pgFail").value||0);}
+  function send(){reqs++;const mtls=$("pgMtls").checked,retry=$("pgRetry").checked,cb=$("pgCB").checked;
+    log("A's sidecar → B's sidecar"+(mtls?" (🔒 mTLS)":" (plaintext)"),"ac");
+    if(cb&&circuitOpen){err++;log("⚡ circuit OPEN → B's sidecar fails fast, no call made (protects B)","bad");stats();draw();return;}
+    const tries=retry?3:1;let served=false;
+    for(let i=1;i<=tries;i++){if(!bFails()){served=true;log("B responded OK on attempt "+i+" → forwards to C → 200","ok");break;}
+      else log("attempt "+i+": B failed"+(retry&&i<tries?" → sidecar retries…":""),"wa");}
+    if(served){ok++;recentFails=0;if(circuitOpen){circuitOpen=false;log("recovery → circuit CLOSED again","ok");}}
+    else{err++;recentFails++;log("request FAILED after "+tries+" attempt(s)","bad");
+      if(cb&&recentFails>=3&&!circuitOpen){circuitOpen=true;log("⚡ 3 consecutive failures → circuit breaker OPENS (fail fast for a while)","bad");}}
+    stats();draw();}
+  function draw(){svg.innerHTML="";const mtls=$("pgMtls")?$("pgMtls").checked:true;
+    function pod(x,name,col){svg.appendChild(S("rect",{x:x-50,y:55,width:100,height:48,rx:10,fill:"#141416",stroke:"#3a3a42"}));
+      svg.appendChild(S("rect",{x:x-44,y:61,width:40,height:36,rx:5,fill:"rgba(56,189,248,.14)",stroke:"#38bdf8"}));svg.appendChild(TX(x-24,y2(),name,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+      svg.appendChild(S("rect",{x:x+4,y:61,width:40,height:36,rx:5,fill:col||"rgba(124,58,237,.2)",stroke:"#7C3AED"}));svg.appendChild(TX(x+24,y2(),"⬡",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle"}));}
+    function y2(){return 83;}
+    pod(90,"A");pod(280,"B",circuitOpen?"rgba(248,113,113,.25)":"rgba(124,58,237,.2)");pod(470,"C");
+    svg.appendChild(S("line",{x1:118,y1:79,x2:230,y2:79,stroke:mtls?"#34d399":"#7C3AED","stroke-width":2,"stroke-dasharray":mtls?"none":"4 3","marker-end":"url(#a)"}));
+    svg.appendChild(S("line",{x1:308,y1:79,x2:420,y2:79,stroke:mtls?"#34d399":"#7C3AED","stroke-width":2,"stroke-dasharray":mtls?"none":"4 3","marker-end":"url(#a)"}));
+    svg.appendChild(TX(W/2,125,mtls?"🔒 proxy↔proxy mTLS":"plaintext proxy↔proxy",{fill:mtls?"#34d399":"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    svg.appendChild(TX(W/2,30,"⬡ = sidecar proxy (data plane)",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));}
+  function stats(){$("pgReq").textContent=reqs;$("pgOk").textContent=ok;$("pgErr").textContent=err;
+    $("pgCirc").textContent=circuitOpen?"OPEN":"closed";$("pgCirc").className="v "+(circuitOpen?"bad":"ok");}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgFail").oninput=()=>$("pgFV").textContent=$("pgFail").value+"%";
+  $("pgMtls").onchange=draw;$("pgSend").onclick=send;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🕸️",title:"Service Mesh",category:"Networking",difficulty:"Hard",readingTime:"10 min",
+  eyebrow:"Infrastructure Layer for Service Communication",
+  tagline:"A dedicated layer that handles service-to-service networking — encryption, retries, load balancing, observability — by injecting a <b>sidecar proxy</b> next to every service. Reliability and security move out of app code and into the platform.",
+  pills:["<b>Sidecar</b> proxies","<b>mTLS</b> everywhere","<b>Retries/CB/LB</b>","<b>Zero app changes</b>"],
+  overview:"In a microservices system, every service must handle the same hard networking concerns: mutual TLS, retries, timeouts, load balancing, circuit breaking, traffic shifting, and telemetry. A <b>service mesh</b> extracts all of this into infrastructure. It deploys a lightweight <b>sidecar proxy</b> (e.g., Envoy) alongside each service instance; the app talks to localhost and the sidecar transparently intercepts all inbound/outbound traffic. These proxies form the <b>data plane</b>. A <b>control plane</b> (Istio, Linkerd, Consul) configures them centrally — defining routing rules, security policies, and collecting metrics/traces. The result: uniform, encrypted, observable, resilient service communication with <b>no changes to application code</b>, plus powerful traffic management like canary releases, fault injection, and A/B routing.",
+  problem:"Without a mesh, each service (in each language) must reimplement mTLS, retries, timeouts, circuit breakers, and metrics — inconsistently, with bugs, and mixed into business logic. Operating dozens of microservices then means dozens of slightly different networking stacks. A mesh standardizes and centralizes these cross-cutting concerns, giving consistent security, reliability, and observability across all services regardless of language.",
+  diagram,diagramCaption:"Each pod runs a sidecar proxy (data plane); a control plane configures routing, security, and telemetry.",
+  how:[
+    "Inject a sidecar proxy into every service pod; it intercepts all network traffic to/from the app.",
+    "The app calls services normally (localhost/service name); the sidecar handles discovery, LB, mTLS, retries.",
+    "Sidecars (data plane) enforce policies and emit metrics/traces for every call.",
+    "The control plane pushes configuration (routing rules, mTLS certs, policies) to all sidecars.",
+    "Operators declaratively manage traffic: canary/blue-green shifts, timeouts, circuit breaking, and fault injection — without touching app code."
+  ],
+  complexity:[["Data plane","sidecar proxies (Envoy)"],["Control plane","Istio/Linkerd/Consul"],["Security","automatic mTLS"],["Overhead","+1 proxy hop / pod"]],
+  advantages:["Uniform mTLS, retries, timeouts, LB across all services","Language-agnostic — no per-service libraries","Rich observability (metrics, traces, logs) for free","Advanced traffic control (canary, mirroring, fault injection)","Policy & security centralized in the control plane"],
+  disadvantages:["Operational complexity — another platform to run","Latency & resource overhead per sidecar","Steep learning curve (Istio especially)","Debugging spans app + proxy + control plane","Overkill for small systems"],
+  tradeoffs:"A mesh trades added complexity and per-hop overhead for consistency, security, and observability at scale. Every call now traverses two extra proxies (client + server sidecar), adding latency and CPU/memory per pod — significant with thousands of pods. The control plane itself must be highly available. For a handful of services, libraries or a simpler gateway may be enough; the mesh pays off when you have many services in multiple languages needing uniform mTLS, resilience, and traffic policies. Emerging 'sidecarless'/ambient meshes (eBPF, per-node proxies) aim to cut the per-pod overhead while keeping the benefits.",
+  whenNot:"Skip a service mesh for small systems (a few services), monoliths, or when a shared client library / API gateway already covers your needs. The complexity and overhead aren't justified below a certain scale. Also avoid adopting it purely for one feature (e.g., just mTLS) that a simpler tool can provide.",
+  sim,
+  code:{
+"mTLS policy (Istio)":`# Enforce automatic mutual TLS for all services in a namespace —\n# no app changes; sidecars handle certs, rotation, and encryption.\napiVersion: security.istio.io/v1\nkind: PeerAuthentication\nmetadata: { name: default, namespace: prod }\nspec:\n  mtls: { mode: STRICT }        # only accept mTLS traffic between proxies`,
+"Traffic (canary)":`# Shift 10% of traffic to v2 (canary) via the control plane — declaratively.\napiVersion: networking.istio.io/v1\nkind: VirtualService\nmetadata: { name: reviews }\nspec:\n  http:\n  - route:\n    - destination: { host: reviews, subset: v1 }\n      weight: 90\n    - destination: { host: reviews, subset: v2 }\n      weight: 10\n    retries: { attempts: 3, perTryTimeout: 200ms }   # retries for free`,
+"Circuit breaking":`# Sidecar sheds load / trips a breaker when a backend degrades.\napiVersion: networking.istio.io/v1\nkind: DestinationRule\nmetadata: { name: ratings }\nspec:\n  host: ratings\n  trafficPolicy:\n    connectionPool: { http: { http1MaxPendingRequests: 100 } }\n    outlierDetection:                 # eject unhealthy endpoints\n      consecutive5xxErrors: 3\n      interval: 10s\n      baseEjectionTime: 30s`
+  },
+  realWorld:[
+    ["Istio","The most feature-rich mesh (Envoy data plane); mTLS, traffic mgmt, telemetry."],
+    ["Linkerd","Lightweight CNCF mesh focused on simplicity and low overhead."],
+    ["HashiCorp Consul","Service discovery + mesh with mTLS and multi-platform support."],
+    ["AWS App Mesh / Google ASM","Managed meshes integrating with cloud platforms."],
+    ["Envoy","The high-performance proxy powering most mesh data planes (and API gateways)."]
+  ],
+  interview:[
+    ["basic","What is a service mesh?","A dedicated infrastructure layer that manages service-to-service communication — mTLS, retries, timeouts, load balancing, circuit breaking, and observability — by running a sidecar proxy next to each service. It moves these concerns out of application code into the platform, configured centrally by a control plane."],
+    ["basic","What are the data plane and control plane?","The data plane is the set of sidecar proxies (e.g., Envoy) that actually carry and manipulate traffic between services. The control plane (Istio/Linkerd/Consul) is the management layer that configures those proxies — distributing routing rules, security policies, and certificates, and aggregating telemetry."],
+    ["inter","How does a mesh provide mTLS with no code changes?","The sidecars terminate and originate TLS on behalf of the app. The control plane issues and rotates short-lived certificates and pushes them to every proxy. When service A calls B, A's sidecar and B's sidecar mutually authenticate and encrypt the connection automatically, so every service-to-service call is encrypted and identity-verified without the app knowing."],
+    ["inter","What traffic-management features does a mesh enable?","Weighted routing for canary/blue-green deploys, request mirroring (shadow traffic), fault injection for chaos testing, retries with budgets, timeouts, circuit breaking / outlier detection, rate limiting, and locality-aware load balancing — all declaratively, without redeploying application code."],
+    ["adv","What are the downsides and overhead of a mesh?","Each request traverses two extra proxy hops (client and server sidecars), adding latency and consuming CPU/memory per pod — costly at thousands of pods. It's operationally complex (especially Istio), adds moving parts to debug, and the control plane must be highly available. For small systems it's overkill. Newer sidecarless/ambient designs (eBPF, per-node proxies) aim to reduce per-pod cost."],
+    ["adv","Service mesh vs API gateway — how do they differ?","An API gateway sits at the edge (north-south traffic), handling external client concerns: auth, rate limiting, request routing, and API composition. A service mesh handles internal service-to-service traffic (east-west): mTLS, retries, and observability between microservices. They're complementary — gateway at the boundary, mesh inside — and both often use Envoy under the hood."],
+    ["sd","When would you introduce a service mesh into an architecture?","When you have many microservices (often polyglot) and need consistent mTLS, resilience (retries/timeouts/circuit breaking), and observability without duplicating logic per service, plus advanced deployment strategies like canaries. Introduce it once library-based approaches become inconsistent or unmanageable; for a few services, a shared client library or gateway is simpler and cheaper."]
+  ],
+  mistakes:["Adopting a mesh for a handful of services (complexity > benefit).","Ignoring the added latency/resource cost of sidecars at scale.","Treating the control plane as non-critical (it must be HA).","Confusing the mesh (east-west) with an API gateway (north-south).","Enabling everything at once instead of incrementally (mTLS → observability → traffic)."],
+  best:["Adopt incrementally: start with mTLS/observability, then traffic policies.","Right-size: use a mesh only when many polyglot services justify it.","Run the control plane highly available across zones.","Use mesh for east-west + a gateway for north-south traffic.","Watch sidecar resource usage; consider lightweight/ambient meshes at scale."],
+  related:[["Sidecar Pattern","🚗","The building block","system-designed.html"],["API Gateway","🚪","North-south counterpart","system-designed.html"],["gRPC","🔗","Traffic meshes carry","grpc.html"],["Circuit Breaker","🔌","A mesh resilience feature","system-designed.html"],["Load Balancer","⚖️","Client-side LB in mesh","system-designed.html"],["Forward & Reverse Proxy","🔁","Proxies everywhere","forward-proxy.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

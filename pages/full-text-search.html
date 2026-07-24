@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Full-Text Search — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const stages=[["raw text","The Cats are Running!","#8b8b93"],["tokenize","[the][cats][are][running]","#38bdf8"],["lowercase","the · cats · are · running","#38bdf8"],["stopwords","cats · running","#fbbf24"],["stem","cat · run","#34d399"]];
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    stages.forEach(([name,val,c],i)=>{const y=44+i*30;const on=i<=phase;
+      g.appendChild(S("rect",{x:60,y:y-13,width:110,height:24,rx:5,fill:on?c+"22":"#141416",stroke:on?c:"#242a33","stroke-width":1.4}));
+      g.appendChild(TX(115,y+3,name,{fill:on?"#e4e4e7":"#3a3a42","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(TX(190,y+3,val,{fill:on?c:"#3a3a42","font-size":11,"text-anchor":"start"}));
+      if(i>0)g.appendChild(S("line",{x1:115,y1:y-13,x2:115,y2:y-17,stroke:on?"#c4a2ff":"#242a33","stroke-width":1.4}));});
+    lbl.textContent="the analysis pipeline turns text into index terms";lbl.setAttribute("fill","#c4a2ff");
+    sub.textContent="the SAME pipeline runs on documents (index time) and queries — so terms line up";}
+  function step(){phase=(phase+1)%stages.length;timer=1.5;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Watch text flow through an <b>analysis pipeline</b> before it hits the index. Toggle each stage — tokenize, lowercase, remove stopwords, stem — and see how raw text becomes normalized <b>terms</b>. The same analyzer runs on documents and queries, which is why <code>Running</code> matches <code>run</code>.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Text to analyze</label><input id="pgTxt" type="text" value="The Cats are quickly Running!" style="width:220px"></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgLower" checked>lowercase</label></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgStop" checked>remove stopwords</label></div>
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgStem" checked>stem</label></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Stopwords (the, a, is, are…) carry little meaning and are dropped. Stemming reduces words to a root (running→run, cats→cat) so variants match. Getting analysis right matters more than the query.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Raw tokens</div><div class="v ac" id="pgRaw">0</div></div>
+        <div class="pg-stat"><div class="k">Stopwords dropped</div><div class="v wa" id="pgDrop">0</div></div>
+        <div class="pg-stat"><div class="k">Final terms</div><div class="v ok" id="pgTerms">0</div></div>
+        <div class="pg-stat"><div class="k">Stemmed</div><div class="v" id="pgStemN">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const STOP=new Set(["the","a","an","is","are","was","were","be","to","of","and","or","in","on","at","for","with","that","this"]);
+  const W=560,H=200;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function stem(w){ // toy stemmer
+    return w.replace(/(ies)$/,"y").replace(/(sses)$/,"ss").replace(/(ing|edly|ed|ly|es|s)$/,"")||w;}
+  function run(){const txt=$("pgTxt").value||"";const lower=$("pgLower").checked,stop=$("pgStop").checked,doStem=$("pgStem").checked;
+    let toks=txt.split(/[^A-Za-z]+/).filter(Boolean);
+    const raw=toks.slice();
+    let s1=lower?toks.map(t=>t.toLowerCase()):toks.slice();
+    let dropped=0;let s2=stop?s1.filter(t=>{const isStop=STOP.has(t.toLowerCase());if(isStop)dropped++;return !isStop;}):s1.slice();
+    let stemN=0;let s3=doStem?s2.map(t=>{const st=stem(t);if(st!==t)stemN++;return st;}):s2.slice();
+    $("pgRaw").textContent=raw.length;$("pgDrop").textContent=dropped;$("pgTerms").textContent=s3.length;$("pgStemN").textContent=stemN;
+    draw(raw,s1,s2,s3,lower,stop,doStem);
+    $("pgLog").innerHTML="";
+    log("index terms: ["+s3.join(", ")+"]","ok");
+    log("a query for any of these terms (analyzed the same way) will match this text","ac");}
+  function draw(raw,s1,s2,s3,lower,stop,doStem){svg.innerHTML="";
+    const rows=[["1. tokenize",raw,"#38bdf8"],["2. "+(lower?"lowercase":"(lowercase off)"),s1,lower?"#38bdf8":"#5b5b63"],["3. "+(stop?"stopwords":"(stopwords off)"),s2,stop?"#fbbf24":"#5b5b63"],["4. "+(doStem?"stem → TERMS":"(stem off) → TERMS"),s3,"#34d399"]];
+    rows.forEach((r,ri)=>{const y=26+ri*44;svg.appendChild(TX(20,y-6,r[0],{fill:r[2],"font-size":10}));
+      let x=20;r[1].forEach(t=>{const w=Math.max(30,t.length*8+14);
+        svg.appendChild(S("rect",{x,y,width:w,height:22,rx:5,fill:r[2]+"22",stroke:r[2],"stroke-width":1.4}));
+        svg.appendChild(TX(x+w/2,y+15,t,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));x+=w+6;});
+      if(!r[1].length)svg.appendChild(TX(24,y+15,"∅",{fill:"#5b5b63","font-size":11}));});}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  ["pgTxt"].forEach(id=>$(id).oninput=run);["pgLower","pgStop","pgStem"].forEach(id=>$(id).onchange=run);
+  run();
+}
+
+const DATA={
+  badge:"📄",title:"Full-Text Search",category:"Search",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"From Raw Text to Ranked Results",
+  tagline:"Searching the actual words inside documents — not just exact fields. It combines a text <b>analysis pipeline</b> (tokenize, normalize, stem), an <b>inverted index</b>, and <b>relevance ranking</b> so a natural-language query returns the most relevant documents, fast.",
+  pills:["<b>Analysis</b> pipeline","<b>Inverted index</b>","<b>Relevance</b> ranking","<b>Same analyzer</b> both sides"],
+  overview:"Full-text search (FTS) lets users find documents by the words they contain, with typo/variant tolerance and relevance ordering — unlike a database <code>LIKE '%...%'</code> which is exact, slow (full scan), and unranked. FTS has three pillars. First, an <b>analysis pipeline</b> transforms raw text into normalized index <b>terms</b>: <b>tokenization</b> splits text into words; <b>normalization</b> lowercases and folds accents; <b>stopword removal</b> drops low-value words (the, a, is); <b>stemming/lemmatization</b> reduces words to a root so 'running', 'runs', 'ran' all become 'run'; and synonyms/n-grams can be added. Critically, the <b>same analyzer runs on documents at index time and on the query at search time</b>, so the terms line up. Second, the analyzed terms are stored in an <b>inverted index</b> (term → postings) so queries touch only relevant documents. Third, matches are ordered by <b>relevance</b> using TF-IDF/BM25 (plus signals like recency and popularity). The analyzer choices — which stopwords, which stemmer, language handling — usually affect result quality more than anything else.",
+  problem:"People search using natural language full of variation: different cases, word forms, filler words, and phrasing. Exact matching (equality or LIKE) misses 'Running' when the query is 'run', can't rank by relevance, and scans entire tables. Full-text search normalizes language and indexes terms so queries are both accurate (matching intent) and fast (index lookups), returning ranked results.",
+  diagram,diagramCaption:"An analysis pipeline converts raw text into normalized terms — applied identically to documents and queries.",
+  how:[
+    "Analyze documents: tokenize → normalize (lowercase/fold) → remove stopwords → stem/lemmatize (± synonyms/n-grams).",
+    "Store the resulting terms in an inverted index (term → postings, with positions/frequencies).",
+    "At query time, run the SAME analyzer on the query so its terms match indexed terms.",
+    "Retrieve candidate documents by combining the query terms' postings lists (boolean/phrase).",
+    "Score and rank candidates by relevance (TF-IDF/BM25 + recency, popularity, field boosts); return top-k."
+  ],
+  complexity:[["Analysis","O(text length)"],["Retrieval","inverted-index lookup"],["Ranking","BM25 over candidates"],["Key lever","the analyzer config"]],
+  advantages:["Natural-language, variant-tolerant matching","Fast via inverted index (no full scans)","Relevance ranking, not just true/false","Language features: stemming, synonyms, stopwords","Supports phrases, fuzziness, highlighting, facets"],
+  disadvantages:["Analyzer/language tuning is subtle and impactful","Index build & storage overhead","Stemming can over/under-conflate (lose precision)","Must reindex when analysis rules change","Not a substitute for exact/structured queries"],
+  tradeoffs:"Full-text search trades exactness for recall and relevance. Aggressive analysis (heavy stemming, broad synonyms, dropping many stopwords) increases recall — you find more relevant docs despite variation — but can hurt precision (stemming 'universe' and 'university' to the same root, or matching unintended senses). Lighter analysis preserves precision but misses variants. Because the analyzer is applied at index time, changing it requires reindexing, so choices are somewhat sticky. There's also the classic build-vs-query trade: FTS front-loads work into indexing/analysis to make queries cheap. And FTS is complementary to, not a replacement for, structured queries — you combine analyzed text fields (for matching/ranking) with exact keyword fields and numeric filters. The single biggest quality lever is almost always the analyzer configuration, not the query syntax.",
+  whenNot:"Don't use full-text search for exact-match needs (IDs, enums, exact codes) — use keyword/exact fields; for structured filtering, ranges, joins, and aggregations use a database index; for tiny datasets a simple scan/LIKE is fine. For semantic matching ('sofa' ~ 'couch') combine or replace with vector/embedding search — lexical FTS matches words, not meanings.",
+  sim,
+  code:{
+"Analyzer":`// An analyzer = tokenizer + filters. Documents AND queries use the SAME one.\nPUT /articles\n{ "settings": { "analysis": { "analyzer": { "my_en": {\n    "tokenizer": "standard",\n    "filter": ["lowercase", "stop", "porter_stem", "my_synonyms"]\n}}}}}\n\n// "The Cats are quickly Running!"  ->  tokenize + lowercase + drop stopwords\n//   -> ["cats","quickly","running"]  -> stem -> ["cat","quick","run"]\n// Query "run" is analyzed to ["run"] and matches the indexed term "run".`,
+"Postgres FTS":`-- Analyze text into a tsvector (terms), query with tsquery, rank by relevance.\nSELECT id, ts_rank(v, q) AS score\nFROM (\n  SELECT id, to_tsvector('english', title || ' ' || body) AS v\n  FROM articles\n) t, to_tsquery('english', 'run & cat') AS q     -- analyzed identically\nWHERE v @@ q\nORDER BY score DESC\nLIMIT 10;\n-- A GIN index on the tsvector makes @@ fast (inverted index under the hood).`,
+"Precision vs recall":`# The analyzer is the biggest quality lever:\nstemming:   running/runs/ran -> run      (+recall, -precision if over-conflated)\nstopwords:  drop the/a/is             (smaller index, but breaks phrases like\n                                        "to be or not to be")\nsynonyms:   tv == television           (+recall)\nn-grams:    "search" -> sea,ear,arc..  (typo/substring tolerance, bigger index)\n# Test with real queries + judgments; changing analysis => REINDEX.`
+  },
+  realWorld:[
+    ["Elasticsearch / Solr / Lucene","Configurable analyzers + inverted index + BM25 ranking."],
+    ["Postgres / MySQL FTS","to_tsvector/tsquery (GIN) and MATCH...AGAINST for built-in FTS."],
+    ["Site & docs search","Algolia, Typesense, Meilisearch power instant site search."],
+    ["Email & note apps","Gmail, Notion, Evernote full-text search across content."],
+    ["Log/observability","Splunk, Loki, ELK analyze and index log text for search."]
+  ],
+  interview:[
+    ["basic","What is full-text search and how is it different from LIKE?","Full-text search finds documents by the words they contain, with normalization (case, word forms), typo/variant tolerance, and relevance ranking. A SQL LIKE '%term%' does a literal substring scan: it's exact (misses variants), slow (full scan, no index for leading wildcards), and returns unranked rows. FTS analyzes text into terms, stores them in an inverted index, and ranks results by relevance."],
+    ["basic","What does the analysis pipeline do?","It converts raw text into normalized index terms: tokenization (split into words), normalization (lowercase, accent folding), stopword removal (drop low-value words like 'the'), and stemming/lemmatization (reduce to a root so 'running'→'run'), optionally adding synonyms or n-grams. The same analyzer is applied to documents at index time and to queries at search time so their terms match."],
+    ["inter","Why must the query use the same analyzer as the documents?","Because matching happens on analyzed terms, not raw text. If documents are lowercased and stemmed to 'run' but the query 'Running' isn't analyzed the same way, it becomes 'Running' and won't match 'run' in the index. Using one analyzer on both sides guarantees the query terms are transformed identically to the indexed terms, so intended matches actually line up."],
+    ["inter","What's the difference between stemming and lemmatization?","Stemming crudely chops affixes using rules (e.g., Porter: 'running'→'run', but also 'universe'→'univers'), fast but can produce non-words and over/under-conflate. Lemmatization uses vocabulary and morphology to map a word to its dictionary form ('better'→'good', 'ran'→'run'), more accurate but slower and language-resource-heavy. Both increase recall by matching word variants; the choice trades precision/accuracy against speed/simplicity."],
+    ["adv","How does analysis affect precision vs recall?","More aggressive analysis (heavy stemming, broad synonyms, dropping stopwords) raises recall by matching more variants but can lower precision (conflating unrelated words, matching wrong senses, or breaking phrase meaning by removing stopwords). Lighter analysis preserves precision but misses variants. You tune the analyzer against real queries with relevance judgments — and because it's applied at index time, changing it means reindexing."],
+    ["adv","How do full-text and structured/semantic search fit together?","Full-text (lexical) search matches and ranks words via analysis + inverted index; structured search filters exact/numeric fields with B-tree/columnar indexes; semantic (vector) search matches meaning via embeddings and ANN. Real systems combine them: e.g., filter by category/price (structured), match text with BM25 (lexical), and blend in vector similarity for synonyms/intent — then rank with a unified scoring layer (hybrid search)."],
+    ["sd","Design full-text search for a documentation site.","Choose a language analyzer (tokenize, lowercase, stopwords, stemming, synonyms) and apply it to both indexing and queries. Build an inverted index (Elasticsearch/Postgres GIN/Meilisearch) over analyzed text fields, keeping exact keyword fields for filters/facets and positions for phrase queries and highlighting. Rank with BM25 plus boosts (title > body, recency, popularity). Add fuzziness for typos and autocomplete via prefixes. Reindex on analyzer changes; evaluate with real query judgments and cache popular queries."]
+  ],
+  mistakes:["Using different analysis for documents and queries (matches silently fail).","Relying on LIKE '%x%' for search (slow full scans, no ranking).","Over-stemming, conflating unrelated words and hurting precision.","Removing stopwords that break important phrases (e.g., 'to be or not to be').","Forgetting to reindex after changing analysis rules."],
+  best:["Use one analyzer for both indexing and querying.","Pick language-appropriate tokenization, stemming, and stopwords; test on real queries.","Combine analyzed text fields with exact keyword fields and numeric filters.","Store positions for phrases/highlighting; add synonyms/fuzziness as needed.","Rank with BM25 plus field boosts, recency, and popularity; reindex on analyzer changes."],
+  related:[["Inverted Index","🔎","Stores the terms","inverted-index.html"],["Ranking (TF-IDF/BM25)","🏆","Orders results","ranking.html"],["Fuzzy Search","≈","Typo tolerance","fuzzy-search.html"],["Elasticsearch","🔍","FTS at scale","elasticsearch.html"],["Trie","🌴","Autocomplete terms","trie.html"],["Typeahead Search","⌨️","As-you-type search","typeahead-search.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

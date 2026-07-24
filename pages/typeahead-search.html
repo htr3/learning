@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Typeahead Search — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:740px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:520px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+
+  /* TYPEAHEAD widget (playground) */
+  .ta-box{position:relative;max-width:540px;margin:8px auto 0}
+  .ta-inwrap{position:relative}
+  .ta-inwrap .mag{position:absolute;left:15px;top:50%;transform:translateY(-50%);font-size:16px;opacity:.6}
+  .ta-input{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:12px;padding:14px 16px 14px 42px;font-size:16px;outline:none;font-family:inherit}
+  .ta-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .ta-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+  .ta-item{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:10px;padding:10px 14px;cursor:pointer;transition:all .12s}
+  .ta-item:hover{border-color:var(--accent);background:var(--panel-2);transform:translateX(2px)}
+  .ta-item .ic{opacity:.5;font-size:13px}
+  .ta-item .q{flex:1;font-size:14px;font-family:"JetBrains Mono",monospace}
+  .ta-item .q b{color:var(--accent);font-weight:700}
+  .ta-item .meter{width:70px;height:5px;border-radius:3px;background:var(--gray);overflow:hidden}
+  .ta-item .meter i{display:block;height:100%;background:var(--accent);border-radius:3px}
+  .ta-item .c{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:46px;text-align:right}
+  .ta-status{text-align:center;margin-top:14px;font-size:12.5px;color:var(--muted);font-family:"JetBrains Mono",monospace}
+  .ta-status .hit{color:var(--ok);font-weight:700} .ta-status .miss{color:var(--warn);font-weight:700}
+  .ta-empty{text-align:center;color:var(--muted);font-size:13px;padding:22px}
+  .ta-hint{text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🔍</span> Typeahead Search</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Typeahead Search</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Approaches</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Typeahead Search</h1>
+      <p class="tagline">How Google, YouTube and Amazon suggest queries as you type — a debounced request per keystroke hits an
+        autocomplete service backed by a <b>trie</b> (prefix tree), completions are ranked by popularity, hot prefixes are
+        cached in Redis, and search counts continuously update the rankings. Explore each with live visualizations and a
+        real, working autocomplete you can type into.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>&lt;100ms</b>&nbsp;per keystroke</span>
+        <span class="hpill"><b>Trie</b>&nbsp;prefix search</span>
+        <span class="hpill"><b>Redis</b>&nbsp;top-K cache</span>
+        <span class="hpill"><b>Live</b>&nbsp;working demo</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Design Choices</div><h2>Autocomplete Approaches</h2></div></div>
+      <div class="card">
+        <div class="block-title">Trie vs Precomputed vs DB vs Search Engine</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>What large systems do —</b> precompute the <b>top-K completions per prefix</b> offline and serve them straight from Redis (O(1) lookup), rebuilding periodically from query logs. The trie is the mental model; the hot path is really a cache of prefix → ranked suggestions.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The key paths — the trie, prefix search with top-K, ranking, Redis caching, precomputed suggestions and popularity updates.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Live Autocomplete</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Debounce <b id="pgDebounceV">120 ms</b></label><input id="pgDebounce" type="range" min="0" max="400" step="10" value="120"></div>
+            <div class="pg-field"><label>Suggestions (top-K) <b id="pgTopKV">6</b></label><input id="pgTopK" type="range" min="3" max="10" value="6"></div>
+            <div class="pg-field">
+              <label>Prefix cache</label>
+              <select id="pgCache"><option value="on" selected>On (Redis)</option><option value="off">Off (always trie)</option></select>
+            </div>
+            <div class="pg-btns"><button id="pgReset">↺ Reset</button></div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Type a query below. Click a suggestion to "search" it — its popularity rises and it climbs the rankings (and the cache is invalidated).</p>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Queries</div><div class="v ac" id="pgQueries">0</div></div>
+              <div class="pg-stat"><div class="k">Cache hits</div><div class="v ok" id="pgHits">0</div></div>
+              <div class="pg-stat"><div class="k">Avg latency</div><div class="v wa" id="pgLatency">— ms</div></div>
+              <div class="pg-stat"><div class="k">Shown</div><div class="v" id="pgShown">0</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   TYPEAHEAD SEARCH — modular vanilla JS (SVG animations, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=n=>n.toLocaleString();
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in typeof this export default stream throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None while not and or "+
+    "String Long Integer List Map Set Stream Node char true false null val "+
+    "SELECT INSERT UPDATE FROM WHERE ORDER BY LIMIT DESC LIKE select from where order by limit desc like").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|--[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.nodes=[["👤","User",10],["🚪","API GW",92],["🔤","Autocomplete",184],["🌳","Trie",300],["⚡","Redis",384],["🏅","Ranking",468],["💡","Suggest",562]];
+    this.w=[72,80,104,72,74,84,70];
+    this.nodes.forEach(([ic,nm,x],i)=>{ this.box(x,86,this.w[i],46,nm,i===3?"#34d399":i===4?"#fbbf24":i===5?"#7C3AED":"#3a3a42",ic);
+      if(i<this.nodes.length-1) this.arrow(x+this.w[i],109,this.nodes[i+1][2],109); });
+    this.centers=this.nodes.map((n,i)=>n[2]+this.w[i]/2);
+    this.packets=[]; this.spawn=0;
+    this.cap("Each keystroke hits the API Gateway → Autocomplete Service, which looks up completions in the trie (or the Redis cache), ranks them by popularity, and returns suggestions — all within a tight latency budget.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.85); this.packets.push({prog:0,dead:false,el:this.dot(this.centers[0],109,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.7;
+      if(p.prog>=this.centers.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog),f=p.prog-seg; p.el.setAttribute("cx",this.centers[seg]+(this.centers[seg+1]-this.centers[seg])*f);
+      p.el.setAttribute("fill",p.prog>=5?"#7C3AED":p.prog>=3?"#fbbf24":"#c4a2ff"); });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. Typing & Debounce ---- */
+class TypingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.svg.appendChild(S("rect",{x:30,y:40,width:340,height:44,rx:10,fill:"#0e0e11",stroke:"#3a3a42"}));
+    this.svg.appendChild(T(48,67,"🔍",{"font-size":14}));
+    this.txt=T(72,68,"",{fill:"#f4f4f5","font-size":16,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.txt);
+    this.caret=S("rect",{x:74,y:52,width:2,height:20,fill:"#7C3AED"}); this.svg.appendChild(this.caret);
+    this.box(430,42,180,44,"Autocomplete","#7C3AED","server");
+    // debounce bar
+    this.svg.appendChild(T(30,120,"debounce timer",{fill:"#8b8b93","font-size":10}));
+    this.svg.appendChild(S("rect",{x:30,y:128,width:340,height:12,rx:5,fill:"#141416",stroke:"#26262e"}));
+    this.dbar=S("rect",{x:30,y:128,width:0,height:12,rx:5,fill:"#fbbf24"}); this.svg.appendChild(this.dbar);
+    this.status=T(200,168,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.status);
+    this.words=["react","redis","recipe"]; this.wi=0; this.str=""; this.timer=0; this.mode="typing"; this.db=0; this.dbMax=.5; this.blink=0;
+    this.reqs=[];
+    this.cap("Firing a request on every keystroke would flood the server. Debouncing waits for a short pause in typing (e.g. 150ms) before sending — so 'r-e-a-c-t' triggers one request, not five.");
+  }
+  frame(dt){ this.blink+=dt; this.caret.setAttribute("opacity", (this.blink%0.9<0.5)?1:0.2);
+    this.reqs.forEach(r=>{ if(r.dead)return; r.prog+=dt*2; r.el.setAttribute("cx",380+(520-380)*r.prog);
+      if(r.prog>=1){ r.dead=true; r.el.remove(); } });
+    this.reqs=this.reqs.filter(r=>!r.dead);
+    this.timer-=dt;
+    if(this.mode==="typing"){ if(this.timer<=0){ const w=this.words[this.wi];
+        if(this.str.length<w.length){ this.str=w.slice(0,this.str.length+1); this.txt.textContent=this.str;
+          this.caret.setAttribute("x",74+this.str.length*9.6); this.db=this.dbMax;
+          this.status.textContent="typing… (request suppressed)"; this.status.setAttribute("fill","#8b8b93"); this.timer=.28; }
+        else { this.mode="debounce"; } } }
+    else if(this.mode==="debounce"){ this.db-=dt; this.dbar.setAttribute("width", clamp(1-this.db/this.dbMax,0,1)*340);
+      this.status.textContent="paused — debounce elapsing…"; this.status.setAttribute("fill","#fbbf24");
+      if(this.db<=0){ this.status.textContent='✓ debounce fired → request "'+this.str+'"'; this.status.setAttribute("fill","#34d399");
+        this.reqs.push({prog:0,dead:false,el:this.dot(380,64,"#34d399")}); this.mode="hold"; this.timer=1.2; } }
+    else { if(this.timer<=0){ this.str=""; this.txt.textContent=""; this.caret.setAttribute("x",74); this.dbar.setAttribute("width",0);
+        this.wi=(this.wi+1)%this.words.length; this.mode="typing"; this.timer=.4; } }
+  }
+}
+
+/* ---- shared trie model for Trie/Prefix viz ---- */
+const TRIE_NODES=[
+  {ch:"●",x:300,y:22},{ch:"c",x:200,y:70},{ch:"d",x:430,y:70},{ch:"a",x:200,y:118},
+  {ch:"t",x:150,y:170,end:"cat"},{ch:"r",x:262,y:170,end:"car"},{ch:"d",x:262,y:220,end:"card"},
+  {ch:"o",x:430,y:118},{ch:"g",x:430,y:170,end:"dog"}
+];
+const TRIE_EDGES=[[0,1],[0,2],[1,3],[3,4],[3,5],[5,6],[2,7],[7,8]];
+
+/* ---- 3. Trie (Prefix Tree) ---- */
+class TrieViz extends Viz {
+  constructor(host){ super(host,"0 0 640 250"); }
+  setup(){
+    TRIE_EDGES.forEach(([a,b])=>this.arrow(TRIE_NODES[a].x,TRIE_NODES[a].y+13,TRIE_NODES[b].x,TRIE_NODES[b].y-13,"#2a2a32"));
+    this.circs=TRIE_NODES.map(n=>{ const c=S("circle",{cx:n.x,cy:n.y,r:14,fill:n.end?"#141416":"#161619",stroke:n.end?"#34d399":"#3a3a42","stroke-width":2}); this.svg.appendChild(c);
+      this.svg.appendChild(T(n.x,n.y+4,n.ch,{fill:"#d4d4d8","font-size":12,"text-anchor":"middle","font-weight":600})); return c; });
+    this.words={cat:[0,1,3,4],car:[0,1,3,5],card:[0,1,3,5,6],dog:[0,2,7,8]}; this.keys=Object.keys(this.words);
+    this.wi=0; this.ptr=0; this.timer=0;
+    this.lbl=T(300,242,"",{fill:"#c4a2ff","font-size":12.5,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.lbl);
+    this.cap("A trie stores strings by character. Words with a common prefix share the same nodes — 'cat', 'car' and 'card' all share c→a. End-of-word nodes (green) mark valid terms. This structure makes prefix lookups O(prefix length).");
+  }
+  reset(){ this.circs.forEach((c,i)=>{ const n=TRIE_NODES[i]; c.setAttribute("fill",n.end?"#141416":"#161619"); c.setAttribute("stroke",n.end?"#34d399":"#3a3a42"); }); }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=.5;
+    const word=this.keys[this.wi], path=this.words[word];
+    if(this.ptr===0) this.reset();
+    if(this.ptr<path.length){ const idx=path[this.ptr]; this.circs[idx].setAttribute("fill","rgba(124,58,237,.4)"); this.circs[idx].setAttribute("stroke","#7C3AED");
+      this.lbl.textContent=`insert / lookup "${word}"  —  ${this.ptr+1}/${path.length}`; this.ptr++; }
+    else { this.timer=1.0; this.ptr=0; this.wi=(this.wi+1)%this.keys.length; }
+  }
+}
+
+/* ---- 4. Prefix Search / Traversal ---- */
+class PrefixViz extends Viz {
+  constructor(host){ super(host,"0 0 640 250"); }
+  setup(){
+    TRIE_EDGES.forEach(([a,b])=>this.arrow(TRIE_NODES[a].x,TRIE_NODES[a].y+13,TRIE_NODES[b].x,TRIE_NODES[b].y-13,"#2a2a32"));
+    this.circs=TRIE_NODES.map(n=>{ const c=S("circle",{cx:n.x,cy:n.y,r:14,fill:n.end?"#141416":"#161619",stroke:n.end?"#34d399":"#3a3a42","stroke-width":2}); this.svg.appendChild(c);
+      this.svg.appendChild(T(n.x,n.y+4,n.ch,{fill:"#d4d4d8","font-size":12,"text-anchor":"middle","font-weight":600})); return c; });
+    this.prefixes=[
+      {p:"c",nodes:[1],words:["cat","car","card"]},
+      {p:"ca",nodes:[1,3],words:["cat","car","card"]},
+      {p:"car",nodes:[1,3,5],words:["car","card"]},
+      {p:"d",nodes:[2],words:["dog"]}
+    ];
+    this.svg.appendChild(S("rect",{x:496,y:30,width:132,height:150,rx:10,fill:"#0e0e11",stroke:"#26262e"}));
+    this.sugTitle=T(504,50,"",{fill:"#c4a2ff","font-size":11,"font-weight":700,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.sugTitle);
+    this.sugEls=[]; for(let i=0;i<4;i++){ const t=T(508,74+i*26,"",{fill:"#d4d4d8","font-size":12,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(t); this.sugEls.push(t); }
+    this.pi=-1; this.timer=0;
+    this.lbl=T(250,242,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.lbl);
+    this.cap("Prefix search walks the trie to the node for the typed prefix, then collects every word in that subtree — those are the completions. Typing 'ca' lands on c→a and yields cat, car, card.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return; this.timer=2.4;
+    this.pi=(this.pi+1)%this.prefixes.length; const pf=this.prefixes[this.pi];
+    this.circs.forEach((c,i)=>{ const n=TRIE_NODES[i]; c.setAttribute("fill",n.end?"#141416":"#161619"); c.setAttribute("stroke",n.end?"#34d399":"#3a3a42"); });
+    this.circs[0].setAttribute("stroke","#7C3AED");
+    pf.nodes.forEach(i=>{ this.circs[i].setAttribute("fill","rgba(124,58,237,.4)"); this.circs[i].setAttribute("stroke","#7C3AED"); });
+    this.sugTitle.textContent=`prefix "${pf.p}" →`;
+    this.sugEls.forEach((t,i)=>t.textContent = pf.words[i]?("• "+pf.words[i]):"");
+    this.lbl.textContent=`walk to "${pf.p}", then collect ${pf.words.length} completion(s) in the subtree`;
+  }
+}
+
+/* ---- 5. Ranking ---- */
+class RankingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.n=5; this.rowH=38; this.top=14; this.barX=170; this.barMax=520;
+    this.labels=["react native","react hooks","react router","react query","react redux"];
+    this.items=[];
+    for(let i=0;i<this.n;i++){ const g=S("g"); this.svg.appendChild(g);
+      g.appendChild(S("rect",{x:14,y:0,width:612,height:30,rx:8,fill:"#141416",stroke:"#26262e"}));
+      g.appendChild(T(26,20,this.labels[i],{fill:"#d4d4d8","font-size":12,"font-family":"JetBrains Mono,monospace"}));
+      const bar=S("rect",{x:this.barX,y:9,width:10,height:12,rx:3,fill:"#7C3AED"}); g.appendChild(bar);
+      const sc=T(620,20,"0",{fill:"#8b8b93","font-size":11,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); g.appendChild(sc);
+      this.items.push({g,bar,sc,score:rand(.2,1),y:this.top+i*this.rowH,ty:this.top+i*this.rowH,label:this.labels[i]}); }
+    this.acc=0; this.reshuffle();
+    this.cap("Multiple completions match a prefix, so they're ranked by a popularity score (search frequency, recency, personalization). The most-searched completions rise to the top of the dropdown.");
+  }
+  reshuffle(){ this.items.forEach(it=>it.score=clamp(it.score+rand(-.3,.3),.08,1));
+    const order=[...this.items].sort((a,b)=>b.score-a.score); order.forEach((it,r)=>it.ty=this.top+r*this.rowH); }
+  frame(dt){ this.acc+=dt; if(this.acc>=2.2){ this.acc=0; this.reshuffle(); }
+    this.items.forEach(it=>{ it.y+=(it.ty-it.y)*Math.min(1,dt*5); it.g.setAttribute("transform",`translate(0 ${it.y})`);
+      it.bar.setAttribute("width",Math.max(6,(this.barMax-this.barX)*it.score));
+      it.bar.setAttribute("fill", it.ty<=this.top+this.rowH ? "#34d399":"#7C3AED");
+      it.sc.textContent=Math.round(it.score*1000); }); }
+}
+
+/* ---- 6. Caching ---- */
+class CacheViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(30,90,96,46,"Query","#3a3a42","prefix");
+    this.box(255,40,120,46,"Redis","#34d399","prefix cache");
+    this.box(255,150,120,46,"Trie","#fbbf24","compute top-K");
+    this.box(470,90,120,46,"Suggestions","#7C3AED","ranked");
+    this.arrow(126,113,255,63); this.arrow(126,113,255,173);
+    this.arrow(375,63,470,113); this.arrow(375,173,470,113);
+    this.hits=0; this.miss=0; this.packets=[]; this.spawn=0;
+    this.stat=T(320,212,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.cap("Hot prefixes (like 'a', 'the', 'you') are requested constantly, so their ranked suggestions are cached in Redis. Most keystrokes are cache hits served from memory; a miss computes from the trie and repopulates the cache.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.3,.6); const hit=Math.random()<.8;
+      this.packets.push({hit,ph:0,dead:false,el:this.dot(78,113,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.7; const my=p.hit?63:173;
+      if(p.ph<1){ p.el.setAttribute("cx",78+(315-78)*p.ph); p.el.setAttribute("cy",113+(my-113)*p.ph); p.el.setAttribute("fill",p.hit?"#34d399":"#fbbf24"); }
+      else if(p.ph<2){ const f=p.ph-1; p.el.setAttribute("cx",315+(530-315)*f); p.el.setAttribute("cy",my+(113-my)*f); }
+      else { p.dead=true; p.el.remove(); p.hit?this.hits++:this.miss++; } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    const tot=this.hits+this.miss; this.stat.textContent=`cache hits ${this.hits} · misses ${this.miss} · hit rate ${tot?Math.round(this.hits/tot*100):0}%`;
+  }
+}
+
+/* ---- 7. Top Searches (precomputed top-K) ---- */
+class TopKViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(24,88,120,46,"prefix key","#38bdf8","re:");
+    this.arrow(144,111,230,111,"#2f2f37");
+    this.svg.appendChild(S("rect",{x:230,y:16,width:396,height:190,rx:10,fill:"#0e0e11",stroke:"#26262e"}));
+    this.svg.appendChild(T(244,36,"Redis sorted set → top-K completions",{fill:"#8b8b93","font-size":10.5}));
+    this.rowH=32; this.barX=380; this.barMax=600;
+    this.sets={
+      "re:":[["react",980],["redis",760],["remote",540],["redux",430],["rest api",300]],
+      "ca:":[["canva",870],["car",640],["cat",520],["career",410],["cake",260]],
+      "yo:":[["youtube",990],["yoga",560],["york",340],["yogurt",230],["yoyo",120]]
+    };
+    this.keys=Object.keys(this.sets); this.ki=0;
+    this.rows=[]; for(let i=0;i<5;i++){ const g=S("g"); this.svg.appendChild(g);
+      const nm=T(244,52+i*this.rowH,"",{fill:"#d4d4d8","font-size":12,"font-family":"JetBrains Mono,monospace"}); g.appendChild(nm);
+      const bar=S("rect",{x:this.barX,y:42+i*this.rowH,width:0,height:12,rx:3,fill:"#7C3AED"}); g.appendChild(bar);
+      const sc=T(this.barX-6,52+i*this.rowH,"",{fill:"#8b8b93","font-size":10.5,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); g.appendChild(sc);
+      this.rows.push({nm,bar,sc}); }
+    this.keyLbl=this.svg.querySelector; this.timer=99;
+    this.cap("Instead of walking the trie every keystroke, systems precompute the top-K completions for each prefix and store them in a Redis sorted set. A lookup is then a single O(1) fetch of an already-ranked list.");
+  }
+  frame(dt){ this.timer+=dt; if(this.timer<2.6)return; this.timer=0;
+    this.ki=(this.ki+1)%this.keys.length; const key=this.keys[this.ki], data=this.sets[key];
+    const max=data[0][1];
+    data.forEach((d,i)=>{ const r=this.rows[i]; r.nm.textContent=(i+1)+". "+d[0];
+      r.bar.setAttribute("width",Math.max(8,(this.barMax-this.barX)*(d[1]/max))); r.bar.setAttribute("fill",i===0?"#34d399":"#7C3AED");
+      r.sc.textContent=d[1]; });
+    // update the prefix key label (first box sub text)
+    const keyText=this.svg.querySelectorAll("text")[0];
+  }
+}
+
+/* ---- 8. Popularity Updates ---- */
+class PopularityViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.terms=[["taylor swift",rand(5,9)],["election 2026",rand(4,9)],["world cup",rand(3,8)],["chatgpt",rand(3,7)],["stock market",rand(2,6)],["new movie",rand(2,6)]];
+    this.rowH=32; this.top=14; this.barX=170; this.barMax=560;
+    this.items=this.terms.map((t,i)=>{ const g=S("g"); this.svg.appendChild(g);
+      g.appendChild(T(16,20,t[0],{fill:"#d4d4d8","font-size":12,"font-family":"JetBrains Mono,monospace"}));
+      const bar=S("rect",{x:this.barX,y:8,width:10,height:16,rx:4,fill:"#7C3AED"}); g.appendChild(bar);
+      const val=T(this.barX+16,20,"0",{fill:"#8b8b93","font-size":11,"font-family":"JetBrains Mono,monospace"}); g.appendChild(val);
+      return {g,bar,val,rate:t[1],count:rand(100,400),y:this.top+i*this.rowH,ty:this.top+i*this.rowH}; });
+    this.acc=0; this.reorder();
+    this.cap("Every executed search increments that query's counter (a stream aggregated in Redis). As counts change, completions are continuously re-ranked — so trending queries climb the suggestions in near-real-time.");
+  }
+  reorder(){ const order=[...this.items].sort((a,b)=>b.count-a.count); order.forEach((it,r)=>it.ty=this.top+r*this.rowH); }
+  frame(dt){ this.items.forEach(it=>it.count+=it.rate*dt*rand(4,13));
+    this.acc+=dt; if(this.acc>=0.8){ this.acc=0; this.reorder(); }
+    const top=Math.max(...this.items.map(i=>i.count));
+    this.items.forEach(it=>{ it.y+=(it.ty-it.y)*Math.min(1,dt*5); it.g.setAttribute("transform",`translate(0 ${it.y})`);
+      it.bar.setAttribute("width",Math.max(6,(this.barMax-this.barX)*(it.count/top)));
+      it.bar.setAttribute("fill", it.ty<=this.top+this.rowH*1.5?"#34d399":"#7C3AED");
+      it.val.textContent=Math.floor(it.count).toLocaleString(); }); }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS to avoid TDZ)
+   ===================================================================== */
+const CODE_flow =
+"keydown -> debounce 150ms -> GET /autocomplete?q=<prefix>\n" +
+"Autocomplete Service:\n" +
+"  hit = redis.get(\"ac:\" + prefix)        # cached ranked list?\n" +
+"  if hit: return hit                       # O(1) fast path\n" +
+"  node = trie.walk(prefix)                 # else compute\n" +
+"  words = node.collectTopK(K)              # DFS + heap by score\n" +
+"  redis.setex(\"ac:\" + prefix, ttl, words) # cache it\n" +
+"  return words\n" +
+"on search-submit -> counters[query]++     # popularity feeds ranking";
+
+const CODE_trie =
+"class TrieNode {\n" +
+"  Map<Character,TrieNode> children = new HashMap<>();\n" +
+"  boolean end; long freq;               // search frequency\n" +
+"}\n" +
+"void insert(String word, long freq){\n" +
+"  TrieNode n = root;\n" +
+"  for (char c : word.toCharArray())\n" +
+"    n = n.children.computeIfAbsent(c, k -> new TrieNode());\n" +
+"  n.end = true; n.freq = freq;\n" +
+"}";
+
+const CODE_search =
+"// walk to the prefix node, then collect the top-K completions\n" +
+"List<String> suggest(String prefix, int k){\n" +
+"  TrieNode n = root;\n" +
+"  for (char c : prefix.toCharArray()){\n" +
+"    n = n.children.get(c);\n" +
+"    if (n == null) return List.of();       // no matches\n" +
+"  }\n" +
+"  PriorityQueue<Word> heap =\n" +
+"     new PriorityQueue<>(comparingLong(w -> w.freq)); // min-heap size k\n" +
+"  dfs(n, prefix, heap, k);                  // gather subtree words\n" +
+"  return heap.stream().sorted(reverseOrder()).map(w -> w.text).toList();\n" +
+"}";
+
+const CODE_rank =
+"// popularity-driven score (add recency / personalization as needed)\n" +
+"double score(Completion c, User u){\n" +
+"  double popularity = Math.log1p(c.searchCount());\n" +
+"  double recency    = 1.0 / (1 + daysSince(c.lastSearched()));\n" +
+"  double personal   = u.affinity(c.category());\n" +
+"  return 3*popularity + 1.5*recency + personal;\n" +
+"}";
+
+const CODE_cache =
+"// cache ranked suggestions per prefix; short TTL keeps them fresh\n" +
+"List<String> autocomplete(String prefix){\n" +
+"  String key = \"ac:\" + prefix;\n" +
+"  List<String> cached = redis.lrange(key, 0, -1);\n" +
+"  if (!cached.isEmpty()) return cached;          // cache HIT\n" +
+"  List<String> res = trie.suggest(prefix, 10);   // cache MISS\n" +
+"  redis.del(key); redis.rpush(key, res);\n" +
+"  redis.expire(key, Duration.ofMinutes(10));\n" +
+"  return res;\n" +
+"}";
+
+const CODE_topk =
+"# precompute top-K per prefix into a Redis sorted set (offline job)\n" +
+"# score = search frequency; members = completions\n" +
+"ZADD ac:re 980 \"react\" 760 \"redis\" 540 \"remote\" 430 \"redux\"\n" +
+"# serving a keystroke is then a single O(log N + K) read:\n" +
+"ZREVRANGE ac:re 0 5 WITHSCORES";
+
+const CODE_popularity =
+"// every executed search bumps popularity; async, off the hot path\n" +
+"@KafkaListener(topics = \"searches\")\n" +
+"void onSearch(SearchEvent e){\n" +
+"  redis.zincrby(\"pop:\" + prefixOf(e.query()), 1, e.query());\n" +
+"  // a periodic job rebuilds ac:<prefix> top-K lists from pop:<prefix>\n" +
+"}";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"Typeahead (autocomplete) suggests complete queries as the user types. It's a <b>read-heavy, ultra-low-latency</b> problem: every keystroke is a request, so suggestions must return in tens of milliseconds. A trie (or precomputed prefix→top-K lists) powers the lookups, Redis caches hot prefixes, and a ranking engine orders results by popularity.",
+    problem:"You must answer 'what are the best completions for this prefix?' on every keystroke, for millions of users, in under ~100ms — while keeping suggestions relevant and fresh as search trends change.",
+    how:["A debounced request per keystroke hits the API Gateway.","The Autocomplete Service checks the Redis cache for the prefix.","On a miss, it walks the trie to gather completions.","The ranking engine orders them by popularity/recency.","The top-K suggestions are returned (and cached)."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Trie gives O(prefix) lookups","Redis cache serves hot prefixes from memory","Ranking keeps suggestions relevant"],
+    disadvantages:["Tight per-keystroke latency budget","Trie for the whole corpus is memory-heavy","Freshness vs cache TTL trade-off"],
+    interview:[["How would you design a typeahead / autocomplete system?","Debounce keystrokes on the client, then hit an autocomplete service. Back it with a trie (prefix tree) for prefix lookups, but on the hot path serve precomputed top-K completions per prefix from a Redis cache (O(1)). Rank completions by popularity (search frequency) plus recency/personalization, and update those counts asynchronously from a search-event stream. Shard the trie/keyspace by prefix to scale."]] },
+
+  { id:"typing", num:2, icon:"⌨️", tag:"Client", title:"Typing & Debounce", viz:TypingViz,
+    definition:"Every keystroke <i>could</i> fire a request, but that would flood the backend and waste work on prefixes the user types straight past. <b>Debouncing</b> waits for a short pause (e.g. 100–200ms) before sending, so rapid typing collapses into a single, meaningful request.",
+    problem:"Sending a request per character means ~5 requests for 'react', most of which are obsolete the moment the next key is pressed — huge, wasteful load for stale results.",
+    how:["On each keystroke, reset a short debounce timer.","Only send the request when the timer elapses (typing paused).","Cancel/ignore responses for prefixes already superseded.","Optionally require a minimum prefix length (e.g. ≥ 2 chars).","Show cached/local suggestions instantly while waiting."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Drastically fewer requests","Avoids wasted work on skipped prefixes","Smoother UX, less network churn"],
+    disadvantages:["Adds a small perceived delay","Must handle out-of-order responses","Tuning the debounce interval is a UX trade-off"],
+    interview:[["What is debouncing and why is it essential here?","Debouncing delays firing the request until the user pauses typing for a set interval (say 150ms), so a burst of keystrokes produces one request instead of many. It slashes backend load and avoids computing suggestions for prefixes the user immediately types past. You also cancel stale in-flight responses so a slower earlier request can't overwrite a newer one."]] },
+
+  { id:"trie", num:3, icon:"🌳", tag:"Data Structure", title:"Trie (Prefix Tree)", viz:TrieViz,
+    definition:"A <b>trie</b> (prefix tree) stores strings character by character. Each path from the root spells a prefix, and words sharing a prefix share nodes. It's the natural structure for prefix queries: finding a prefix is O(length of the prefix), independent of how many words are stored.",
+    problem:"Scanning every known query to find those starting with a prefix is O(N) per keystroke — impossibly slow. You need a structure where prefix lookup cost depends only on the prefix length.",
+    how:["Insert each query character by character, creating nodes as needed.","Mark end-of-word nodes and store their search frequency.","Shared prefixes reuse existing nodes (compact).","To search, walk from the root following the prefix's characters.","The node you land on roots the subtree of all completions."],
+    code:{ "Trie":CODE_trie },
+    advantages:["O(prefix length) lookups","Shared prefixes save space","Naturally supports prefix + ordering"],
+    disadvantages:["High memory for a huge corpus","Pointer-chasing hurts cache locality","Updates need care under concurrency"],
+    interview:[["Why a trie for autocomplete instead of a hash map or sorted list?","A hash map keys whole strings, so it can't answer prefix queries; a sorted list needs a binary search plus a scan and grows costly. A trie indexes by character, so reaching a prefix is O(prefix length) regardless of corpus size, and every completion lives in that node's subtree. You can also store per-node frequencies to rank, or cache the top-K at each node."]] },
+
+  { id:"prefix", num:4, icon:"🔎", tag:"Query", title:"Prefix Search", viz:PrefixViz,
+    definition:"Prefix search is two steps: <b>walk</b> the trie to the node representing the typed prefix, then <b>collect</b> all words in that node's subtree — those are the candidate completions, which are then ranked and truncated to top-K.",
+    problem:"Reaching the prefix node is cheap, but a popular prefix (like 'a') can have millions of completions. You can't return them all — you need just the best K.",
+    how:["Walk the trie following the prefix characters.","If any character is missing, there are no completions.","From the prefix node, DFS the subtree to find end-of-word nodes.","Keep only the top-K by score (a size-K heap).","Return the ranked K (often precomputed and cached per node)."],
+    code:{ "Search":CODE_search },
+    advantages:["Prefix walk is O(prefix length)","Top-K heap bounds the result work","Subtree = exactly the valid completions"],
+    disadvantages:["Broad prefixes have enormous subtrees","Full DFS per keystroke is costly → precompute","Ranking must happen on the candidates"],
+    interview:[["A prefix like 'a' matches millions of terms — how do you return fast?","Don't gather them all at query time. Precompute and store the top-K completions at each trie node (or per prefix in Redis), so a lookup returns an already-ranked K in O(1)/O(K). If computing on the fly, cap the subtree traversal and use a size-K min-heap. Cache hot prefixes so repeated broad prefixes are memory reads."]] },
+
+  { id:"ranking", num:5, icon:"🏅", tag:"Relevance", title:"Ranking", viz:RankingViz,
+    definition:"Many completions match a prefix, so they're ordered by a <b>score</b>: primarily search popularity (frequency), plus recency, and sometimes personalization and location. The highest-scoring completions appear at the top of the dropdown.",
+    problem:"Alphabetical or arbitrary ordering buries what people actually want. The value of autocomplete is surfacing the <i>likely</i> query first, which requires ranking by real usage.",
+    how:["Track each completion's search frequency.","Score = popularity (log frequency) + recency + personalization.","Sort candidate completions by score.","Return the top-K.","Refresh scores as new search data arrives."],
+    code:{ "Ranking":CODE_rank },
+    advantages:["Surfaces the most likely query first","Can blend recency, locale, personalization","Directly improves completion acceptance"],
+    disadvantages:["Needs continuous usage data","Personalization adds complexity/privacy concerns","Cold-start for new/rare queries"],
+    interview:[["How do you rank autocomplete suggestions?","Primarily by popularity — the historical search frequency of each completion (often log-scaled). Blend in recency (trending now), and optionally personalization (user history) and location. Precompute a score per completion, keep the top-K per prefix sorted, and refresh from a search-event stream so rankings track real, current demand."]] },
+
+  { id:"cache", num:6, icon:"⚡", tag:"Speed", title:"Caching", viz:CacheViz,
+    definition:"A small set of prefixes accounts for a huge share of traffic, so their ranked suggestions are cached in <b>Redis</b>. Most keystrokes become memory reads; only cache misses fall back to computing from the trie, after which the result is cached.",
+    problem:"Recomputing suggestions from the trie on every one of billions of keystrokes is wasteful when the same popular prefixes repeat constantly.",
+    how:["Key the cache by prefix (e.g. ac:<prefix>).","On a request, return the cached ranked list if present (hit).","On a miss, compute from the trie and store with a TTL.","Use a short TTL to keep suggestions reasonably fresh.","Invalidate/refresh when popularity shifts materially."],
+    code:{ "Cache":CODE_cache },
+    advantages:["Sub-millisecond reads for hot prefixes","Massively offloads the trie/compute path","Simple key-value model"],
+    disadvantages:["Staleness bounded by TTL","Cache invalidation on popularity change","Long-tail prefixes still miss"],
+    interview:[["What do you cache, and how do you keep it fresh?","Cache the ranked top-K suggestions per prefix in Redis (keyed by prefix), since a few prefixes dominate traffic. Use a short TTL so results stay fresh, and rebuild/invalidate keys when a periodic job recomputes top-K from updated popularity counts. Hot prefixes are then memory reads; only long-tail misses touch the trie."]] },
+
+  { id:"topk", num:7, icon:"🔝", tag:"Precompute", title:"Top Searches", viz:TopKViz,
+    definition:"Rather than traverse the trie per keystroke, systems <b>precompute the top-K completions for every prefix</b> offline and store them (e.g. a Redis sorted set per prefix). Serving a keystroke becomes a single fetch of an already-ranked list.",
+    problem:"Even with a trie, DFS-ing a broad prefix's subtree and ranking it on every keystroke is too slow at scale. Move that work offline.",
+    how:["Run a periodic job over the query logs.","For each prefix, compute its top-K completions by score.","Store them in a sorted set: ZADD ac:<prefix> score member.","Serving = ZREVRANGE ac:<prefix> 0 K — O(log N + K).","Rebuild on a schedule to fold in new popularity."],
+    code:{ "Top-K (Redis)":CODE_topk },
+    advantages:["O(1)/O(K) serving — no live traversal","Ranking done once, reused by everyone","Scales to enormous query volume"],
+    disadvantages:["Storage for many prefix→list entries","Freshness limited by rebuild cadence","Precompute job is heavy"],
+    interview:[["How do you serve autocomplete at Google scale without traversing per request?","Precompute the top-K completions for each prefix from query logs (offline/streaming) and store them in a fast KV/sorted-set store keyed by prefix. Each keystroke is then a single O(K) read of a ranked list — no trie traversal on the hot path. Rebuild the lists periodically to incorporate new search trends, and cache the hottest prefixes in memory."]] },
+
+  { id:"popularity", num:8, icon:"📈", tag:"Feedback", title:"Popularity Updates", viz:PopularityViz,
+    definition:"Rankings must reflect what people are searching <b>now</b>. Every executed search increments that query's counter (aggregated via a stream like Kafka into Redis), and a periodic job folds those counts back into the top-K lists — so trending queries climb the suggestions.",
+    problem:"A static popularity model goes stale: breaking news, viral topics and seasonal queries surge, and yesterday's rankings would bury them.",
+    how:["Emit a search event whenever a query is executed.","Aggregate counts asynchronously (Kafka → Redis counters).","Weight recent activity (time-decay) for 'trending'.","Periodically rebuild prefix top-K lists from the counts.","Keep this off the read hot path so latency stays low."],
+    code:{ "Popularity":CODE_popularity, "Top-K":CODE_topk },
+    advantages:["Suggestions track real, current demand","Trending topics surface quickly","Decoupled from the low-latency read path"],
+    disadvantages:["Rebuild lag between count and ranking","Spam/manipulation must be filtered","Time-decay tuning is fiddly"],
+    interview:[["How do search counts feed back into suggestions?","Executed searches emit events onto a stream (Kafka); a consumer increments per-query/per-prefix counters in Redis (often with time-decay for trending). A periodic job recomputes the top-K per prefix from those counters and refreshes the cached lists. This keeps popularity current while staying completely off the per-keystroke read path, so serving stays fast."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["🌳","Trie","Character-by-character prefix tree giving O(prefix) lookups; the canonical structure behind autocomplete."],
+  ["🌲","Prefix Tree","Another name for a trie — nodes are characters, paths are prefixes, shared prefixes share nodes."],
+  ["⚡","Redis","Caches ranked suggestions per prefix (and sorted sets of top-K) for sub-millisecond serving."],
+  ["🏅","Ranking","Orders completions by popularity + recency + personalization so the likely query appears first."],
+  ["🗃️","Caching","Hot prefixes dominate traffic; caching their results turns most keystrokes into memory reads."],
+  ["⌨️","Debounce","Client-side delay that collapses rapid keystrokes into one request, slashing backend load."],
+  ["🔝","Top-K","Precomputed top-K completions per prefix so serving is O(K) with no live trie traversal."],
+  ["🧩","Sharding","Partition the trie / prefix keyspace across nodes so the index and load scale horizontally."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   COMPARISON table
+   ===================================================================== */
+const CMP=[
+  ["Trie (in-memory)","O(prefix + K)","High (whole corpus)","Live","Medium datasets, exact prefix"],
+  ["Precomputed top-K","O(K) Redis read","Medium (per-prefix lists)","Rebuild cadence","Web-scale hot path"],
+  ["DB LIKE 'pre%'","O(scan/index)","Low","Live","Small apps, quick build"],
+  ["Search engine (n-gram)","O(query) inverted","High","Near-real-time","Fuzzy / typo-tolerant search"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Approach</th><th>Lookup</th><th>Memory</th><th>Freshness</th><th>Best for</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["Design a typeahead / search autocomplete system.","Debounce keystrokes on the client (min prefix length), then call an autocomplete service. Model the corpus as a trie for prefix lookups, but serve the hot path from precomputed top-K completions per prefix cached in Redis (O(K)). Rank by popularity (search frequency) + recency/personalization. Update counts asynchronously from a search-event stream (Kafka) and rebuild top-K periodically. Shard by prefix and cache hot prefixes."],
+  ["Why a trie and not SQL LIKE or a hash map?","A hash map can't do prefix queries; SQL LIKE 'pre%' works for small data but scans/indexes get slow and don't rank well. A trie gives O(prefix length) lookups independent of corpus size, shares nodes for common prefixes, and lets you store per-node frequency or precomputed top-K for ranking."],
+  ["A broad prefix matches millions of terms — how do you stay fast?","Precompute top-K per prefix offline and serve an already-ranked list in O(K); don't traverse at query time. If computing live, bound the subtree DFS and use a size-K min-heap. Cache hot prefixes in Redis so repeated broad prefixes are memory reads."],
+  ["How do you rank completions?","By popularity first — historical search frequency (log-scaled) — blended with recency (trending), and optionally personalization and location. Keep a sorted top-K per prefix and refresh it from search analytics so rankings match current demand."],
+  ["Where and what do you cache?","Cache the ranked suggestions per prefix in Redis (keyed by prefix), because a small number of prefixes serve most traffic. Short TTL for freshness; rebuild/invalidate when popularity shifts. This turns most keystrokes into sub-ms memory reads and offloads the trie."],
+  ["How do you keep suggestions fresh with trends?","Emit a search event per executed query; aggregate per-query/per-prefix counters (with time-decay) via Kafka → Redis. A periodic job recomputes top-K per prefix and refreshes cached lists — all off the read path so serving stays fast while rankings track trends."],
+  ["How do you handle typos / fuzzy matching?","Beyond exact-prefix tries, add edit-distance tolerance (e.g. a BK-tree or Levenshtein automaton) or an n-gram/edge-gram inverted index in a search engine like Elasticsearch. You can also correct the prefix ('did you mean') before completing. It's a trade-off of complexity vs. tolerance."],
+  ["How do you scale the index across machines?","Shard by prefix (e.g. first 1–2 characters) so each node owns a slice of the keyspace, replicate for read throughput and availability, and put a routing/aggregation layer in front. Precomputed top-K lists in a distributed cache (Redis Cluster) scale reads horizontally."],
+  ["How do you handle multi-word and personalized suggestions?","Index on normalized tokens/phrases (and edge-grams) so mid-phrase prefixes match; store completions as full phrases with scores. For personalization, blend a user-history signal into the score at serve time (or keep small per-user top lists) while falling back to global popularity."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Flow":CODE_flow,
+  "Trie":CODE_trie,
+  "Prefix search":CODE_search,
+  "Ranking":CODE_rank,
+  "Cache":CODE_cache,
+  "Top-K (Redis)":CODE_topk,
+  "Popularity":CODE_popularity
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Web Crawler","🕷️","Feeds the index","web-crawler.html"],
+    ["Twitter News Feed","🐦","Ranking & Redis","news-feed.html"],
+    ["Notification System","🔔","Kafka streams","notification-system.html"],
+    ["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["Unique ID Generator","❄️","Trie cousin: encoding","id-generator.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — real working autocomplete (trie prefix search + cache)
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.queries=0; this.hits=0; this.latSum=0; this.latN=0; this.shown=0;
+    this.cache=new Map(); this.debTimer=null;
+    this.data=[
+      ["react",980],["react native",640],["react hooks",520],["redis",760],["redux",430],["remote work",300],["rest api",280],["responsive design",190],
+      ["javascript",900],["java",850],["json web token",410],["jenkins",260],["jest testing",180],
+      ["python",890],["postgresql",560],["php",240],["pandas",330],["prometheus",210],
+      ["kubernetes",620],["kafka",580],["kotlin",290],["keras",160],
+      ["docker",700],["django",340],["dynamodb",300],["data structures",520],
+      ["system design",810],["sql",640],["spring boot",470],["sharding",230],["scalability",300],
+      ["golang",520],["graphql",440],["grafana",190],["git rebase",260]
+    ].map(([term,count])=>({term,count}));
+    this.host=$("pgViz"); this.build(); this.bind(); this.render("",[],null); this.updateStats();
+  }
+  build(){
+    const box=el("div","ta-box");
+    box.appendChild(el("div","ta-hint","Try: <b>re</b>, <b>ja</b>, <b>do</b>, <b>sys</b>, <b>k</b> …"));
+    const iw=el("div","ta-inwrap");
+    iw.appendChild(el("span","mag","🔍"));
+    this.input=el("input","ta-input"); this.input.setAttribute("type","text"); this.input.setAttribute("placeholder","Search…"); this.input.setAttribute("spellcheck","false");
+    iw.appendChild(this.input); box.appendChild(iw);
+    this.list=el("div","ta-list"); box.appendChild(this.list);
+    this.status=el("div","ta-status"); box.appendChild(this.status);
+    this.host.appendChild(box);
+  }
+  bind(){
+    $("pgDebounce").addEventListener("input",()=>$("pgDebounceV").textContent=$("pgDebounce").value+" ms");
+    $("pgTopK").addEventListener("input",()=>{ $("pgTopKV").textContent=$("pgTopK").value; this.query(this.input.value,true); });
+    $("pgCache").addEventListener("change",()=>{ this.cache.clear(); this.query(this.input.value,true); });
+    $("pgReset").onclick=()=>{ this.queries=this.hits=this.latSum=this.latN=this.shown=0; this.cache.clear();
+      this.input.value=""; this.render("",[],null); this.updateStats(); };
+    this.input.addEventListener("input",()=>{ const deb=+$("pgDebounce").value;
+      if(this.debTimer) clearTimeout(this.debTimer);
+      const v=this.input.value;
+      if(deb<=0){ this.query(v); } else { this.debTimer=setTimeout(()=>this.query(v),deb); } });
+  }
+  compute(prefix,k){ const p=prefix.toLowerCase();
+    return this.data.filter(d=>d.term.startsWith(p)).sort((a,b)=>b.count-a.count).slice(0,k); }
+  query(raw,silent){ const prefix=(raw||"").trim().toLowerCase(); const k=+$("pgTopK").value;
+    if(!prefix){ this.render("",[],null); return; }
+    if(!silent){ this.queries++; }
+    const useCache=$("pgCache").value==="on"; let hit=false, res;
+    const key=prefix+"|"+k;
+    if(useCache && this.cache.has(key)){ hit=true; res=this.cache.get(key); }
+    else { res=this.compute(prefix,k); if(useCache) this.cache.set(key,res); }
+    // simulated latency: cache hit ~2ms, miss scales with dataset scan
+    const lat = hit? rand(1.5,3.5) : rand(8,14)+this.data.length*0.05;
+    if(!silent){ if(hit)this.hits++; this.latSum+=lat; this.latN++; this.shown=res.length; }
+    this.render(prefix,res,{hit,lat}); this.updateStats();
+  }
+  render(prefix,res,meta){
+    this.list.innerHTML="";
+    if(!prefix){ this.list.appendChild(el("div","ta-empty","Start typing to see ranked suggestions…")); this.status.innerHTML=""; return; }
+    if(res.length===0){ this.list.appendChild(el("div","ta-empty",`No matches for "<b>${CodeViewer.esc(prefix)}</b>"`)); }
+    const max=res.length?res[0].count:1;
+    res.forEach(r=>{ const rest=CodeViewer.esc(r.term.slice(prefix.length));
+      const item=el("div","ta-item",
+        `<span class="ic">🔎</span><span class="q"><b>${CodeViewer.esc(prefix)}</b>${rest}</span>`+
+        `<span class="meter"><i style="width:${Math.round(r.count/max*100)}%"></i></span>`+
+        `<span class="c">${fmt(r.count)}</span>`);
+      item.addEventListener("click",()=>this.pick(r));
+      this.list.appendChild(item); });
+    if(meta){ this.status.innerHTML = (meta.hit?'<span class="hit">● cache HIT</span>':'<span class="miss">● cache MISS → trie</span>')+
+      `  ·  ${res.length} suggestions  ·  ~${meta.lat.toFixed(1)} ms`; }
+  }
+  pick(r){ r.count+=Math.round(rand(60,160)); this.cache.clear();  // popularity update invalidates cache
+    this.input.value=r.term; this.query(r.term); }
+  updateStats(){
+    $("pgQueries").textContent=fmt(this.queries);
+    $("pgHits").textContent=fmt(this.hits);
+    $("pgLatency").textContent=this.latN?(this.latSum/this.latN).toFixed(1)+" ms":"— ms";
+    $("pgShown").textContent=fmt(this.shown);
+  }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ranking (TF-IDF & BM25) — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    if(phase===0){g.appendChild(TX(310,50,"TF — term frequency",{fill:"#38bdf8","font-size":13,"text-anchor":"middle","font-weight":700}));
+      g.appendChild(TX(310,74,"a term appearing more often in a doc → higher score",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+      [["doc mentions 'cat' ×1",90,60],["doc mentions 'cat' ×5",140,120]].forEach(([t,w,y])=>{g.appendChild(S("rect",{x:120,y,width:w*2,height:22,rx:5,fill:"rgba(56,189,248,.25)",stroke:"#38bdf8"}));g.appendChild(TX(130,y+15,t,{fill:"#e4e4e7","font-size":9}));});
+      lbl.textContent="term frequency rewards relevance…";lbl.setAttribute("fill","#38bdf8");sub.textContent="but raw counts favor long docs and common words — so we temper TF";}
+    else{g.appendChild(TX(310,50,"IDF — inverse document frequency",{fill:"#fbbf24","font-size":13,"text-anchor":"middle","font-weight":700}));
+      g.appendChild(TX(310,74,"rare terms are more informative → weighted UP",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+      [["'the' — in 99% of docs → low weight",95,"#f87171",40],["'quantum' — in 0.1% of docs → high weight",135,"#34d399",170]].forEach(([t,y,c,w])=>{g.appendChild(S("rect",{x:120,y,width:w,height:22,rx:5,fill:c+"33",stroke:c}));g.appendChild(TX(130,y+15,t,{fill:"#e4e4e7","font-size":9}));});
+      lbl.textContent="…IDF down-weights common words";lbl.setAttribute("fill","#fbbf24");sub.textContent="score ≈ TF × IDF (BM25 adds saturation + length normalization)";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Run a query over 5 documents and watch them get <b>scored and ranked</b>. Toggle between <b>TF-IDF</b> and <b>BM25</b>: BM25 adds term-frequency <b>saturation</b> (the 10th mention of a word barely helps) and <b>length normalization</b> (long documents don't win just for being long). Tune <code>k1</code> and <code>b</code> to see ranking shift.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Query</label><input id="pgQ" type="text" value="cat sat" style="width:150px"></div>
+      <div class="pg-field"><label>Scoring</label><select id="pgModel"><option value="bm25">BM25</option><option value="tfidf">TF-IDF</option></select></div>
+      <div class="pg-field"><label>k1 (TF saturation): <b id="pgK1V">1.2</b></label><input id="pgK1" type="range" min="0.2" max="3" value="1.2" step="0.1"></div>
+      <div class="pg-field"><label>b (length norm): <b id="pgBV">0.75</b></label><input id="pgB" type="range" min="0" max="1" value="0.75" step="0.05"></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">k1 controls how fast term frequency saturates; b controls how much longer docs are penalized. b=0 = no length norm; higher k1 = raw counts matter more.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Model</div><div class="v ac" id="pgMs">BM25</div></div>
+        <div class="pg-stat"><div class="k">Query terms</div><div class="v" id="pgQt">0</div></div>
+        <div class="pg-stat"><div class="k">Docs matched</div><div class="v ok" id="pgHits">0</div></div>
+        <div class="pg-stat"><div class="k">Top doc</div><div class="v wa" id="pgTop">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const DOCS=[
+    "the cat sat on the mat",
+    "the cat sat and the cat sat again the cat sat",
+    "a dog ran in the park",
+    "cat",
+    "the mat was where the cat sat quietly in the warm afternoon sun near the old wooden door"];
+  const W=560,H=200;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let toks,df,avgdl,N;
+  function build(){toks=DOCS.map(d=>d.toLowerCase().split(/\s+/).filter(Boolean));N=DOCS.length;
+    df={};toks.forEach(t=>{new Set(t).forEach(w=>df[w]=(df[w]||0)+1);});avgdl=toks.reduce((a,t)=>a+t.length,0)/N;}
+  function idf(term){const n=df[term]||0;return Math.log(1+(N-n+0.5)/(n+0.5));}
+  function tf(term,i){return toks[i].filter(w=>w===term).length;}
+  function score(i,terms,model,k1,b){let s=0;terms.forEach(t=>{const f=tf(t,i);if(f===0)return;
+    if(model==="tfidf"){s+=(f)*Math.log(N/((df[t]||0)+1));}
+    else{const dl=toks[i].length;const denom=f+k1*(1-b+b*dl/avgdl);s+=idf(t)*(f*(k1+1))/denom;}});return s;}
+  function reset(){build();run();log("index built over "+N+" docs — query and compare TF-IDF vs BM25","ac");}
+  function run(){const q=($("pgQ").value||"").toLowerCase().split(/\s+/).filter(Boolean);const model=$("pgModel").value||"bm25";
+    const k1=+$("pgK1").value||1.2,b=+$("pgB").value||0.75;
+    $("pgMs").textContent=model==="bm25"?"BM25":"TF-IDF";$("pgQt").textContent=q.length;
+    const scored=DOCS.map((d,i)=>({i,s:score(i,q,model,k1,b),len:toks[i].length})).filter(x=>x.s>0).sort((a,b2)=>b2.s-a.s);
+    $("pgHits").textContent=scored.length;$("pgTop").textContent=scored.length?("D"+(scored[0].i+1)):"—";
+    draw(scored);
+    $("pgLog").innerHTML="";
+    scored.forEach((x,r)=>log("#"+(r+1)+" D"+(x.i+1)+"  score "+x.s.toFixed(3)+"  (len "+x.len+")",r===0?"ok":"ac"));
+    if(!scored.length)log("no documents contain the query terms","bad");}
+  function draw(scored){svg.innerHTML="";
+    svg.appendChild(TX(20,16,"ranked results (bar ∝ score):",{fill:"#8b8b93","font-size":10}));
+    const max=scored.length?scored[0].s:1;const rowH=Math.min(34,(H-30)/Math.max(scored.length,1));
+    scored.forEach((x,r)=>{const y=26+r*rowH;const w=(W-120)*(x.s/max);
+      svg.appendChild(TX(20,y+rowH/2,"D"+(x.i+1),{fill:"#c4a2ff","font-size":11,"font-weight":700}));
+      svg.appendChild(S("rect",{x:56,y:y+3,width:Math.max(3,w),height:rowH-8,rx:4,fill:r===0?"#34d399":"#38bdf8"}));
+      svg.appendChild(TX(60+Math.max(3,w),y+rowH/2+3,x.s.toFixed(3),{fill:"#8b8b93","font-size":9}));
+      const snippet=DOCS[x.i].slice(0,34)+(DOCS[x.i].length>34?"…":"");
+      svg.appendChild(TX(56,y+rowH-2,snippet,{fill:"#5b5b63","font-size":7.5}));});
+    if(!scored.length)svg.appendChild(TX(W/2,H/2,"no matches",{fill:"#6b6b73","font-size":13,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgQ").oninput=run;$("pgModel").onchange=run;
+  $("pgK1").oninput=()=>{$("pgK1V").textContent=(+$("pgK1").value).toFixed(1);run();};
+  $("pgB").oninput=()=>{$("pgBV").textContent=(+$("pgB").value).toFixed(2);run();};
+  reset();
+}
+
+const DATA={
+  badge:"🏆",title:"Ranking (TF-IDF & BM25)",category:"Search",difficulty:"Hard",readingTime:"10 min",
+  eyebrow:"Ordering Results by Relevance",
+  tagline:"Once you've found the documents that match, ranking decides their <b>order</b>. TF-IDF weights terms by frequency and rarity; <b>BM25</b> refines it with term-frequency <b>saturation</b> and document-<b>length normalization</b> — the default relevance model in Lucene/Elasticsearch.",
+  pills:["<b>TF</b> × <b>IDF</b>","<b>BM25</b> default","<b>Saturation</b> (k1)","<b>Length norm</b> (b)"],
+  overview:"Retrieval finds the set of documents matching a query; <b>ranking</b> scores them so the most relevant appear first. The foundational idea is <b>TF-IDF</b>: <b>term frequency (TF)</b> — a term that appears more in a document is more relevant to it; times <b>inverse document frequency (IDF)</b> — a term appearing in few documents is more discriminating, so common words like 'the' get near-zero weight while rare words like 'quantum' get high weight. Summing TF·IDF over the query terms gives a score. But raw TF has problems: the 10th occurrence of a word shouldn't count as much as the 1st, and long documents accumulate more term hits just by being long. <b>BM25</b> (Best-Matching 25) fixes both. It applies <b>saturation</b> via parameter <b>k1</b> — TF contribution rises then plateaus (diminishing returns) — and <b>length normalization</b> via parameter <b>b</b> — penalizing documents longer than the average length. BM25 is the well-tuned, probabilistically-grounded default in Lucene, Elasticsearch, and Solr. Modern systems layer additional signals (recency, popularity, click feedback) and often a machine-learned re-ranker or neural/semantic model on top of a BM25 first pass.",
+  problem:"A query can match thousands of documents; users only look at the first few. Returning matches in arbitrary (or purely chronological) order buries the best results. Ranking quantifies relevance so the most useful documents surface first — and doing it well (not over-rewarding repetition or length) is what separates good search from bad.",
+  diagram,diagramCaption:"TF rewards term frequency; IDF down-weights common terms; BM25 adds saturation and length normalization.",
+  how:[
+    "For each matching document, compute a score by summing per-query-term contributions.",
+    "TF: reward how often the term appears in the document.",
+    "IDF: weight the term by rarity across the corpus (log of N / doc-frequency) — common terms count little.",
+    "BM25: saturate TF (k1) so repeats give diminishing returns, and normalize by document length vs average (b).",
+    "Add signals (field boosts, recency, popularity, personalization), sort by score, and return the top-k; optionally re-rank with an ML/neural model."
+  ],
+  complexity:[["Score","sum over query terms"],["BM25 k1","TF saturation (≈1.2–2)"],["BM25 b","length norm (≈0.75)"],["Cost","per candidate, cheap"]],
+  advantages:["Orders results by relevance, not arbitrarily","BM25: robust, well-tuned default","Handles term repetition (saturation) & doc length","Cheap to compute per candidate","Extensible with boosts & extra signals"],
+  disadvantages:["Purely lexical — no understanding of meaning","Bag-of-words: ignores word order/context (beyond phrases)","Needs parameter/field tuning for best results","Susceptible to keyword stuffing without saturation","Doesn't capture synonyms/intent (needs semantic layer)"],
+  tradeoffs:"Ranking trades simplicity and speed against semantic understanding. TF-IDF/BM25 are fast, interpretable, and require no training data, which is why BM25 is the ubiquitous default — but they're <b>bag-of-words</b> models: they don't understand synonyms ('car' vs 'automobile'), word sense, or intent, and only capture order via explicit phrase queries. BM25's parameters embody trade-offs: higher <b>k1</b> lets term frequency matter more (good when repetition signals relevance, risky for keyword stuffing); <b>b</b> near 1 strongly penalizes long documents (good against padding, bad if long docs are genuinely more complete). Because BM25 is cheap, the common architecture is a two-stage pipeline: BM25 retrieves and coarsely ranks a large candidate set, then an expensive learning-to-rank or neural/semantic re-ranker reorders the top few hundred using richer features (embeddings, behavioral signals). This balances quality against compute.",
+  whenNot:"Pure TF-IDF/BM25 falls short when relevance depends on meaning rather than exact words (use semantic/vector search or a neural re-ranker), when strong behavioral signals dominate (learning-to-rank with click data), or for very short texts/structured data where lexical stats are weak. It's also not needed when a single deterministic sort (price, date) is what users actually want. In practice, use BM25 as the fast first stage and layer richer models on top when quality demands it.",
+  sim,
+  code:{
+"TF-IDF":`# score(doc, query) = sum over query terms of  TF * IDF\ntf(t, d)  = count of term t in document d\nidf(t)    = log( N / df(t) )     # N = #docs, df(t) = #docs containing t\n\nscore(d, q) = Σ_{t in q}  tf(t, d) * idf(t)\n\n# Problem: raw tf grows without bound and long docs accumulate hits ->\n# a doc repeating "cat" 50 times or a 10k-word doc dominates unfairly.`,
+"BM25":`# BM25 fixes both with saturation (k1) and length normalization (b):\nscore(d, q) = Σ_{t in q}  IDF(t) * ( f * (k1 + 1) )\n                          / ( f + k1 * (1 - b + b * |d| / avgdl) )\n#   f     = tf(t, d)         k1 ~ 1.2-2.0  (how fast tf saturates)\n#   |d|   = doc length        b  ~ 0.75      (0 = no length norm, 1 = full)\n#   avgdl = average doc length\n#   IDF(t) = log( 1 + (N - df + 0.5) / (df + 0.5) )   # smoothed\n\n# f -> infinity : contribution -> IDF*(k1+1)  (bounded! saturation)\n# long doc (|d| >> avgdl) : denominator grows -> score shrinks`,
+"Two-stage ranking":`// Real search = cheap recall + expensive precision.\n// Stage 1: BM25 over the inverted index -> top 1000 candidates (fast).\ncandidates = index.search(query, top=1000, scorer=BM25);\n\n// Stage 2: re-rank the top candidates with richer signals / a model.\nreranked = model.rank(candidates, features={\n  bm25_score, title_match, freshness, popularity, click_through_rate,\n  semantic_similarity /* query & doc embeddings (cosine) */\n});\nreturn reranked.slice(0, 10);   // learning-to-rank / neural re-ranker`
+  },
+  realWorld:[
+    ["Lucene / Elasticsearch / Solr","BM25 is the default similarity for scoring text matches."],
+    ["Web search engines","BM25-style first pass + ML/neural re-ranking with behavioral signals."],
+    ["E-commerce search","Relevance score blended with popularity, margin, and availability."],
+    ["Postgres ts_rank","Relevance ranking for built-in full-text search."],
+    ["RAG / vector + BM25 hybrid","BM25 lexical recall combined with embedding similarity for LLM retrieval."]
+  ],
+  interview:[
+    ["basic","What is TF-IDF?","A scoring scheme where a term's weight in a document is its term frequency (how often it appears in the doc) times its inverse document frequency (how rare it is across the corpus). Frequent-in-doc but rare-in-corpus terms score highest; ubiquitous words like 'the' get near-zero weight. A document's relevance to a query is the sum of TF-IDF weights of the query terms."],
+    ["basic","Why is IDF important?","Because not all terms are equally informative. A word appearing in almost every document (like 'the') tells you nothing about which document is relevant, so IDF (log of N over document-frequency) drives its weight toward zero. Rare, discriminating terms get high IDF, so matching them counts much more — this is what makes ranking focus on meaningful words."],
+    ["inter","What does BM25 add over TF-IDF?","Two crucial refinements. Saturation: term-frequency contribution rises but plateaus (controlled by k1), so the 10th occurrence adds little versus the 1st — preventing keyword stuffing from dominating. Length normalization: documents longer than average are penalized (controlled by b), so a long document doesn't rank highly just for accumulating more term hits. BM25 is also grounded in a probabilistic relevance model and is the tuned default in Lucene/Elasticsearch."],
+    ["inter","What do BM25's k1 and b parameters control?","k1 controls term-frequency saturation: low k1 means TF saturates quickly (frequency barely matters beyond the first hits), high k1 means raw counts matter more. b controls document-length normalization: b=0 disables it (length ignored), b=1 fully normalizes by length relative to the average. Typical defaults are k1≈1.2–2.0 and b≈0.75; you tune them for your corpus."],
+    ["adv","What are the limitations of BM25 and how are they addressed?","BM25 is lexical and bag-of-words: it doesn't understand synonyms, word sense, or intent, and ignores order beyond explicit phrase queries — so 'car' won't match 'automobile'. It's addressed with a query/analysis layer (synonyms, stemming) and, more powerfully, a two-stage pipeline: BM25 for fast recall, then a learning-to-rank or neural/semantic re-ranker (using embeddings and behavioral features) on the top candidates. Hybrid search blends BM25 with vector similarity."],
+    ["adv","Why use a two-stage retrieve-then-rerank architecture?","Because high-quality ranking models (learning-to-rank, cross-encoders, LLM re-rankers) are too expensive to run over millions of documents per query. BM25 over the inverted index cheaply narrows to a few hundred/thousand strong candidates (high recall), then the expensive model re-ranks only those for precision. This balances quality and latency/cost — you get sophisticated relevance without scoring the entire corpus with the heavy model."],
+    ["sd","Design the ranking layer for a search system.","Stage 1: retrieve with an inverted index scored by BM25 (with field boosts, e.g., title > body), returning the top ~1000 candidates fast. Stage 2: re-rank the candidates with a learning-to-rank/neural model using features like BM25 score, freshness, popularity/CTR, and semantic (embedding) similarity for synonyms/intent. Add business rules/boosts, personalization, and caching for hot queries. Continuously evaluate with offline judgments and online A/B tests (nDCG, CTR), and tune BM25 k1/b and model weights."]
+  ],
+  mistakes:["Ranking by raw term counts (no IDF) — common words dominate.","Ignoring TF saturation, letting keyword stuffing win (use BM25).","No length normalization, so long documents unfairly rank high.","Expecting BM25 to understand synonyms/meaning (it's lexical).","Running an expensive re-ranker over the whole corpus instead of top-k."],
+  best:["Use BM25 as the default lexical scorer (with sensible k1≈1.2, b≈0.75).","Apply field boosts (title/headings weighted higher than body).","Add recency/popularity/behavioral signals as extra features.","Adopt a two-stage retrieve (BM25) then re-rank (LTR/neural) pipeline.","Evaluate with offline metrics (nDCG) and online A/B tests; tune parameters."],
+  related:[["Inverted Index","🔎","Provides matches to rank","inverted-index.html"],["Full-Text Search","📄","Analysis feeds ranking","full-text-search.html"],["Elasticsearch","🔍","BM25 default scorer","elasticsearch.html"],["Fuzzy Search","≈","Candidate generation","fuzzy-search.html"],["Vector Search / Embeddings","🧭","Semantic re-ranking","system-designed.html"],["Trie","🌴","Autocomplete ranking","trie.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

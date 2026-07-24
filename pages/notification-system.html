@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Distributed Notification System — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:740px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:520px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🔔</span> Notification System</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Distributed Notification System</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Channels Compared</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Distributed Notification System</h1>
+      <p class="tagline">How platforms send billions of emails, SMS, push and in-app messages reliably — a Kafka-buffered
+        pipeline with preference filtering, idempotent deduplication, multi-channel fan-out, exponential-backoff retries,
+        priority queues, batching and a dead-letter queue for the messages that just won't deliver. Explore each with live
+        visualizations and a delivery-pipeline simulator.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>Kafka</b>&nbsp;buffered ingest</span>
+        <span class="hpill"><b>At-least-once</b>&nbsp;+ dedup</span>
+        <span class="hpill"><b>Retry</b>&nbsp;with backoff + DLQ</span>
+        <span class="hpill"><b>Live</b>&nbsp;pipeline simulator</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Delivery Channels</div><h2>Channels Compared</h2></div></div>
+      <div class="card">
+        <div class="block-title">Channel Trade-offs</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>Why one service per channel —</b> each provider (SES, Twilio, FCM/APNs) has its own latency, cost, rate limits and failure modes. A shared pipeline (dedup, retry, DLQ, preferences) feeds channel-specific <b>senders</b> so you get one consistent, reliable path with per-channel tuning.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The key paths — publishing a notification, consuming with preference + dedup, exponential-backoff retries, routing to the dead-letter queue, priority consumption and batch sends.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Delivery Pipeline Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Notifications / sec <b id="pgRateV">5</b></label><input id="pgRate" type="range" min="1" max="20" value="5"></div>
+            <div class="pg-field"><label>Send failure rate <b id="pgFailV">30%</b></label><input id="pgFail" type="range" min="0" max="90" value="30"></div>
+            <div class="pg-field"><label>Max retries <b id="pgRetriesV">3</b></label><input id="pgRetries" type="range" min="0" max="6" value="3"></div>
+            <div class="pg-field"><label>Duplicate rate <b id="pgDupV">20%</b></label><input id="pgDup" type="range" min="0" max="60" value="20"></div>
+            <div class="pg-btns" style="margin-bottom:14px"><button class="go" id="pgEmit">✉️ Emit one</button></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Start</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Delivered</div><div class="v ok" id="pgDelivered">0</div></div>
+              <div class="pg-stat"><div class="k">Retried</div><div class="v wa" id="pgRetried">0</div></div>
+              <div class="pg-stat"><div class="k">Dead-lettered</div><div class="v bad" id="pgDead">0</div></div>
+              <div class="pg-stat"><div class="k">Dupes dropped</div><div class="v" id="pgDupes">0</div></div>
+              <div class="pg-stat"><div class="k">In-flight</div><div class="v ac" id="pgInflight">0</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   DISTRIBUTED NOTIFICATION SYSTEM — modular vanilla JS (SVG, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=n=>n.toLocaleString();
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in typeof this export default stream throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None while "+
+    "String Long Integer List Map Stream true false null val Exception "+
+    "SELECT INSERT UPDATE FROM WHERE ORDER BY LIMIT DESC select from where order by limit desc").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|--[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill){ const c=S("circle",{r:4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 240"); }
+  setup(){
+    this.chain=[["📱","App",8,66],["🪵","Kafka",86,66],["🔔","Notif Svc",164,84],["⚙️","Prefs",260,66],["🔁","Dedup",338,80]];
+    const cy=118;
+    this.cx=[];
+    this.chain.forEach(([ic,nm,x,w],i)=>{ this.box(x,cy-24,w,48,nm,i===1?"#38bdf8":i===4?"#7C3AED":"#3a3a42",ic);
+      this.cx.push(x+w/2);
+      if(i<this.chain.length-1) this.arrow(x+w,cy,this.chain[i+1][2],cy); });
+    this.dedupR=this.chain[4][2]+this.chain[4][3];
+    // channels + retry/DLQ column
+    this.ch=[["📧","Email",8,"#34d399"],["💬","SMS",44,"#34d399"],["🔔","Push",80,"#34d399"],["🔌","WebSocket",116,"#38bdf8"],
+             ["♻️","Retry Queue",162,"#fbbf24"],["☠️","Dead Letter",198,"#f87171"]];
+    this.chY=[];
+    this.ch.forEach(([ic,nm,y,col])=>{ this.box(510,y,122,28,nm,col);
+      this.chY.push(y+14);
+      this.arrow(this.dedupR,cy,510,y+14,"#2f2f37"); });
+    this.arrow(this.dedupR,cy,510,this.chY[0],"#3a3a42");
+    this.packets=[]; this.spawn=0;
+    this.cap("A producer publishes to Kafka; the Notification Service applies user preferences and dedup, then fans out to Email / SMS / Push / WebSocket senders. Failures go to a retry queue, then to the dead-letter queue.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.9);
+      this.packets.push({phase:"chain",prog:0,dead:false,el:this.dot(this.cx[0],118,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return;
+      if(p.phase==="chain"){ p.prog+=dt*1.6;
+        if(p.prog>=this.cx.length-1){ p.phase="fan"; p.prog=0; p.el.setAttribute("cx",this.cx[this.cx.length-1]);
+          const r=Math.random(); p.target = r<0.12?4 : r<0.16?5 : randi(0,3);
+          p.color = p.target===5?"#f87171":p.target===4?"#fbbf24":"#34d399"; }
+        else { const seg=Math.floor(p.prog), f=p.prog-seg; p.el.setAttribute("cx",this.cx[seg]+(this.cx[seg+1]-this.cx[seg])*f); }
+      } else { p.prog+=dt*1.9;
+        const sx=this.dedupR, sy=118, tx=510, ty=this.chY[p.target];
+        p.el.setAttribute("cx",sx+(tx-sx)*p.prog); p.el.setAttribute("cy",sy+(ty-sy)*p.prog); p.el.setAttribute("fill",p.color);
+        if(p.prog>=1){ p.dead=true; p.el.remove(); } }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. Notification Lifecycle ---- */
+class LifecycleViz extends Viz {
+  constructor(host){ super(host,"0 0 640 180"); }
+  setup(){
+    this.stops=[["Created",60],["Queued",166,"Kafka"],["Deduped",272],["Routed",378,"prefs"],["Sent",484],["Delivered",590]];
+    this.arrow(50,96,600,96,"#2f2f37");
+    this.marks=this.stops.map(([nm,x,sub])=>{ const c=S("circle",{cx:x,cy:96,r:8,fill:"#1a1a1c",stroke:"#3a3a42","stroke-width":2}); this.svg.appendChild(c);
+      this.svg.appendChild(T(x,66,nm,{fill:"#8b8b93","font-size":10.5,"text-anchor":"middle","font-weight":600}));
+      if(sub) this.svg.appendChild(T(x,120,sub,{fill:"#5b5b63","font-size":8.5,"text-anchor":"middle"}));
+      return c; });
+    this.token=this.dot(this.stops[0][1],96,"#c4a2ff");
+    this.status=T(320,150,"",{fill:"#c4a2ff","font-size":12,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.status);
+    this.idx=0; this.timer=0; this.hold=1.0; this.failing=false;
+    this.cap("Every notification moves through a lifecycle: created → queued in Kafka → deduplicated → routed by preferences → sent to a provider → delivered. A failed send loops back through retry before continuing.");
+  }
+  frame(dt){ this.timer+=dt; if(this.timer<this.hold)return; this.timer=0;
+    // colour visited
+    this.marks.forEach((m,i)=>{ m.setAttribute("fill", i<this.idx?"#34d399":i===this.idx?"#7C3AED":"#1a1a1c");
+      m.setAttribute("stroke", i<=this.idx?"#34d399":"#3a3a42"); });
+    if(this.idx===4 && !this.failing && Math.random()<0.4){ this.failing=true; this.hold=1.1;
+      this.marks[4].setAttribute("fill","#f87171"); this.marks[4].setAttribute("stroke","#f87171");
+      this.status.textContent="⚠ send failed → retry"; this.status.setAttribute("fill","#f87171");
+      this.token.setAttribute("fill","#fbbf24"); return; }
+    const [nm,x]=this.stops[this.idx];
+    this.token.setAttribute("cx",x);
+    this.status.textContent = this.idx===5? "✓ delivered" : "→ "+nm;
+    this.status.setAttribute("fill", this.idx===5?"#34d399":"#c4a2ff");
+    this.token.setAttribute("fill", this.idx===5?"#34d399":"#c4a2ff");
+    this.failing=false; this.hold=0.9;
+    this.idx++;
+    if(this.idx>this.stops.length-1){ this.idx=0; this.timer=-0.6;
+      this.marks.forEach(m=>{ m.setAttribute("fill","#1a1a1c"); m.setAttribute("stroke","#3a3a42"); });
+      this.token.setAttribute("cx",this.stops[0][1]); }
+  }
+}
+
+/* ---- 3. Preferences & Channel Fan-out ---- */
+class ChannelsViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(20,84,110,44,"Notification","#7C3AED","event");
+    this.box(190,84,120,44,"Preferences","#38bdf8","user opt-in");
+    this.arrow(130,106,190,106);
+    this.chans=[["📧 Email",18],["💬 SMS",62],["🔔 Push",106],["🔌 WebSocket",150]];
+    this.boxes=this.chans.map(([nm,y])=>{ const g=this.box(470,y,150,32,nm,"#3a3a42"); return {g,y:y+16,on:true}; });
+    this.boxes.forEach(b=>this.arrow(310,106,470,b.y,"#2f2f37"));
+    this.enabled=[true,false,true,true];
+    this.applyPrefs();
+    this.packets=[]; this.spawn=0; this.toggleT=0;
+    this.cap("Before sending, the system checks each user's preferences — which channels they've opted into and quiet hours. Only enabled channels receive the notification; the rest are filtered out.");
+  }
+  applyPrefs(){ this.boxes.forEach((b,i)=>{ b.on=this.enabled[i];
+    const rect=b.g.querySelector("rect"), txt=b.g.querySelectorAll("text")[0];
+    rect.setAttribute("stroke", b.on?"#34d399":"#3a3a42"); rect.setAttribute("opacity", b.on?1:.4);
+    if(txt) txt.setAttribute("fill", b.on?"#f4f4f5":"#5b5b63"); }); }
+  frame(dt){ this.toggleT+=dt; if(this.toggleT>=3.2){ this.toggleT=0;
+      this.enabled=this.enabled.map(()=>Math.random()<0.7); if(!this.enabled.some(x=>x))this.enabled[0]=true; this.applyPrefs(); }
+    this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(1.2,1.8); this.packets.push({phase:"toPref",prog:0,dead:false,el:this.dot(75,106,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return;
+      if(p.phase==="toPref"){ p.prog+=dt*2.0; p.el.setAttribute("cx",75+(250-75)*p.prog);
+        if(p.prog>=1){ p.dead=true; p.el.remove();
+          this.boxes.forEach((b,i)=>{ if(b.on) this.packets.push({phase:"fan",prog:0,y:b.y,dead:false,el:this.dot(250,106,"#34d399")}); }); } }
+      else { p.prog+=dt*2.1; p.el.setAttribute("cx",250+(470-250)*p.prog); p.el.setAttribute("cy",106+(p.y-106)*p.prog);
+        if(p.prog>=1){ p.dead=true; p.el.remove(); } }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 4. Duplicate Detection ---- */
+class DedupViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(24,80,110,46,"Events","#3a3a42","idempotency key");
+    this.box(250,80,140,46,"Dedup","#7C3AED","Redis SETNX");
+    this.box(500,80,116,46,"Send","#34d399","once");
+    this.arrow(134,103,250,103); this.arrow(390,103,500,103);
+    this.svg.appendChild(T(320,150,"seen keys (rolling window)",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));
+    this.seenLbl=T(320,168,"",{fill:"#8b8b93","font-size":10,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.seenLbl);
+    this.stat=T(320,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.pool=["evt-A","evt-B","evt-C","evt-D","evt-E"];
+    this.seen=new Set(); this.packets=[]; this.spawn=0; this.expire=0; this.pass=0; this.drop=0;
+    this.cap("Each notification carries an idempotency key. The dedup step does an atomic Redis SETNX: a brand-new key passes through, a key already seen in the window is a duplicate and dropped — so the same alert is never sent twice.");
+  }
+  frame(dt){ this.expire+=dt; if(this.expire>=5){ this.expire=0; this.seen.clear(); }
+    this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.9);
+      const dup=Math.random()<0.45 && this.seen.size>0;
+      const key = dup ? [...this.seen][randi(0,this.seen.size-1)] : this.pool[randi(0,this.pool.length-1)];
+      this.packets.push({key,phase:"in",prog:0,dead:false,decided:false,isDup:false,el:this.dot(79,103,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return;
+      if(p.phase==="in"){ p.prog+=dt*1.9; p.el.setAttribute("cx",79+(320-79)*p.prog);
+        if(p.prog>=1){ p.prog=0;
+          if(this.seen.has(p.key)){ p.isDup=true; p.phase="drop"; this.drop++; p.el.setAttribute("fill","#f87171"); }
+          else { this.seen.add(p.key); p.phase="out"; p.el.setAttribute("fill","#34d399"); } } }
+      else if(p.phase==="out"){ p.prog+=dt*1.9; p.el.setAttribute("cx",320+(558-320)*p.prog);
+        if(p.prog>=1){ p.dead=true; p.el.remove(); this.pass++; } }
+      else if(p.phase==="drop"){ p.prog+=dt*2.2; p.el.setAttribute("cy",103+40*p.prog); p.el.setAttribute("opacity",1-p.prog);
+        if(p.prog>=1){ p.dead=true; p.el.remove(); } }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+    this.seenLbl.textContent="{ "+[...this.seen].join(", ")+" }";
+    this.stat.textContent=`passed ${this.pass} · duplicates dropped ${this.drop}`;
+  }
+}
+
+/* ---- 5. Retries & Exponential Backoff ---- */
+class RetryViz extends Viz {
+  constructor(host){ super(host,"0 0 640 190"); }
+  setup(){
+    this.attempts=[["attempt 1",70],["+1s → attempt 2",180],["+2s → attempt 3",320],["+4s → attempt 4",480]];
+    this.arrow(50,104,560,104,"#2f2f37");
+    this.marks=this.attempts.map(([nm,x])=>{ const c=S("circle",{cx:x,cy:104,r:8,fill:"#1a1a1c",stroke:"#3a3a42","stroke-width":2}); this.svg.appendChild(c);
+      this.svg.appendChild(T(x,80,nm,{fill:"#8b8b93","font-size":9.5,"text-anchor":"middle"})); return c; });
+    this.box(560,86,64,36,"DLQ","#f87171");
+    this.token=this.dot(this.attempts[0][1],104,"#fbbf24");
+    this.note=T(300,150,"",{fill:"#fbbf24","font-size":12,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.note);
+    this.idx=0; this.timer=0; this.hold=1.0; this.succeedAt=randi(2,3); this.dlq=false;
+    this.cap("A transient failure isn't fatal — the sender retries with exponential backoff (1s, 2s, 4s, 8s…), giving the provider time to recover. After the max attempts it either succeeds or is routed to the dead-letter queue.");
+  }
+  reset(){ this.idx=0; this.marks.forEach(m=>{ m.setAttribute("fill","#1a1a1c"); m.setAttribute("stroke","#3a3a42"); });
+    this.token.setAttribute("cx",this.attempts[0][1]); this.token.setAttribute("cy",104); this.token.setAttribute("fill","#fbbf24"); this.token.setAttribute("opacity",1);
+    this.dlq = Math.random()<0.4; this.succeedAt = this.dlq? 99 : randi(1,3); }
+  frame(dt){ this.timer+=dt; if(this.timer<this.hold)return; this.timer=0;
+    if(this.idx>=this.attempts.length){ // resolved
+      if(this.dlq){ this.token.setAttribute("cx",592); this.token.setAttribute("cy",104); this.token.setAttribute("fill","#f87171");
+        this.note.textContent="✗ retries exhausted → dead-letter queue"; this.note.setAttribute("fill","#f87171"); }
+      this.hold=1.4; this.pendingReset=true; }
+    if(this.pendingReset){ this.pendingReset=false; this.reset(); this.hold=1.0; return; }
+    const [nm,x]=this.attempts[this.idx]; this.token.setAttribute("cx",x);
+    const ok = this.idx===this.succeedAt;
+    this.marks[this.idx].setAttribute("fill", ok?"#34d399":"#f87171");
+    this.marks[this.idx].setAttribute("stroke", ok?"#34d399":"#fbbf24");
+    if(ok){ this.token.setAttribute("fill","#34d399"); this.note.textContent="✓ delivered on attempt "+(this.idx+1); this.note.setAttribute("fill","#34d399");
+      this.idx=this.attempts.length; this.hold=1.4; this.pendingReset=true; return; }
+    this.note.textContent = `attempt ${this.idx+1} failed · backing off ${Math.pow(2,this.idx)}s`;
+    this.note.setAttribute("fill","#fbbf24"); this.token.setAttribute("fill","#fbbf24");
+    this.idx++;
+  }
+}
+
+/* ---- 6. Dead Letter Queue ---- */
+class DLQViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.box(24,82,120,46,"Sender","#7C3AED");
+    this.box(250,20,120,42,"Retry queue","#fbbf24","backoff");
+    this.box(250,150,120,46,"Dead Letter","#f87171","poison msgs");
+    this.box(470,82,140,46,"Provider","#34d399","delivered");
+    this.arrow(144,105,470,105,"#2f2f37");              // sender -> provider
+    this.arrow(84,82,300,62,"#2f2f37");                  // sender -> retry
+    this.arrow(300,62,84,82,"#2f2f37",true);             // retry -> sender (loop)
+    this.arrow(310,62,310,150,"#2f2f37");                // retry -> dlq
+    this.dlqCount=0;
+    this.cntLbl=T(310,188,"DLQ: 0",{fill:"#f87171","font-size":11,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.cntLbl);
+    this.packets=[]; this.spawn=0;
+    this.cap("After the retry budget is spent, a message that still can't be delivered (bad address, permanent provider error) is parked in the dead-letter queue for inspection, alerting and later manual replay — it never blocks the live pipeline.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.6,1.0);
+      this.packets.push({phase:"send",attempts:0,dead:false,x:84,y:105,el:this.dot(84,105,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return;
+      const move=(tx,ty,sp)=>{ const dx=tx-p.x, dy=ty-p.y, d=Math.hypot(dx,dy); if(d<3){p.x=tx;p.y=ty;return true;}
+        const s=Math.min(d,sp*dt); p.x+=dx/d*s; p.y+=dy/d*s; p.el.setAttribute("cx",p.x); p.el.setAttribute("cy",p.y); return false; };
+      if(p.phase==="send"){ if(move(160,105,180)){ // reached sender exit; decide
+          if(Math.random()<0.5){ p.phase="ok"; p.el.setAttribute("fill","#34d399"); }
+          else { p.attempts++; p.phase="toRetry"; p.el.setAttribute("fill","#fbbf24"); } } }
+      else if(p.phase==="ok"){ if(move(470,105,200)){ p.dead=true; p.el.remove(); } }
+      else if(p.phase==="toRetry"){ if(move(310,41,170)){ if(p.attempts>=3){ p.phase="toDLQ"; p.el.setAttribute("fill","#f87171"); }
+          else p.phase="backToSender"; } }
+      else if(p.phase==="backToSender"){ if(move(84,105,150)){ p.phase="send"; p.el.setAttribute("fill","#c4a2ff"); } }
+      else if(p.phase==="toDLQ"){ if(move(310,173,170)){ p.dead=true; p.el.remove(); this.dlqCount++; this.cntLbl.textContent="DLQ: "+this.dlqCount; } }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 7. Priority Queue ---- */
+class PriorityViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.lanes=[["High",18,"#f87171"],["Normal",78,"#fbbf24"],["Low",138,"#38bdf8"]];
+    this.laneObjs=this.lanes.map(([nm,y,col])=>{ this.box(24,y,150,44,nm,col);
+      const cnt=T(196,y+27,"0",{fill:col,"font-size":12,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(cnt);
+      return {y:y+22,col,q:[],cnt}; });
+    this.box(400,78,130,46,"Worker","#7C3AED","pulls hi→lo");
+    this.laneObjs.forEach(l=>this.arrow(230,l.y,400,101,"#2f2f37"));
+    this.packets=[]; this.spawn=0; this.pull=0;
+    this.done=T(465,150,"processed: 0",{fill:"#34d399","font-size":11,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.done);
+    this.processed=0;
+    this.cap("Not all notifications are equal — an OTP or security alert must jump ahead of a marketing digest. Separate priority lanes feed the worker, which always drains the highest-priority non-empty queue first.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.35,.7);
+      const r=Math.random(); const lane = r<0.25?0 : r<0.6?1 : 2;
+      if(this.laneObjs[lane].q.length<9){ this.laneObjs[lane].q.push(1); } }
+    this.laneObjs.forEach(l=>l.cnt.textContent=l.q.length);
+    this.pull-=dt;
+    if(this.pull<=0){ this.pull=0.5;
+      const lane=this.laneObjs.find(l=>l.q.length>0);
+      if(lane){ lane.q.pop();
+        this.packets.push({phase:"go",prog:0,y:lane.y,col:lane.col,dead:false,el:this.dot(230,lane.y,lane.col)}); } }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.8;
+      if(p.prog<1){ p.el.setAttribute("cx",230+(465-230)*p.prog); p.el.setAttribute("cy",p.y+(101-p.y)*p.prog); }
+      else { p.dead=true; p.el.remove(); this.processed++; this.done.textContent="processed: "+this.processed; } });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 8. Batch Processing ---- */
+class BatchViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.box(24,78,110,44,"Events","#3a3a42","one by one");
+    this.batchG=this.box(250,66,140,66,"Batch buffer","#fbbf24");
+    this.box(500,78,116,44,"Provider","#34d399","1 API call");
+    this.arrow(134,100,250,100); this.arrow(390,100,500,100);
+    this.countLbl=T(320,116,"0 / 5",{fill:"#fbbf24","font-size":13,"text-anchor":"middle","font-weight":700,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.countLbl);
+    this.stat=T(320,168,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.N=5; this.count=0; this.flushes=0; this.saved=0;
+    this.packets=[]; this.flush=[]; this.spawn=0;
+    this.cap("Sending one API call per notification is wasteful. Batching accumulates messages until it hits a size (5) or time threshold, then flushes them in a single provider call — far fewer round-trips, higher throughput and lower cost.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0 && this.count<this.N){ this.spawn=rand(.35,.6);
+      this.packets.push({prog:0,dead:false,el:this.dot(84,100,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*2.0; p.el.setAttribute("cx",84+(320-84)*p.prog);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); this.count++; this.countLbl.textContent=this.count+" / "+this.N;
+        if(this.count>=this.N){ this.doFlush(); } } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    this.flush.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.6; p.el.setAttribute("cx",320+(558-320)*p.prog);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); } });
+    this.flush=this.flush.filter(p=>!p.dead);
+  }
+  doFlush(){ this.flushes++; this.saved+=this.N-1; this.count=0; this.countLbl.textContent="0 / "+this.N;
+    const big=S("circle",{r:8,cx:320,cy:100,fill:"#fbbf24",filter:"drop-shadow(0 0 6px rgba(251,191,36,.7))"}); this.svg.appendChild(big);
+    this.flush.push({prog:0,dead:false,el:big});
+    this.stat.textContent=`flushes ${this.flushes} · API calls saved ${this.saved}`;
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS to avoid TDZ)
+   ===================================================================== */
+const CODE_flow =
+"Application\n" +
+"  -> publish NotificationEvent to Kafka (topic: notifications)\n" +
+"Notification Service (Kafka consumer)\n" +
+"  -> Preference Service: is this user opted-in for this channel?\n" +
+"  -> Deduplication: SETNX idempotency-key (drop if already seen)\n" +
+"  -> route by channel -> Email | SMS | Push | WebSocket sender\n" +
+"On send failure:\n" +
+"  -> Retry queue (exponential backoff + jitter)\n" +
+"  -> after max attempts -> Dead Letter Queue (alert + manual replay)";
+
+const CODE_produce =
+"// producers just publish an event and return immediately\n" +
+"public void notify(NotificationEvent e){\n" +
+"  e.setEventId(UUID.randomUUID().toString());   // idempotency key\n" +
+"  kafka.send(\"notifications\", e.userId(), e);   // key = userId for ordering\n" +
+"}";
+
+const CODE_consume =
+"@KafkaListener(topics = \"notifications\", groupId = \"notifier\")\n" +
+"public void handle(NotificationEvent e){\n" +
+"  Prefs p = prefs.get(e.userId());\n" +
+"  for (Channel ch : e.channels()){\n" +
+"    if (!p.optedIn(ch) || p.inQuietHours(ch)) continue;   // preferences\n" +
+"    if (!dedup.firstTime(e.eventId(), ch)) continue;      // idempotent\n" +
+"    senders.get(ch).send(e);                              // fan-out\n" +
+"  }\n" +
+"}";
+
+const CODE_dedup =
+"// atomic 'set if not exists' — true only the first time we see this key\n" +
+"public boolean firstTime(String eventId, Channel ch){\n" +
+"  String key = \"notif:sent:\" + ch + \":\" + eventId;\n" +
+"  Boolean ok = redis.opsForValue()\n" +
+"      .setIfAbsent(key, \"1\", Duration.ofHours(24));  // TTL = dedup window\n" +
+"  return Boolean.TRUE.equals(ok);\n" +
+"}";
+
+const CODE_retry =
+"// exponential backoff with full jitter, capped\n" +
+"long backoffMs(int attempt){\n" +
+"  long base = 1000L << attempt;             // 1s, 2s, 4s, 8s ...\n" +
+"  long cap  = Math.min(base, 60_000L);      // never wait > 60s\n" +
+"  return ThreadLocalRandom.current().nextLong(cap); // full jitter\n" +
+"}\n" +
+"void send(NotificationEvent e, int attempt){\n" +
+"  try { provider.deliver(e); }\n" +
+"  catch (TransientException ex){\n" +
+"    if (attempt >= MAX_RETRIES) deadLetter(e, ex);   // give up\n" +
+"    else retryQueue.schedule(e, attempt + 1, backoffMs(attempt));\n" +
+"  }\n" +
+"}";
+
+const CODE_dlq =
+"// poison messages are parked, not dropped and not retried forever\n" +
+"void deadLetter(NotificationEvent e, Exception cause){\n" +
+"  dlqRepo.save(new DeadLetter(e, cause.getMessage(), Instant.now()));\n" +
+"  kafka.send(\"notifications.DLQ\", e.userId(), e);\n" +
+"  metrics.increment(\"notifications.dead_lettered\");\n" +
+"  alerts.pageIfSpike();                    // humans investigate later\n" +
+"}";
+
+const CODE_priority =
+"# Redis: three lists, drained highest-first\n" +
+"LPUSH  notif:high    {otp/security}\n" +
+"LPUSH  notif:normal  {transactional}\n" +
+"LPUSH  notif:low     {marketing}\n" +
+"# worker blocks on all three; BRPOP returns from the first non-empty\n" +
+"BRPOP  notif:high notif:normal notif:low  5";
+
+const CODE_batch =
+"// accumulate, then flush on size OR time (whichever comes first)\n" +
+"void enqueue(Notification n){\n" +
+"  buffer.add(n);\n" +
+"  if (buffer.size() >= 500) flush();       // size trigger\n" +
+"}\n" +
+"@Scheduled(fixedRate = 200)                 // time trigger (200ms)\n" +
+"void flush(){\n" +
+"  if (buffer.isEmpty()) return;\n" +
+"  List<Notification> batch = buffer.drain();\n" +
+"  provider.sendBatch(batch);               // ONE API call for many\n" +
+"}";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A notification system takes events from many producers and reliably delivers them to users across multiple channels (email, SMS, push, in-app/WebSocket). At scale it's an <b>asynchronous, event-driven pipeline</b>: Kafka absorbs bursts, a Notification Service applies preferences and dedup, and channel-specific senders talk to providers — with retries and a dead-letter queue backing it all.",
+    problem:"Sending is unreliable and spiky: providers rate-limit and fail, the same event can arrive twice, users have different channel preferences, and some messages are more urgent than others. A naive 'call the provider inline' approach loses messages, double-sends and collapses under load.",
+    how:["A producer publishes a NotificationEvent to a Kafka topic and returns instantly.","The Notification Service consumes events and looks up the user's preferences.","Deduplication drops any event already processed (idempotency key).","The event is routed to the relevant channel senders (email / SMS / push / WebSocket).","Failed sends go to a retry queue with backoff; exhausted ones land in the DLQ."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Kafka decouples producers from delivery and absorbs spikes","Each channel scales and fails independently","Retries + DLQ make delivery resilient without data loss"],
+    disadvantages:["Delivery is eventually consistent (small delay)","More moving parts to operate and monitor","Exactly-once is hard — you design for at-least-once + dedup"],
+    interview:[["What are the core building blocks of a notification system?","An ingest queue (Kafka) to decouple and buffer, a notification service that applies user preferences and idempotent deduplication, per-channel senders talking to providers, a retry mechanism with exponential backoff, a dead-letter queue for poison messages, and priority handling so urgent messages aren't stuck behind marketing blasts."]] },
+
+  { id:"lifecycle", num:2, icon:"🔄", tag:"State Machine", title:"Notification Lifecycle", viz:LifecycleViz,
+    definition:"A single notification travels through a well-defined lifecycle: <b>created → queued → deduplicated → routed by preferences → sent → delivered</b> (or failed → retried). Tracking this state is what lets you show delivery status, debug drops and measure success rates.",
+    problem:"Without an explicit lifecycle you can't tell whether a message was suppressed by preferences, dropped as a duplicate, still retrying, or genuinely delivered — making failures invisible and un-debuggable.",
+    how:["Created: producer emits the event with an idempotency key.","Queued: the event is durably buffered in Kafka.","Deduplicated: a repeat of the same event is discarded.","Routed: user preferences decide which channels apply.","Sent → Delivered: the provider accepts it; delivery receipts confirm it (or it fails and retries)."],
+    code:{ "Consume":CODE_consume, "Flow":CODE_flow },
+    advantages:["Every notification has an observable status","Failures are attributable to a specific stage","Enables delivery receipts and analytics"],
+    disadvantages:["State must be persisted/updated (extra writes)","Delivery receipts vary by provider/channel","Status can lag reality (async)"],
+    interview:[["How do you track a notification's status end-to-end?","Attach a stable id at creation and record state transitions (queued, deduped, sent, delivered, failed) — often as events on a status topic or a status store. Channel providers return delivery/read receipts (webhooks) that you fold back in. This gives you per-message observability and success-rate metrics."]] },
+
+  { id:"channels", num:3, icon:"📡", tag:"Fan-out", title:"Preferences & Channel Fan-out", viz:ChannelsViz,
+    definition:"Before anything is sent, the <b>Preference Service</b> decides <i>whether</i> and <i>where</i> to deliver: which channels the user opted into, quiet hours, frequency caps and per-category settings. The notification then fans out only to the enabled channels.",
+    problem:"Spamming every channel ignores consent and annoys users (and can be illegal). You need centralized, per-user, per-category preferences enforced consistently for every notification.",
+    how:["Load the user's preferences (channel opt-ins, quiet hours, caps).","Filter out channels the user disabled or that are muted right now.","Apply frequency capping / de-duplication of similar alerts.","Fan out the event to each remaining channel's sender.","Fall back to another channel if the preferred one is unavailable."],
+    code:{ "Consume":CODE_consume },
+    advantages:["Respects user consent and legal requirements","One place to enforce quiet hours & frequency caps","Channel fallback improves reach"],
+    disadvantages:["Preference lookups add latency (cache them)","Rules get complex (per-category, per-locale)","Must stay consistent across all producers"],
+    interview:[["How do you handle user notification preferences?","Keep a Preference Service (cached in Redis) with per-user, per-channel, per-category settings plus quiet hours and frequency caps. The notification service consults it before fan-out and only sends to enabled channels. Centralizing it guarantees every producer honors consent, and caching keeps the lookup cheap."]] },
+
+  { id:"dedup", num:4, icon:"🔁", tag:"Idempotency", title:"Duplicate Detection", viz:DedupViz,
+    definition:"Kafka and retries give you <b>at-least-once</b> delivery, so the same event can be processed more than once. Deduplication makes processing <b>idempotent</b>: each event carries a unique key, and an atomic Redis <code>SETNX</code> ensures it's acted on exactly once within a window.",
+    problem:"At-least-once means duplicates are inevitable — a consumer redelivery or a producer retry would otherwise send the same OTP or alert twice, which is confusing and can be harmful.",
+    how:["Producers stamp each event with a stable idempotency key (event id).","Before sending, do SETNX key with a TTL (the dedup window).","If the key was new, proceed to send; if it existed, drop as a duplicate.","Scope the key per channel so the same event can still go to email AND push.","Size the TTL to cover your maximum retry/redelivery horizon."],
+    code:{ "Dedup":CODE_dedup },
+    advantages:["Turns at-least-once into effectively once","Cheap: a single atomic Redis op","Protects against producer AND consumer retries"],
+    disadvantages:["Bounded window — very late duplicates can slip through","Requires a stable, well-chosen idempotency key","Redis is now on the critical path (must be HA)"],
+    interview:[["How do you achieve exactly-once notification delivery?","You can't get true exactly-once over unreliable networks, so you aim for at-least-once + idempotent processing. Give every event a stable idempotency key and use an atomic SETNX (with TTL) in Redis, scoped per channel, so a duplicate is detected and dropped. Combined with delivery receipts, users effectively receive each notification once."]] },
+
+  { id:"retry", num:5, icon:"♻️", tag:"Resilience", title:"Retries & Exponential Backoff", viz:RetryViz,
+    definition:"Providers fail transiently (timeouts, 429s, brief outages). Instead of dropping the message, the sender <b>retries with exponential backoff and jitter</b> — waiting 1s, 2s, 4s, 8s… (randomized) — giving the downstream time to recover without stampeding it.",
+    problem:"Immediate, fixed-interval retries hammer an already-struggling provider and, when many clients retry in lock-step, create a synchronized 'thundering herd' that keeps it down.",
+    how:["Classify the failure: transient (retry) vs permanent (straight to DLQ).","Compute delay = base × 2^attempt, capped at a max.","Add full jitter (randomize the delay) to de-synchronize clients.","Re-enqueue the message on a delay/retry queue.","After N attempts, stop and dead-letter it."],
+    code:{ "Retry":CODE_retry },
+    advantages:["Rides out transient provider failures automatically","Backoff + jitter prevents thundering herds","Bounded attempts stop infinite loops"],
+    disadvantages:["Adds delivery latency for failing messages","Needs a delay/scheduled queue mechanism","Must distinguish retryable vs permanent errors"],
+    interview:[["Why exponential backoff with jitter and not fixed retries?","Fixed, immediate retries overwhelm a recovering service and, across many clients, synchronize into a thundering herd. Exponential backoff spaces attempts out (1s, 2s, 4s…) so the provider can recover, and jitter randomizes the timing so clients don't all retry at the same instant. A cap and a max-attempt limit keep it bounded."]] },
+
+  { id:"dlq", num:6, icon:"☠️", tag:"Safety Net", title:"Dead Letter Queue", viz:DLQViz,
+    definition:"A <b>Dead Letter Queue</b> is where messages go when they can't be delivered after exhausting retries — bad addresses, permanently rejected sends, or repeated failures. They're parked (not dropped, not retried forever) for inspection, alerting and later manual replay.",
+    problem:"Some messages will never succeed. Retrying them forever wastes resources and can block the pipeline; silently dropping them loses data and hides bugs. You need a controlled place to set them aside.",
+    how:["A message exceeds its max retry attempts (or hits a permanent error).","It's published to a dedicated DLQ topic/queue with its failure reason.","Metrics + alerts fire so on-call can investigate spikes.","Engineers inspect payloads to find the root cause (bad data, provider issue).","Fixed messages are replayed from the DLQ back into the pipeline."],
+    code:{ "DLQ":CODE_dlq },
+    advantages:["No message is silently lost","Keeps the live pipeline unblocked","Enables root-cause analysis and replay"],
+    disadvantages:["Needs monitoring or it becomes a silent graveyard","Replay tooling/process required","Must guard against re-poisoning on replay"],
+    interview:[["What is a dead-letter queue and when is a message sent there?","A DLQ holds messages that failed processing/delivery after all retries, or that hit a permanent (non-retryable) error like an invalid recipient. Instead of blocking the pipeline or dropping data, they're isolated with their error context for alerting, debugging and later replay once the underlying issue is fixed."]] },
+
+  { id:"priority", num:7, icon:"🚦", tag:"Ordering", title:"Priority Queue", viz:PriorityViz,
+    definition:"Notifications aren't equal: an OTP or fraud alert is <b>critical</b>, a transactional receipt is <b>normal</b>, a marketing digest is <b>low</b>. Priority queues ensure urgent messages are processed first, even during a backlog of low-priority sends.",
+    problem:"With a single FIFO queue, a burst of marketing notifications sitting in front of a security OTP would delay the OTP unacceptably. Priority is needed so latency-sensitive messages jump the line.",
+    how:["Classify each notification into a priority tier.","Route to separate per-priority queues/topics (or a priority score).","Workers drain the highest-priority non-empty queue first.","Give higher tiers more worker capacity / stricter SLAs.","Guard low-priority against starvation (aging or reserved capacity)."],
+    code:{ "Priority":CODE_priority },
+    advantages:["Urgent messages meet tight latency SLAs","Marketing blasts can't delay OTPs","Capacity can be tuned per tier"],
+    disadvantages:["Risk of starving low-priority messages","More queues/topics to manage","Priority classification must be correct"],
+    interview:[["How do you make sure an OTP isn't stuck behind a marketing blast?","Use priority tiers: separate queues (e.g. high/normal/low) with workers that always pull from the highest-priority non-empty queue, and dedicated capacity/SLAs for critical messages. Add aging or reserved slots so low-priority work still drains and never starves entirely."]] },
+
+  { id:"batch", num:8, icon:"📦", tag:"Throughput", title:"Batch Processing", viz:BatchViz,
+    definition:"Making one provider API call per notification is slow and expensive. <b>Batching</b> groups many messages together and sends them in a single call — triggered by a size threshold or a short timer, whichever comes first — dramatically improving throughput and cost.",
+    problem:"Per-message calls incur per-request overhead, hit provider rate limits fast, and waste cost. High-volume channels (email, push) need to amortize that overhead.",
+    how:["Accumulate outgoing notifications in an in-memory (or Kafka) buffer.","Flush when the buffer reaches a size (e.g. 500) OR a max delay (e.g. 200ms).","Send the whole batch in one provider bulk API call.","Handle partial failures — retry only the failed items.","Tune batch size vs latency for each channel."],
+    code:{ "Batch":CODE_batch },
+    advantages:["Far fewer API calls — higher throughput, lower cost","Plays nicely with provider bulk endpoints & rate limits","Amortizes per-request overhead"],
+    disadvantages:["Adds a little latency (waiting to fill a batch)","Partial batch failures are trickier to handle","Larger blast radius if a batch call fails"],
+    interview:[["When and how would you batch notifications?","For high-volume, latency-tolerant channels (email, push), buffer messages and flush on a size OR time threshold into a single bulk provider call. It amortizes per-request overhead, respects rate limits and cuts cost. Keep batches small enough to meet latency SLAs and handle partial failures by retrying only the failed items."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["🪵","Message Queue (Kafka)","Decouples producers from delivery, durably buffers bursts, and lets many consumers process notifications in parallel with replay."],
+  ["🔁","Idempotency & Dedup","At-least-once delivery means duplicates happen. A stable event key + atomic SETNX makes processing effectively exactly-once."],
+  ["♻️","Retries & Backoff","Transient provider failures are retried with exponential backoff + jitter, capped and bounded, to ride out outages without a thundering herd."],
+  ["☠️","Dead Letter Queue","Poison messages that exhaust retries are parked for alerting, inspection and manual replay instead of being lost or looping forever."],
+  ["📡","Multi-channel Fan-out","One event → many channels (email, SMS, push, WebSocket), each with its own provider, rate limits and failure handling."],
+  ["🛡️","Rate Limiting","Per-user and per-provider limits protect downstreams, respect provider quotas and prevent notification spam."],
+  ["🚦","Priority Queues","Critical messages (OTP, security) jump ahead of low-priority marketing via priority tiers and dedicated capacity."],
+  ["📲","Push (APNs / FCM)","Device tokens, delivery receipts and provider-specific payloads for mobile push through Apple and Google gateways."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   COMPARISON table
+   ===================================================================== */
+const CMP=[
+  ["📧 Email","Seconds–minutes","At-least-once (receipts)","Very low","Digests, receipts, newsletters"],
+  ["💬 SMS","Seconds","At-least-once (carrier)","High (per msg)","OTP, critical alerts, no app"],
+  ["📲 Push","Sub-second","Best-effort","Low","Re-engagement, real-time alerts"],
+  ["🔌 WebSocket","Milliseconds","Only if connected","Very low","In-app live updates & badges"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Channel</th><th>Latency</th><th>Delivery guarantee</th><th>Cost</th><th>Best for</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["Design a notification system that sends email, SMS and push at scale.","Clarify volume, channels and latency SLAs. Core: producers publish events to Kafka → Notification Service applies preferences + idempotent dedup → routes to per-channel senders → providers deliver. Add retries with exponential backoff, a dead-letter queue, priority tiers, batching, and delivery-receipt tracking. Discuss at-least-once + dedup, and scaling each channel independently."],
+  ["How do you guarantee a user isn't notified twice for the same event?","Give each event a stable idempotency key and dedup with an atomic Redis SETNX (with a TTL covering the retry window), scoped per channel. This survives both producer and consumer retries, turning at-least-once delivery into effectively-once processing."],
+  ["Why put Kafka between producers and the notification service?","To decouple and buffer. Producers publish and return instantly; Kafka absorbs traffic spikes, provides durability and ordering per partition, lets many consumers scale out, and supports replay if a consumer fails — none of which a synchronous inline call gives you."],
+  ["How do you handle a provider that's temporarily down?","Retry with exponential backoff and jitter, capped and bounded. Transient errors (timeouts, 429s) are re-queued with increasing delays; permanent errors go straight to the DLQ. Backoff lets the provider recover and jitter avoids synchronized retry storms. A circuit breaker can shed load while it's unhealthy."],
+  ["What goes into the dead-letter queue and how do you handle it?","Messages that exhaust retries or hit permanent errors (invalid recipient, rejected payload). They're parked with their failure reason, monitored/alerted on, investigated for root cause, and replayed once fixed. It keeps the live pipeline unblocked and guarantees nothing is silently lost."],
+  ["How do you ensure critical notifications (like OTPs) are fast?","Priority tiers: route OTP/security to a high-priority queue that workers drain first, with dedicated capacity and tight SLAs, while marketing goes to a low-priority queue. Add aging/reserved capacity so low-priority still drains without starving."],
+  ["How do you respect user preferences and avoid spamming?","A centralized Preference Service (cached) holds per-user, per-channel, per-category opt-ins, quiet hours and frequency caps. The notification service consults it before fan-out so every producer consistently honors consent, and fans out only to enabled channels."],
+  ["How would you scale to millions of notifications per minute?","Partition Kafka topics and scale consumers horizontally; scale each channel sender independently; batch high-volume channels into bulk provider calls; cache preferences in Redis; shard dedup keys; and apply rate limiting per user and per provider. Monitor per-stage metrics and back-pressure via the queue."],
+  ["At-least-once vs exactly-once — which do you build for and why?","Build for at-least-once (achievable and simple) plus idempotent processing (dedup on a stable key). True exactly-once is impractical over unreliable networks and provider APIs; at-least-once + dedup + delivery receipts gives users the effect of exactly-once without the fragility."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Produce event":CODE_produce,
+  "Consume + route":CODE_consume,
+  "Dedup (Redis)":CODE_dedup,
+  "Retry + backoff":CODE_retry,
+  "Dead-letter":CODE_dlq,
+  "Priority (Redis)":CODE_priority,
+  "Batch send":CODE_batch
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Real-Time Chat","💬","WebSocket delivery","chat-system.html"],
+    ["Twitter News Feed","🐦","Fan-out & Kafka","news-feed.html"],
+    ["Rate Limiting","🛡️","Protect providers","rate-limiting.html"],
+    ["Unique ID Generator","❄️","Idempotency keys","id-generator.html"],
+    ["Kafka","🪵","Event streaming","kafka.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — delivery pipeline simulator
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.delivered=0; this.retried=0; this.dead=0; this.dupes=0;
+    this.playing=false; this.acc=0; this.keyCounter=0; this.recentKeys=[]; this.seen=new Set(); this.seenExpire=0;
+    this.packets=[]; this.SPEED=140;
+    this.host=$("pgViz"); this.svg=S("svg",{viewBox:"0 0 620 300"}); this.host.appendChild(this.svg);
+    this.centers={};
+    this.buildStage(); this.bind();
+    this.last=performance.now();
+    const loop=now=>{ const dt=Math.min(.05,(now-this.last)/1000); this.last=now;
+      if(this.playing){ this.acc+=dt; const r=+$("pgRate").value; if(this.acc>=1/r){ this.acc-=1/r; this.spawnOne(); } }
+      this.frame(dt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+    this.updateStats();
+  }
+  b(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color,"stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11.5,"font-weight":600,"text-anchor":"middle"}));
+    if(sub)g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  buildStage(){
+    this.b(24,120,110,50,"Source","#7C3AED","new event");
+    this.b(185,120,110,50,"Dedup","#38bdf8","SETNX");
+    this.b(346,120,110,50,"Sender","#fbbf24","→ provider");
+    this.b(505,54,96,46,"Delivered","#34d399","✓");
+    this.b(346,224,110,46,"Retry","#fbbf24","backoff");
+    this.b(505,224,96,46,"DLQ","#f87171","☠");
+    this.centers={ source:[79,145], dedup:[240,145], sender:[401,145], delivered:[553,77], retry:[401,247], dlq:[553,247] };
+    // connectors
+    this.arrow(134,145,185,145); this.arrow(295,145,346,145);
+    this.arrow(456,140,505,80,"#2f2f37");        // sender -> delivered
+    this.arrow(401,170,401,224,"#2f2f37");        // sender -> retry
+    this.arrow(360,224,360,170,"#2f2f37",true);   // retry -> sender (loop)
+    this.arrow(456,247,505,247,"#2f2f37");        // retry -> dlq
+    this.svg.appendChild(T(240,196,"✕ duplicate",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));
+  }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); }
+  bind(){
+    $("pgRate").addEventListener("input",()=>$("pgRateV").textContent=$("pgRate").value);
+    $("pgFail").addEventListener("input",()=>$("pgFailV").textContent=$("pgFail").value+"%");
+    $("pgRetries").addEventListener("input",()=>$("pgRetriesV").textContent=$("pgRetries").value);
+    $("pgDup").addEventListener("input",()=>$("pgDupV").textContent=$("pgDup").value+"%");
+    $("pgEmit").onclick=()=>this.spawnOne();
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.playing=false; this.delivered=this.retried=this.dead=this.dupes=0;
+      this.packets.forEach(p=>p.el.remove()); this.packets=[]; this.seen.clear(); this.recentKeys=[]; this.updateStats(); };
+  }
+  mk(fill){ const [x,y]=this.centers.source;
+    const c=S("circle",{r:5,cx:x,cy:y,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+  spawnOne(){
+    const dupRate=+$("pgDup").value/100;
+    let key, dup=false;
+    if(Math.random()<dupRate && this.recentKeys.length>0){ key=this.recentKeys[randi(0,this.recentKeys.length-1)]; dup=true; }
+    else { key="ntf-"+(++this.keyCounter); this.recentKeys.push(key); if(this.recentKeys.length>14)this.recentKeys.shift(); }
+    const [x,y]=this.centers.source;
+    this.packets.push({key,dup,x,y,attempts:0,state:"toDedup",delay:0,el:this.mk("#c4a2ff")});
+    this.setTarget(this.packets[this.packets.length-1],"dedup");
+    this.updateStats();
+  }
+  setTarget(p,name){ const c=this.centers[name]; p.tx=c[0]; p.ty=c[1]; }
+  colorFor(state){ return state==="toRetry"||state==="waiting"?"#fbbf24":state==="toDLQ"?"#f87171":state==="toDelivered"?"#34d399":state==="toDrop"?"#8b8b93":"#c4a2ff"; }
+  moveTo(p,dt){ const dx=p.tx-p.x, dy=p.ty-p.y, d=Math.hypot(dx,dy); if(d<4){p.x=p.tx;p.y=p.ty;return true;}
+    const s=Math.min(d,this.SPEED*dt); p.x+=dx/d*s; p.y+=dy/d*s; p.el.setAttribute("cx",p.x); p.el.setAttribute("cy",p.y); return false; }
+  frame(dt){
+    this.seenExpire+=dt; if(this.seenExpire>=8){ this.seenExpire=0; this.seen.clear(); }
+    const failRate=+$("pgFail").value/100, maxRetries=+$("pgRetries").value;
+    this.packets.forEach(p=>{ if(p.done)return;
+      if(p.state==="waiting"){ p.delay-=dt; if(p.delay<=0){ p.state="toSender"; this.setTarget(p,"sender"); p.el.setAttribute("fill",this.colorFor(p.state)); } return; }
+      p.el.setAttribute("fill",this.colorFor(p.state));
+      if(!this.moveTo(p,dt)) return;
+      // arrived
+      if(p.state==="toDedup"){
+        if(this.seen.has(p.key)){ p.state="toDrop"; this.dupes++; this.flashDrop(p); p.done=true; p.el.remove(); this.updateStats(); }
+        else { this.seen.add(p.key); p.state="toSender"; this.setTarget(p,"sender"); }
+      } else if(p.state==="toSender"){
+        if(Math.random()>=failRate){ p.state="toDelivered"; this.setTarget(p,"delivered"); }
+        else { p.attempts++; p.state="toRetry"; this.setTarget(p,"retry"); }
+      } else if(p.state==="toDelivered"){ this.delivered++; p.done=true; p.el.remove(); this.updateStats(); }
+      else if(p.state==="toRetry"){ this.retried++;
+        if(p.attempts>maxRetries){ p.state="toDLQ"; this.setTarget(p,"dlq"); }
+        else { p.state="waiting"; p.delay=Math.min(0.4*Math.pow(2,p.attempts-1),2.2); }
+        this.updateStats();
+      } else if(p.state==="toDLQ"){ this.dead++; p.done=true; p.el.remove(); this.updateStats(); }
+    });
+    this.packets=this.packets.filter(p=>!p.done);
+  }
+  flashDrop(p){ p.el.setAttribute("fill","#8b8b93"); }
+  updateStats(){ $("pgDelivered").textContent=fmt(this.delivered); $("pgRetried").textContent=fmt(this.retried);
+    $("pgDead").textContent=fmt(this.dead); $("pgDupes").textContent=fmt(this.dupes);
+    $("pgInflight").textContent=fmt(this.packets.filter(p=>!p.done).length); }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

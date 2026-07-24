@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Distributed Unique ID Generator — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:740px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:460px}
+
+  /* BITS + DECODE */
+  .bitrow{display:flex;flex-wrap:wrap;gap:3px;font-family:"JetBrains Mono","Consolas",monospace;font-size:11px;margin-top:8px}
+  .bitrow .b{width:15px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:4px;
+    background:#0c0c0e;border:1px solid var(--gray-border);color:#4b4c56;transition:all .12s}
+  .bitrow .b.on.ts{color:#c4a2ff;border-color:rgba(124,58,237,.7);background:rgba(124,58,237,.14)}
+  .bitrow .b.on.mc{color:#fbbf24;border-color:rgba(251,191,36,.6);background:rgba(251,191,36,.12)}
+  .bitrow .b.on.sq{color:#34d399;border-color:rgba(52,211,153,.6);background:rgba(52,211,153,.12)}
+  .bitrow .b.on.sign{color:#8b8b93}
+  .bit-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:11.5px;color:var(--muted)}
+  .bit-legend span{display:inline-flex;align-items:center;gap:6px}
+  .bit-legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .decode{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .decode .d{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .decode .d .dk{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  .decode .d .dv{font-size:14px;font-weight:700;font-family:"JetBrains Mono",monospace;margin-top:4px;word-break:break-all}
+  .id-big{font-family:"JetBrains Mono",monospace;font-size:clamp(16px,3vw,24px);font-weight:800;color:var(--accent);word-break:break-all;margin-top:4px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-sub{font-size:11px;color:var(--muted);margin:-8px 0 16px}
+  .pg-sub b{color:var(--warn)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.ac{color:var(--accent)}
+  .short-list{margin-top:14px;max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .short-row{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:8px;padding:8px 11px;font-size:11.5px;font-family:"JetBrains Mono",monospace}
+  .short-row .sc{color:var(--accent);font-weight:700;flex:none;width:34px}
+  .short-row .lu{color:#d4d4d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} .pg-stats{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">❄️</span> Unique ID Generator</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Distributed ID Generator</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> UUID vs Snowflake…</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Distributed Unique ID Generator</h1>
+      <p class="tagline">How systems like Twitter/X mint billions of unique, roughly time-ordered 64-bit IDs per day —
+        without a central database bottleneck. Explore Snowflake's bit layout, clock &amp; sequence edge cases, multi-node
+        generation and the UUID/ULID/KSUID family, with live visualizations and a real BigInt generator.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>64-bit</b>&nbsp;Snowflake ID</span>
+        <span class="hpill"><b>4096</b>&nbsp;IDs / ms / node</span>
+        <span class="hpill"><b>Time-sortable</b>&nbsp;by design</span>
+        <span class="hpill"><b>Live</b>&nbsp;generator + decoder</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">The ID Family</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Decision Guide</div><h2>UUID vs Snowflake vs ULID vs KSUID</h2></div></div>
+      <div class="card">
+        <div class="block-title">Trade-off Matrix</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>Rule of thumb —</b> need no coordination and don't care about order → <b>UUID v4</b>. Need short, time-sortable, high-throughput IDs → <b>Snowflake</b>. Want sortable + zero coordination in 128 bits → <b>ULID</b> or <b>UUID v7</b>.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">A complete, thread-safe Snowflake generator handling <b>sequence overflow</b> and <b>clock rollback</b>, plus how to decode an ID back into its parts.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Live Snowflake Generator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Machine ID <b id="pgMidV">417</b></label><input id="pgMid" type="range" min="0" max="1023" value="417"></div>
+            <div class="pg-sub">Datacenter <b id="pgDc">13</b> · Worker <b id="pgWk">1</b> &nbsp;(5 + 5 bits)</div>
+            <div class="pg-btns" style="margin-bottom:16px"><button class="go" id="pgGen">⚡ Generate one ID</button></div>
+            <div class="pg-field"><label>Auto rate (IDs/s) <b id="pgRateV">6</b></label><input id="pgRate" type="range" min="1" max="80" value="6"></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Start</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+            <div class="short-list" id="pgList"></div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Generated</div><div class="v ac" id="pgTotal">0</div></div>
+              <div class="pg-stat"><div class="k">IDs / sec</div><div class="v" id="pgIps">0</div></div>
+              <div class="pg-stat"><div class="k">Max seq / ms</div><div class="v ok" id="pgMaxSeq">0</div></div>
+            </div>
+            <div id="pgLatest"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   DISTRIBUTED UNIQUE ID GENERATOR — modular vanilla JS (SVG, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* Snowflake bit constants (custom 2020 epoch) */
+const EPOCH=1577836800000n;      // 2020-01-01T00:00:00Z
+const MACHINE_BITS=10n, SEQ_BITS=12n, MAX_SEQ=(1n<<SEQ_BITS)-1n;  // 4095
+
+/* =====================================================================
+   NAVIGATION — smooth fade page transitions
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR — scrollspy + smooth scroll
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER — tabs + copy + lightweight syntax highlight
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile throw "+
+    "function const let var await async of in typeof this export default "+
+    "def self lambda except raise with pass elif print import from as True False None while "+
+    "String Long Integer Instant Duration true false null val").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE — rAF + IntersectionObserver gating
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":12,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color){ this.svg.appendChild(S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5})); }
+}
+
+/* ---- 1. Architecture pipeline ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 250"); }
+  setup(){
+    this.box(150,22,95,40,"Timestamp","#7C3AED");
+    this.box(275,22,95,40,"Machine ID","#fbbf24");
+    this.box(400,22,95,40,"Sequence","#34d399");
+    this.box(20,132,80,44,"Client","#3a3a42","👤");
+    this.box(130,132,80,44,"API","#3a3a42","🚪");
+    this.box(255,132,130,44,"Snowflake","#7C3AED","⚙️ service");
+    this.box(430,132,80,44,"ID","#34d399","🆔 64-bit");
+    this.box(540,132,80,44,"Database","#3a3a42","🗄️");
+    this.arrow(100,154,130,154); this.arrow(210,154,255,154); this.arrow(385,154,430,154); this.arrow(510,154,540,154);
+    [197.5,322.5,447.5].forEach(x=>this.arrow(x,62,320,132));
+    this.centers=[60,170,320,470,580];
+    this.packets=[]; this.spawn=0;
+    this.cap("Client → API → Snowflake service. The service fuses timestamp + machine-id + sequence into one 64-bit ID, then persists it.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.7,1.2);
+      const p={prog:0,dead:false,el:S("circle",{r:5,cx:60,cy:154,fill:"#c4a2ff",filter:"drop-shadow(0 0 5px rgba(196,162,255,.8))"})};
+      this.svg.appendChild(p.el); this.packets.push(p); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.4;
+      if(p.prog>=this.centers.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog), f=p.prog-seg, a=this.centers[seg], b=this.centers[seg+1];
+      p.el.setAttribute("cx",a+(b-a)*f); p.el.setAttribute("fill",p.prog>=2?"#34d399":"#c4a2ff");
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. 64-bit layout + live binary ---- */
+class BitLayoutViz extends Viz {
+  constructor(host){ super(host,"0 0 640 175"); }
+  setup(){
+    this.cells=[]; this.x0=18; this.w=9.35; const y=70, h=30;
+    for(let i=0;i<64;i++){ const seg=i===0?"sign":i<=41?"ts":i<=51?"mc":"sq";
+      const col=seg==="ts"?"#7C3AED":seg==="mc"?"#fbbf24":seg==="sq"?"#34d399":"#3a3a42";
+      const r=S("rect",{x:this.x0+i*this.w,y,width:this.w-1.6,height:h,rx:2,fill:"#0c0c0e",stroke:col,"stroke-width":.8,opacity:.35});
+      this.svg.appendChild(r); this.cells.push({r,col}); }
+    this.lab(this.x0+0.5*this.w,55,"0","#8b8b93");
+    this.lab(this.x0+21*this.w,115,"41 timestamp bits","#c4a2ff");
+    this.lab(this.x0+46.5*this.w,115,"10 machine","#fbbf24");
+    this.lab(this.x0+57.5*this.w,115,"12 sequence","#34d399");
+    this.lab(this.x0+0.5*this.w,132,"sign","#8b8b93");
+    this.machine=417n; this.seq=0n; this.baseTs=BigInt(Date.now()); this.acc=0; this.update();
+    this.cap("A Snowflake ID = 1 unused sign bit · 41 timestamp bits · 10 machine bits · 12 sequence bits = 64 bits. Watch the low sequence bits flip fast, timestamp bits slowly.");
+  }
+  lab(x,y,txt,col){ this.svg.appendChild(T(x,y,txt,{fill:col,"font-size":10.5,"text-anchor":"middle","font-weight":600})); }
+  update(){ const id=((this.baseTs-EPOCH)<<22n)|(this.machine<<12n)|this.seq;
+    const bin=id.toString(2).padStart(64,"0");
+    for(let i=0;i<64;i++){ const on=bin[i]==="1"; const c=this.cells[i];
+      c.r.setAttribute("opacity",on?1:0.3); c.r.setAttribute("fill",on?c.col:"#0c0c0e"); } }
+  frame(dt){ this.acc+=dt; if(this.acc<0.12)return; this.acc=0;
+    this.seq=(this.seq+7n)&MAX_SEQ; if(this.seq<7n) this.baseTs+=1n; this.update(); }
+}
+
+/* ---- 3. Real-time generation (monotonic) ---- */
+class GenerationViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){ this.items=[]; this.acc=0; this.val=1902345678901234000n;
+    this.svg.appendChild(T(320,24,"Real-time IDs — each strictly greater than the last",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}));
+    this.cap("IDs stream out continuously and are monotonically increasing, so ordering by ID value is effectively ordering by creation time.");
+  }
+  frame(dt){
+    this.items.forEach(it=>{ it.y+=(it.ty-it.y)*Math.min(1,dt*6); it.el.setAttribute("y",it.y);
+      it.el.setAttribute("opacity",clamp((it.y-36)/30,0,1)*clamp((206-it.y)/30,0,1)); });
+    this.acc+=dt; if(this.acc<0.8)return; this.acc=0;
+    this.val+=BigInt(randi(1,60));
+    const t=T(320,200,String(this.val),{fill:"#34d399","font-size":15,"font-weight":700,"text-anchor":"middle","font-family":"JetBrains Mono,monospace","opacity":0});
+    this.svg.appendChild(t); this.items.push({el:t,y:200,ty:200});
+    this.items.forEach(x=>x.ty-=25);
+    this.items=this.items.filter(x=>{ if(x.ty<40){ x.el.remove(); return false; } return true; });
+  }
+}
+
+/* ---- 4. Multiple nodes, no collision ---- */
+class MultiNodeViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){ this.nodes=[["Node A",1,34],["Node B",2,96],["Node C",3,158]];
+    this.nodes.forEach(([nm,mid,y])=>this.box(30,y,120,40,nm,"#3a3a42","machine "+mid));
+    this.box(440,88,160,44,"Global stream","#34d399","all unique");
+    this.nodes.forEach(([,,y])=>this.arrow(150,y+20,440,110));
+    this.packets=[]; this.spawn=0; this.count=0;
+    this.countLbl=T(520,150,"0 issued",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.countLbl);
+    this.cols=["#c4a2ff","#fbbf24","#38bdf8"];
+    this.cap("Every node owns a distinct machine-id, so IDs made in the very same millisecond still differ — no coordination is needed at generation time.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.22,.5); const n=randi(0,2); const y=this.nodes[n][2]+20;
+      const p={ph:0,y,dead:false,el:S("circle",{r:4.5,cx:155,cy:y,fill:this.cols[n]})}; this.svg.appendChild(p.el); this.packets.push(p); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.3;
+      p.el.setAttribute("cx",155+(455-155)*p.ph); p.el.setAttribute("cy",p.y+(110-p.y)*p.ph);
+      if(p.ph>=1){ p.dead=true; p.el.remove(); this.count++; this.countLbl.textContent=this.count+" issued"; } });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 5. Sequence overflow within a ms ---- */
+class OverflowViz extends Viz {
+  constructor(host){ super(host,"0 0 640 180"); }
+  setup(){ this.barX=70; this.barW=500; this.seq=0; this.ms=0;
+    this.svg.appendChild(S("rect",{x:this.barX,y:78,width:this.barW,height:30,rx:8,fill:"#0c0c0e",stroke:"#3a3a42"}));
+    this.fill=S("rect",{x:this.barX,y:78,width:0,height:30,rx:8,fill:"#34d399",opacity:.85}); this.svg.appendChild(this.fill);
+    this.lbl=T(this.barX,66,"sequence 0 / 4095",{fill:"#8b8b93","font-size":12}); this.svg.appendChild(this.lbl);
+    this.msLbl=T(this.barX+this.barW,66,"ms #0",{fill:"#c4a2ff","font-size":12,"text-anchor":"end","font-weight":700}); this.svg.appendChild(this.msLbl);
+    this.note=T(320,140,"",{fill:"#fbbf24","font-size":12.5,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.note);
+    this.cap("Within one millisecond the 12-bit sequence counts 0→4095. On overflow the generator waits for the next millisecond and resets the sequence to 0.");
+  }
+  frame(dt){ this.seq+=dt*3400;
+    if(this.seq>=4096){ this.seq=0; this.ms++; this.msLbl.textContent="ms #"+this.ms; this.note.textContent="⚠ overflow → wait next ms → sequence reset to 0"; }
+    else if(this.seq>4000) this.note.textContent="approaching 4095 — the per-ms ceiling";
+    else this.note.textContent="";
+    const s=Math.floor(this.seq);
+    this.fill.setAttribute("width",this.barW*s/4095); this.fill.setAttribute("fill",s>4000?"#fbbf24":"#34d399");
+    this.lbl.textContent="sequence "+s+" / 4095";
+  }
+}
+
+/* ---- 6. Clock rollback ---- */
+class ClockViz extends Viz {
+  constructor(host){ super(host,"0 0 640 175"); }
+  setup(){ this.x=80; this.rollTimer=0; this.warn=0;
+    this.svg.appendChild(S("line",{x1:60,y1:100,x2:580,y2:100,stroke:"#3a3a42","stroke-width":2}));
+    for(let i=0;i<=10;i++){ const x=60+i*52; this.svg.appendChild(S("line",{x1:x,y1:94,x2:x,y2:106,stroke:"#3a3a42","stroke-width":1})); }
+    this.svg.appendChild(T(60,128,"past",{fill:"#8b8b93","font-size":11}));
+    this.svg.appendChild(T(580,128,"future →",{fill:"#8b8b93","font-size":11,"text-anchor":"end"}));
+    this.marker=S("circle",{r:8,cx:80,cy:100,fill:"#7C3AED",filter:"drop-shadow(0 0 6px rgba(124,58,237,.8))"}); this.svg.appendChild(this.marker);
+    this.note=T(320,50,"clock advancing normally",{fill:"#34d399","font-size":12.5,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.note);
+    this.cap("The clock normally moves forward. An NTP correction can pull it backwards — the generator must detect this and refuse to issue IDs until time catches up.");
+  }
+  frame(dt){ this.rollTimer+=dt;
+    if(this.warn>0){ this.warn-=dt; if(this.warn<=0){ this.note.textContent="clock advancing normally"; this.note.setAttribute("fill","#34d399"); this.marker.setAttribute("fill","#7C3AED"); } return; }
+    this.x+=42*dt;
+    if(this.rollTimer>5){ this.rollTimer=0; this.x=Math.max(80,this.x-130); this.warn=2.2;
+      this.note.textContent="⚠ clock moved backwards → reject / wait for catch-up"; this.note.setAttribute("fill","#f87171"); this.marker.setAttribute("fill","#f87171"); }
+    if(this.x>560) this.x=80;
+    this.marker.setAttribute("cx",this.x);
+  }
+}
+
+/* ---- 7. Sorting by timestamp (k-sorted) ---- */
+class SortViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){ this.buckets=6; this.bw=90; this.x0=40; this.dots=[]; this.acc=0; this.msBase=0; this.cols=["#c4a2ff","#fbbf24","#38bdf8"];
+    this.svg.appendChild(S("line",{x1:this.x0,y1:150,x2:this.x0+this.buckets*this.bw,y2:150,stroke:"#3a3a42","stroke-width":2}));
+    this.ticks=[];
+    for(let i=0;i<this.buckets;i++){ const x=this.x0+i*this.bw;
+      this.svg.appendChild(S("line",{x1:x,y1:144,x2:x,y2:156,stroke:"#3a3a42"}));
+      const t=T(x+this.bw/2,172,"ms "+i,{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}); this.svg.appendChild(t); this.ticks.push(t); }
+    this.svg.appendChild(T(320,28,"IDs bucketed by their timestamp bits → globally time-ordered",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.cap("Because the high bits are the timestamp, IDs sort by time across milliseconds. Within one ms, exact order depends on machine/sequence bits — hence 'k-sorted'.");
+  }
+  frame(dt){ this.dots.forEach(d=>{ d.op=Math.min(1,d.op+dt*3); d.el.setAttribute("opacity",d.op); });
+    this.acc+=dt; if(this.acc<0.55)return; this.acc=0;
+    const bi=this.buckets-1;
+    const count=this.dots.filter(d=>d.b===this.msBase+bi).length;
+    const x=this.x0+bi*this.bw+22+(count%3)*20;
+    const c=S("circle",{r:5,cx:x,cy:142-Math.floor(count/3)*15,fill:this.cols[randi(0,2)],opacity:0});
+    this.svg.appendChild(c); this.dots.push({el:c,b:this.msBase+bi,op:0});
+    if(Math.random()<0.55) this.advance();
+  }
+  advance(){ this.msBase++; this.ticks.forEach((t,i)=>t.textContent="ms "+(this.msBase+i));
+    this.dots.forEach(d=>d.el.setAttribute("cx",+d.el.getAttribute("cx")-this.bw));
+    this.dots=this.dots.filter(d=>{ if(+d.el.getAttribute("cx")<this.x0){ d.el.remove(); return false; } return true; });
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (declared before SECTIONS to avoid TDZ)
+   ===================================================================== */
+const CODE_flow =
+"1. client -> POST /ids           (or an internal call)\n" +
+"2. API    -> route to a Snowflake service instance\n" +
+"3. read machine-id (assigned at startup / from config)\n" +
+"4. ts  = currentTimeMillis()\n" +
+"5. if ts == lastTs -> seq = (seq+1) & 4095   (overflow -> wait next ms)\n" +
+"   else            -> seq = 0\n" +
+"6. id = (ts-EPOCH)<<22 | machineId<<12 | seq   // 64-bit\n" +
+"7. return id -> stored in DB as the primary key";
+
+const CODE_snowflake_java =
+"public class Snowflake {\n" +
+"  private static final long EPOCH = 1577836800000L;   // 2020-01-01\n" +
+"  private static final long MACHINE_BITS = 10L;\n" +
+"  private static final long SEQ_BITS = 12L;\n" +
+"  private static final long MAX_SEQ = (1L << SEQ_BITS) - 1;   // 4095\n" +
+"  private final long machineId;                       // 0..1023\n" +
+"  private long lastTs = -1L;\n" +
+"  private long sequence = 0L;\n\n" +
+"  public Snowflake(long machineId){ this.machineId = machineId; }\n\n" +
+"  public synchronized long nextId(){\n" +
+"    long ts = System.currentTimeMillis();\n" +
+"    if (ts < lastTs)                                  // clock rollback\n" +
+"      throw new IllegalStateException(\"Clock moved backwards\");\n" +
+"    if (ts == lastTs){\n" +
+"      sequence = (sequence + 1) & MAX_SEQ;\n" +
+"      if (sequence == 0) ts = waitNextMillis(lastTs); // sequence overflow\n" +
+"    } else {\n" +
+"      sequence = 0L;\n" +
+"    }\n" +
+"    lastTs = ts;\n" +
+"    return ((ts - EPOCH) << (MACHINE_BITS + SEQ_BITS))\n" +
+"         | (machineId << SEQ_BITS)\n" +
+"         | sequence;\n" +
+"  }\n" +
+"  private long waitNextMillis(long last){\n" +
+"    long ts = System.currentTimeMillis();\n" +
+"    while (ts <= last) ts = System.currentTimeMillis();\n" +
+"    return ts;\n" +
+"  }\n" +
+"}";
+
+const CODE_snowflake_py =
+"import time, threading\n\n" +
+"class Snowflake:\n" +
+"    EPOCH = 1577836800000\n" +
+"    MACHINE_BITS, SEQ_BITS = 10, 12\n" +
+"    MAX_SEQ = (1 << SEQ_BITS) - 1          # 4095\n\n" +
+"    def __init__(self, machine_id):\n" +
+"        self.machine_id = machine_id\n" +
+"        self.last_ts = -1\n" +
+"        self.seq = 0\n" +
+"        self.lock = threading.Lock()\n\n" +
+"    def next_id(self):\n" +
+"        with self.lock:\n" +
+"            ts = int(time.time() * 1000)\n" +
+"            if ts < self.last_ts:\n" +
+"                raise Exception('Clock moved backwards')\n" +
+"            if ts == self.last_ts:\n" +
+"                self.seq = (self.seq + 1) & self.MAX_SEQ\n" +
+"                if self.seq == 0:                      # overflow\n" +
+"                    while ts <= self.last_ts:\n" +
+"                        ts = int(time.time() * 1000)\n" +
+"            else:\n" +
+"                self.seq = 0\n" +
+"            self.last_ts = ts\n" +
+"            return ((ts - self.EPOCH) << 22) \\\n" +
+"                 | (self.machine_id << 12) | self.seq";
+
+const CODE_decode_java =
+"// Pull the parts back out of a Snowflake id\n" +
+"long seq       =  id & 0xFFF;              // low 12 bits\n" +
+"long machineId = (id >> 12) & 0x3FF;       // next 10 bits\n" +
+"long timestamp = (id >> 22) + EPOCH;       // top 41 bits + epoch\n" +
+"Instant when   = Instant.ofEpochMilli(timestamp);\n" +
+"long datacenter = machineId >> 5;          // 5 high bits\n" +
+"long worker     = machineId & 0x1F;        // 5 low bits";
+
+const CODE_layout =
+" 64-bit Snowflake ID\n" +
+"+---+------------------------------+------------+--------------+\n" +
+"| 0 |        timestamp (41)        | machine(10)| sequence(12) |\n" +
+"+---+------------------------------+------------+--------------+\n" +
+"  ^   ms since a custom epoch         which node   per-ms counter\n" +
+" sign bit (unused, keeps the id a positive signed long)";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A distributed ID generator hands out globally unique identifiers to many services at once. The most popular design is Twitter's <b>Snowflake</b>: each node independently builds a 64-bit ID from the current <b>timestamp</b>, its own <b>machine-id</b>, and a per-millisecond <b>sequence</b> counter.",
+    problem:"A single auto-increment column in one database becomes a bottleneck and a single point of failure at scale. You need unique IDs generated locally on every node — fast, ordered, and without cross-node coordination on the hot path.",
+    how:["A client/service requests an ID (often just an in-process call).","The node reads the current epoch-relative timestamp (ms).","It combines timestamp + its machine-id + a sequence number.","The 64-bit integer is returned immediately (no DB round-trip).","The ID is used as a primary key / stored in the database."],
+    code:{ "Flow":CODE_flow },
+    advantages:["No central coordination on the generation path → very high throughput","Roughly time-ordered (sortable) IDs","Compact 64-bit integers — index and store efficiently"],
+    disadvantages:["Machine-ids must be assigned uniquely (coordination at startup)","Depends on a reliable, monotonic clock","41-bit timestamp has a finite lifespan (~69 years from the epoch)"],
+    interview:[["Why not just use a database auto-increment?","It centralizes ID generation: every insert must touch one sequence, creating a bottleneck and SPOF, and it couples services to one DB. Snowflake pushes generation to each node so there's no shared hot path, while still giving compact, sortable IDs."]] },
+
+  { id:"bits", num:2, icon:"🧬", tag:"Anatomy", title:"Bit Layout & Binary", viz:BitLayoutViz,
+    definition:"A Snowflake ID is a 64-bit signed integer split into fixed fields: <b>1</b> unused sign bit, <b>41</b> timestamp bits (ms since a custom epoch), <b>10</b> machine bits (often 5 datacenter + 5 worker), and <b>12</b> sequence bits.",
+    problem:"You must pack three independent values into one sortable integer. The field order matters: putting the timestamp in the high bits is what makes IDs sort by time.",
+    how:["Reserve the top sign bit as 0 so the long stays positive.","Timestamp occupies the next 41 high bits → dominates ordering.","Machine-id (10 bits) allows up to 1024 nodes.","Sequence (12 bits) allows 4096 IDs per node per millisecond.","Shift and OR the parts together: <code>(ts&lt;&lt;22) | (machine&lt;&lt;12) | seq</code>."],
+    code:{ "Layout":CODE_layout, "Decode (Java)":CODE_decode_java },
+    advantages:["Timestamp in high bits → natural time ordering","41 bits of ms ≈ 69 years of range","1024 nodes × 4096 IDs/ms ≈ 4M IDs/ms cluster-wide"],
+    disadvantages:["Fixed split caps nodes (1024) and per-ms rate (4096)","Only ~69 years before the timestamp field wraps","Reveals creation time and node — a minor info leak"],
+    interview:[["Why is the timestamp in the high-order bits?","Integer comparison looks at the most-significant bits first. Placing the timestamp there makes larger (later) timestamps produce larger IDs, so sorting by ID sorts by time — great for range scans and clustered indexes."]] },
+
+  { id:"generation", num:3, icon:"⚡", tag:"Runtime", title:"Real-time ID Generation", viz:GenerationViz,
+    definition:"On each call the node computes an ID in a few nanoseconds — no network, no lock contention beyond a tiny critical section. Because the timestamp only moves forward and the sequence increments within a ms, output is <b>monotonically increasing</b> per node.",
+    problem:"IDs must be produced at very high rates with strict uniqueness and near-perfect ordering, even under bursty traffic.",
+    how:["Read the current millisecond.","If it equals the last timestamp, increment the sequence.","If the sequence overflows (>4095), spin until the next millisecond.","If it's a new millisecond, reset the sequence to 0.","Assemble and return the 64-bit ID."],
+    code:{ "Java":CODE_snowflake_java, "Python":CODE_snowflake_py },
+    advantages:["Millions of IDs/sec per node","Lock scope is tiny (or lock-free with atomics)","Monotonic per node → excellent for indexes"],
+    disadvantages:["A hot lock/atomic can bottleneck a single node","Busy-wait on overflow briefly burns CPU","Strict global monotonicity across nodes is not guaranteed"],
+    interview:[["Is a Snowflake ID strictly increasing globally?","No. It's strictly increasing per node, and globally only 'k-sorted' — within the same millisecond two nodes can emit IDs whose relative order doesn't match wall-clock arrival. Across milliseconds ordering holds."]] },
+
+  { id:"multinode", num:4, icon:"🖧", tag:"Distribution", title:"Multiple Nodes Generating IDs", viz:MultiNodeViz,
+    definition:"Every node is configured with a unique machine-id. That field guarantees that even IDs generated in the exact same millisecond on different nodes never collide — without any coordination at generation time.",
+    problem:"Thousands of concurrent generators must never produce a duplicate. Coordinating on every ID would kill throughput.",
+    how:["Assign each node a unique machine-id at startup.","Sources: static config, ZooKeeper/etcd lease, Kubernetes pod index, or a DB registry.","Each node generates independently using its own id.","Uniqueness = (timestamp, machine-id, sequence) is unique by construction.","Reclaim/rotate machine-ids carefully when nodes die."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Zero coordination on the hot path","Linear horizontal scaling by adding nodes","Failure of one node doesn't affect others"],
+    disadvantages:["Machine-id assignment needs coordination (ZooKeeper/etcd)","Reusing a machine-id too soon risks collisions","10 bits caps the cluster at 1024 concurrent ids"],
+    interview:[["How do you assign machine-ids to nodes?","Common options: a ZooKeeper/etcd ephemeral sequential node giving each instance a lease, the ordinal index of a Kubernetes StatefulSet pod, or a small DB table that hands out ids. The key is uniqueness and safe reclamation when a node leaves."]] },
+
+  { id:"overflow", num:5, icon:"🔁", tag:"Edge Case", title:"Sequence Overflow", viz:OverflowViz,
+    definition:"The 12-bit sequence allows only 4096 IDs per node per millisecond. If a node is asked for a 4097th ID in the same millisecond, the sequence overflows and the generator must wait for the clock to tick over.",
+    problem:"Bursts can exceed 4096 IDs/ms on a single node. Without handling, the sequence would wrap and produce a duplicate within the same millisecond.",
+    how:["Increment sequence with a mask: <code>seq = (seq+1) &amp; 4095</code>.","When it wraps back to 0 in the same ms, that's an overflow.","Busy-wait (spin) until <code>currentTimeMillis()</code> advances.","Then reset the sequence to 0 for the new millisecond.","If overflow is frequent, add more nodes or widen the sequence bits."],
+    code:{ "Java":CODE_snowflake_java },
+    advantages:["Guarantees uniqueness even under extreme bursts","Simple, deterministic behavior","Self-limits to a safe per-ms rate"],
+    disadvantages:["Brief latency spike while spinning for the next ms","Wastes CPU during the busy-wait","Hard cap of 4096/ms/node may need re-architecting"],
+    interview:[["What happens if a node needs more than 4096 IDs in one millisecond?","It waits for the next millisecond (busy-wait), which throttles it to 4096/ms/node. To raise the ceiling you either scale out (more machine-ids) or change the bit split to give the sequence more bits at the cost of timestamp/machine range."]] },
+
+  { id:"clock", num:6, icon:"⏰", tag:"Edge Case", title:"Clock Rollback", viz:ClockViz,
+    definition:"Snowflake trusts the system clock to move forward. NTP corrections, VM pauses, or leap-second handling can move the clock <b>backwards</b>, which could produce IDs that collide with or precede already-issued ones.",
+    problem:"If <code>now &lt; lastTimestamp</code>, naively generating an ID risks duplicates and breaks time-ordering.",
+    how:["Detect: compare current ms to the last-seen ms.","If time went backwards by a small amount, wait until it catches up.","If it went backwards a lot, refuse to generate and raise an alert.","Alternatively, keep a logical clock (max(now, lastTs)) that never decreases.","Run NTP in slew mode (gradual) rather than step mode."],
+    code:{ "Java":CODE_snowflake_java },
+    advantages:["Prevents duplicate / out-of-order IDs","Fails loudly instead of silently corrupting data","Mitigations (slew NTP, logical clock) are well understood"],
+    disadvantages:["Can stall generation during a rollback","Relies on correct clock/NTP configuration","Large jumps may need manual intervention"],
+    interview:[["How do you handle clock skew / rollback in Snowflake?","Detect it by comparing to the last timestamp. For small backward moves, wait it out; for large ones, throw and alert. Better: track a monotonic 'logical' timestamp = max(now, lastTs), and configure NTP to slew rather than step. Some designs (Sonyflake) tolerate this differently."]] },
+
+  { id:"sorting", num:7, icon:"🔀", tag:"Property", title:"Sorting by Timestamp", viz:SortViz,
+    definition:"Because the timestamp sits in the high bits, sorting Snowflake IDs numerically is almost the same as sorting by creation time. This 'k-sorted' property is a major reason to prefer them over random UUIDs.",
+    problem:"Random IDs (UUID v4) scatter writes across a B-tree index, causing page splits and poor cache locality. You want IDs that cluster recent rows together.",
+    how:["High bits = timestamp → later IDs are numerically larger.","Rows insert near the 'end' of the clustered index → fewer page splits.","Range queries like 'IDs from the last hour' become index range scans.","Within a single ms, order is approximate (k-sorted), which is fine for most use cases."],
+    code:{ "Layout":CODE_layout },
+    advantages:["Index-friendly, append-mostly write pattern","Cheap time-range scans without a separate timestamp index","Better cache locality than random UUIDs"],
+    disadvantages:["Not exactly sorted within a millisecond","Leaks approximate creation time","Sequential-ish IDs can be enumerated/guessed"],
+    interview:[["Why are time-sortable IDs better for databases than UUID v4?","Random UUIDs insert all over a B-tree/clustered index, causing page splits, write amplification and poor cache hit rates. Time-sortable IDs (Snowflake, ULID, UUID v7) insert monotonically at the 'end', keeping the index compact and range scans cheap."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["🎲","UUID","128-bit. v4 is fully random (no coordination) but not sortable and large. v1 embeds time+MAC. v7 (2022) is time-ordered — a modern default."],
+  ["❄️","Snowflake","64-bit, time + machine + sequence. Compact and time-sortable, but needs machine-id assignment and a trustworthy clock. Twitter/X, Discord, Instagram."],
+  ["🌅","Sonyflake","Sony's 63-bit take: 39-bit time in 10ms units (longer lifespan ~174 yrs), 16-bit machine, 8-bit sequence. Lower per-node QPS, more nodes."],
+  ["🔤","ULID","128-bit: 48-bit millisecond timestamp + 80 random bits, Crockford Base32. Lexicographically sortable, URL-safe, no coordination."],
+  ["🗝️","KSUID","160-bit: 32-bit second timestamp + 128 random bits, Base62. Sortable, collision-resistant, human-copyable; larger than Snowflake."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">ID scheme</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   COMPARISON table
+   ===================================================================== */
+const CMP=[
+  ["UUID v4","128-bit","No (random)","None","Ubiquitous, zero setup; not sortable, index-unfriendly"],
+  ["UUID v7","128-bit","Yes","None","Time-ordered UUID (2022) — modern sortable default"],
+  ["Snowflake","64-bit","Yes (k-sorted)","Machine-id","Compact + fast; needs id assignment + good clock"],
+  ["Sonyflake","63-bit","Yes","Machine-id","Longer lifespan, lower QPS/node (10ms units)"],
+  ["ULID","128-bit","Yes","None","ms time + random, Base32, sortable, URL-safe"],
+  ["KSUID","160-bit","Yes","None","sec time + 128 random, Base62; larger but robust"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Scheme</th><th>Size</th><th>Time-sortable</th><th>Coordination</th><th>Notes</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["Design a distributed unique ID generator.","Clarify needs: uniqueness, throughput, sortability, ID size, coordination tolerance. Then present Snowflake: 64-bit = 1 sign + 41 timestamp + 10 machine + 12 sequence. Explain per-node generation, machine-id assignment (ZooKeeper/etcd/k8s), sequence overflow (wait next ms), clock rollback handling, and why it's time-sortable. Compare with UUID/ULID/KSUID."],
+  ["Why 64 bits and this particular split?","64 bits fits a signed long and DB BIGINT. 41 timestamp bits ≈ 69 years of ms; 10 machine bits = 1024 nodes; 12 sequence bits = 4096 IDs/ms/node → ~4M IDs/ms cluster-wide. You can rebalance the split for more nodes vs higher per-node rate."],
+  ["How do you guarantee global uniqueness without coordination?","Uniqueness comes from the tuple (timestamp, machine-id, sequence). As long as each node has a unique machine-id and never reuses a (ts, seq) pair, IDs can't collide — so the only coordination needed is one-time machine-id assignment."],
+  ["How are machine-ids assigned?","Via ZooKeeper/etcd ephemeral sequential nodes (leases), Kubernetes StatefulSet ordinals, or a small DB registry. Must be unique and safely reclaimed when a node dies to avoid reuse collisions."],
+  ["What about sequence overflow?","The 12-bit sequence caps at 4096/ms/node. On overflow the generator busy-waits for the next millisecond and resets to 0. To exceed that, scale out or widen the sequence field."],
+  ["How do you handle clock moving backwards?","Detect now < lastTs. For small skews, wait for catch-up; for large ones, reject and alert. Use a monotonic logical timestamp = max(now, lastTs) and configure NTP to slew, not step."],
+  ["Snowflake vs UUID — when to use which?","Use Snowflake when you want small, time-sortable, high-throughput integer keys and can assign machine-ids. Use UUID v4 when you need zero coordination and don't care about order/size; use UUID v7 or ULID for sortable 128-bit IDs with no coordination."],
+  ["Are Snowflake IDs safe to expose publicly?","They're guessable/enumerable and leak approximate creation time and node. For public-facing identifiers, prefer opaque random IDs (or encrypt/obfuscate the Snowflake) so you don't reveal volume or ordering."],
+  ["How do you make generation highly available?","Run the generator as a library inside each service (no network hop), or as a small replicated service pool. Since nodes are independent, losing one doesn't stop others — just ensure its machine-id is safely reclaimed before reuse."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Snowflake (Java)":CODE_snowflake_java,
+  "Snowflake (Python)":CODE_snowflake_py,
+  "Decode (Java)":CODE_decode_java,
+  "Bit layout":CODE_layout
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["URL Shortener","🔗","Base62 & IDs","url-shortener.html"],
+    ["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"],
+    ["Kafka","🪵","Event streaming","kafka.html"],
+    ["Architecture","🏗️","Full system diagram","system-design.html"],
+    ["Interview Prep","🧑‍💻","Last-hour revision","interview-last-hour.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — real BigInt Snowflake generator + decoder
+   ===================================================================== */
+class Playground {
+  constructor(){ this.seq=0n; this.lastTs=-1n; this.total=0; this.maxSeq=0; this.times=[]; this.playing=false;
+    this.latest=$("pgLatest"); this.list=$("pgList"); this.acc=0; this.bind();
+    this.last=performance.now();
+    const loop=now=>{ const dt=Math.min(.1,(now-this.last)/1000); this.last=now;
+      if(this.playing){ this.acc+=dt; const rate=+$("pgRate").value; if(this.acc>=1/rate){ this.acc=0; this.gen(); } }
+      this.tickIps(); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+    this.gen();
+  }
+  bind(){
+    const syncMid=()=>{ const m=+$("pgMid").value; $("pgMidV").textContent=m; $("pgDc").textContent=m>>5; $("pgWk").textContent=m&31; };
+    $("pgMid").addEventListener("input",syncMid); syncMid();
+    $("pgRate").addEventListener("input",()=>$("pgRateV").textContent=$("pgRate").value);
+    $("pgGen").onclick=()=>this.gen();
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.playing=false; this.total=0; this.maxSeq=0; this.times=[]; this.seq=0n; this.lastTs=-1n;
+      this.list.innerHTML=""; this.updateStats(); this.gen(); };
+  }
+  nextId(){
+    let ts=BigInt(Date.now());
+    if(ts===this.lastTs){ this.seq=(this.seq+1n)&MAX_SEQ; if(this.seq===0n) ts=this.lastTs+1n; }  // overflow -> next ms
+    else if(ts<this.lastTs){ ts=this.lastTs; this.seq=(this.seq+1n)&MAX_SEQ; }                     // clock rollback guard
+    else this.seq=0n;
+    this.lastTs=ts;
+    const machine=BigInt(+$("pgMid").value);
+    const id=((ts-EPOCH)<<22n)|(machine<<12n)|this.seq;
+    return {id,ts,machine,seq:this.seq};
+  }
+  gen(){
+    const {id,ts,machine,seq}=this.nextId();
+    this.total++; this.times.push(performance.now());
+    const sNum=Number(seq); if(sNum>this.maxSeq)this.maxSeq=sNum;
+    this.renderLatest(id,ts,machine,seq);
+    const row=el("div","short-row",`<span class="sc">#${sNum}</span><span class="lu">${id.toString()}</span>`);
+    this.list.insertBefore(row,this.list.firstChild);
+    while(this.list.children.length>7) this.list.removeChild(this.list.lastChild);
+    this.updateStats();
+  }
+  renderLatest(id,ts,machine,seq){
+    const bin=id.toString(2).padStart(64,"0");
+    let bits="";
+    for(let i=0;i<64;i++){ const on=bin[i]==="1"; let cls="sign";
+      if(i>=1&&i<=41)cls="ts"; else if(i>=42&&i<=51)cls="mc"; else if(i>=52)cls="sq";
+      bits+=`<div class="b ${on?"on":"off"} ${cls}">${bin[i]}</div>`; }
+    const d=new Date(Number(ts)); const iso=d.toISOString().replace("T"," ").slice(0,23);
+    const m=Number(machine);
+    this.latest.innerHTML=
+      `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Latest 64-bit ID</div>`+
+      `<div class="id-big">${id.toString()}</div>`+
+      `<div class="bitrow">${bits}</div>`+
+      `<div class="bit-legend"><span><i style="background:#7C3AED"></i>41 timestamp</span><span><i style="background:#fbbf24"></i>10 machine</span><span><i style="background:#34d399"></i>12 sequence</span></div>`+
+      `<div class="decode">`+
+        `<div class="d"><div class="dk">Timestamp (UTC)</div><div class="dv" style="font-size:12px">${iso}</div></div>`+
+        `<div class="d"><div class="dk">Machine (DC / Worker)</div><div class="dv">${m} &nbsp;(${m>>5} / ${m&31})</div></div>`+
+        `<div class="d"><div class="dk">Sequence</div><div class="dv">${Number(seq)}</div></div>`+
+        `<div class="d"><div class="dk">Binary (hex)</div><div class="dv" style="font-size:12px">0x${id.toString(16)}</div></div>`+
+      `</div>`;
+  }
+  tickIps(){ const now=performance.now(); this.times=this.times.filter(t=>now-t<1000); $("pgIps").textContent=this.times.length; }
+  updateStats(){ $("pgTotal").textContent=this.total; $("pgMaxSeq").textContent=this.maxSeq; }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

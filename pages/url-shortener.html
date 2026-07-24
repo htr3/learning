@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>URL Shortener — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:720px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  .cx-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .cx{font-size:12px;background:var(--panel-2);border:1px solid var(--gray-border);border-radius:8px;padding:7px 12px;
+    display:flex;align-items:center;gap:8px}
+  .cx b{color:var(--accent);font-family:"JetBrains Mono","Consolas",monospace}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+  .viz-ctrl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center}
+  .viz-ctrl button{background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);border-radius:8px;
+    padding:8px 13px;font-size:12.5px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+  .viz-ctrl button:hover{border-color:var(--accent);box-shadow:0 0 10px var(--accent-soft)}
+  .viz-ctrl .stat{background:transparent;border:none;color:var(--muted);font-variant-numeric:tabular-nums;cursor:default}
+  .viz-ctrl .stat b{color:var(--line)}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC / REAL WORLD CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:420px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:300px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field input[type=text]{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:10px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field input[type=text]:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)}
+  .short-out{background:var(--panel);border:1px solid var(--gray-border);border-radius:10px;padding:12px 14px;margin-top:12px;
+    font-size:12.5px;font-family:"JetBrains Mono","Consolas",monospace;color:#d4d4d8;word-break:break-all}
+  .short-out .code{color:var(--accent);font-weight:700}
+  .short-list{margin-top:12px;max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .short-row{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:8px;padding:8px 11px;font-size:11.5px;font-family:"JetBrains Mono",monospace}
+  .short-row .sc{color:var(--accent);font-weight:700;flex:none}
+  .short-row .lu{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  .flash-hit{fill:var(--ok);font-weight:800;font-family:"JetBrains Mono",monospace}
+  .flash-miss{fill:var(--warn);font-weight:800;font-family:"JetBrains Mono",monospace}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} .pg-stats{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🔗</span> URL Shortener</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">URL Shortener</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="capacity"><span class="num">≡</span> Capacity Estimation</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>URL Shortener</h1>
+      <p class="tagline">How TinyURL &amp; Bit.ly turn a long URL into a tiny code in milliseconds — hashing, Base62 encoding,
+        collision handling, a Redis read-cache, sharded PostgreSQL and Kafka-driven click analytics. Explore each stage with live visualizations.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>Read-heavy</b>&nbsp;~100:1</span>
+        <span class="hpill"><b>Base62</b>&nbsp;7-char keyspace</span>
+        <span class="hpill"><b>Interactive</b>&nbsp;SVG simulations</span>
+        <span class="hpill"><b>Live</b>&nbsp;shorten + redirect playground</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== CAPACITY ===== -->
+    <section id="capacity">
+      <div class="sec-head"><div class="s-num">📐</div><div><div class="s-tag">Back-of-envelope</div><h2>Capacity Estimation</h2></div></div>
+      <div class="card">
+        <p class="lead">A staple of the interview: size the system before designing it. Assume <b>100M new URLs/day</b> and a <b>100:1</b> read:write ratio.</p>
+        <div class="table-wrap" style="margin-top:16px"><table id="capTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>Why 7 characters?</b> Base62 gives 62⁷ ≈ <b>3.5 trillion</b> unique codes. At 100M/day that lasts ~95 years — 6 chars (56 billion) would run out in under 2 years.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The two core paths — <b>create</b> (counter → Base62) and <b>redirect</b> (cache-aside lookup) — across common stacks.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Live Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field">
+              <label>Long URL</label>
+              <input id="pgUrl" type="text" value="https://example.com/products/summer-sale/2026?ref=newsletter" />
+            </div>
+            <div class="pg-btns" style="margin-bottom:16px"><button class="go" id="pgShorten">🔗 Shorten</button></div>
+            <div class="pg-field"><label>Redirect traffic (req/s) <b id="pgRpsV">10</b></label><input id="pgRps" type="range" min="1" max="40" value="10"></div>
+            <div class="pg-field"><label>Cache hit ratio <b id="pgHitV">85%</b></label><input id="pgHit" type="range" min="0" max="100" value="85"></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Start</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+            <div class="short-out" id="pgOut">Click <b>Shorten</b> to generate a short code →</div>
+            <div class="short-list" id="pgList"></div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Short URLs</div><div class="v ac" id="pgCount">0</div></div>
+              <div class="pg-stat"><div class="k">Cache hits</div><div class="v ok" id="pgHits">0</div></div>
+              <div class="pg-stat"><div class="k">Cache miss</div><div class="v bad" id="pgMiss">0</div></div>
+              <div class="pg-stat"><div class="k">Hit rate</div><div class="v" id="pgRate">—</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   URL SHORTENER — modular vanilla JS (SVG visualizations, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* Base62 helpers */
+const B62="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function base62(n){ if(n<=0) return "0"; let s=""; while(n>0){ s=B62[n%62]+s; n=Math.floor(n/62); } return s; }
+function simpleHash(str){ let h=0; for(let i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))>>>0; } return h; }
+
+/* =====================================================================
+   NAVIGATION — smooth fade page transitions
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR — scrollspy + smooth scroll
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER — tabs + copy + lightweight syntax highlight
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in typeof this export default "+
+    "func type struct go defer chan map range "+
+    "def self lambda except raise with pass elif print True False None "+
+    "String Long Integer Map HashMap List Optional true false null val "+
+    "SELECT INSERT UPDATE FROM WHERE VALUES INDEX CREATE TABLE PRIMARY KEY UNIQUE ON select insert update from where values").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|--[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE — rAF + IntersectionObserver gating
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class for SVG visualizations
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":12,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color){ this.svg.appendChild(S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5})); }
+}
+
+/* ---- 1. Architecture: animated request through the pipeline ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 260"); }
+  setup(){
+    this.nodes=[["👤","Client",20],["⚖️","LB",120],["🚪","Gateway",215],["🔗","URL Svc",315],["⚡","Redis",435],["🗄️","Postgres",540]];
+    this.w=[90,80,90,100,95,95];
+    this.nodes.forEach(([ic,nm,x],i)=>{ this.box(x,100,this.w[i],46,nm,i===4?"#34d399":i===3?"#7C3AED":"#3a3a42",ic);
+      if(i<this.nodes.length-1) this.arrow(x+this.w[i],123,this.nodes[i+1][2],123); });
+    // cache-hit shortcut label
+    this.svg.appendChild(T(482,80,"cache hit → return",{fill:"#34d399","font-size":9.5,"text-anchor":"middle"}));
+    this.svg.appendChild(T(587,170,"cache miss → DB",{fill:"#fbbf24","font-size":9.5,"text-anchor":"middle"}));
+    this.packets=[]; this.spawn=0;
+    this.cap("A redirect request flows Client → LB → Gateway → URL Service → Redis. ~85% hit the cache; misses fall through to PostgreSQL.");
+  }
+  frame(dt){
+    this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,1.0);
+      const hit=Math.random()<.82;
+      const p={i:0,prog:0,hit,dead:false,el:S("circle",{r:5,cx:this.nodes[0][2]+this.w[0]/2,cy:123,fill:"#c4a2ff",filter:"drop-shadow(0 0 5px rgba(196,162,255,.8))"})};
+      this.svg.appendChild(p.el); this.packets.push(p);
+    }
+    const stopIdx=p=>p.hit?4:5;
+    this.packets.forEach(p=>{ if(p.dead)return;
+      p.prog+=dt*1.7;
+      const maxSeg=stopIdx(p);
+      if(p.prog>=maxSeg){ // reached final node -> flash + remove
+        p.dead=true; p.el.remove();
+        this.flash(this.nodes[maxSeg][2]+this.w[maxSeg]/2, p.hit?"HIT":"MISS", p.hit);
+        return;
+      }
+      const seg=Math.floor(p.prog), f=p.prog-seg;
+      const a=this.nodes[seg][2]+this.w[seg]/2, b=this.nodes[seg+1][2]+this.w[seg+1]/2;
+      p.el.setAttribute("cx",a+(b-a)*f); p.el.setAttribute("fill",p.hit?"#34d399":"#c4a2ff");
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+    if(this.flashes) this.updateFlashes(dt);
+  }
+  flash(x,txt,hit){ if(!this.flashes)this.flashes=[]; const t=T(x,88,txt,{class:hit?"flash-hit":"flash-miss","font-size":12,"text-anchor":"middle"});
+    this.svg.appendChild(t); this.flashes.push({el:t,life:1}); }
+  updateFlashes(dt){ this.flashes.forEach(f=>{ f.life-=dt*1.4; f.el.setAttribute("opacity",Math.max(0,f.life));
+    f.el.setAttribute("y",88-(1-f.life)*14); if(f.life<=0){ f.el.remove(); f.done=true; } });
+    this.flashes=this.flashes.filter(f=>!f.done); }
+}
+
+/* ---- 2. Base62 encoding of an incrementing counter ---- */
+class Base62Viz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.n=1000000000; this.acc=0;
+    this.svg.appendChild(T(320,40,"Auto-increment ID  →  Base62 short code",{fill:"#8b8b93","font-size":12,"text-anchor":"middle"}));
+    this.idEl=T(320,95,"",{fill:"#c4a2ff","font-size":30,"font-weight":800,"text-anchor":"middle","font-family":"JetBrains Mono, monospace"});
+    this.svg.appendChild(this.idEl);
+    this.arrowEl=T(320,120,"▼",{fill:"#3a3a42","font-size":16,"text-anchor":"middle"}); this.svg.appendChild(this.arrowEl);
+    this.codeEl=T(320,160,"",{fill:"#34d399","font-size":34,"font-weight":800,"text-anchor":"middle","font-family":"JetBrains Mono, monospace"});
+    this.svg.appendChild(this.codeEl);
+    this.cap("Each new URL takes the next database ID and encodes it in Base62 (0-9a-zA-Z) — short, URL-safe and collision-free by construction.");
+  }
+  frame(dt){ this.acc+=dt; if(this.acc>=0.9){ this.acc=0; this.n+=randi(1,40);
+    this.idEl.textContent=this.n.toLocaleString();
+    this.codeEl.textContent="short.ly/"+base62(this.n);
+  } }
+}
+
+/* ---- 3. Hash + collision detection / retry ---- */
+class CollisionViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.slots=12; this.cellW=44; this.x0=52; this.y=110; this.filled=new Set();
+    for(let i=0;i<this.slots;i++){ this.svg.appendChild(S("rect",{x:this.x0+i*this.cellW,y:this.y,width:this.cellW-6,height:40,rx:7,fill:"#0c0c0e",stroke:"#3a3a42"})); }
+    this.cells=[];
+    for(let i=0;i<this.slots;i++){ const t=T(this.x0+i*this.cellW+(this.cellW-6)/2,this.y+25,"",{fill:"#34d399","font-size":12,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(t); this.cells.push(t); }
+    this.svg.appendChild(T(320,50,"Hash bucket table",{fill:"#8b8b93","font-size":12,"text-anchor":"middle"}));
+    this.msg=T(320,180,"",{fill:"#f4f4f5","font-size":12.5,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.msg);
+    this.acc=0;
+    this.cap("A random 6-char code is hashed to a bucket. If it's already taken (collision) the code is regenerated until a free slot is found.");
+  }
+  frame(dt){ this.acc+=dt; if(this.acc<1.1) return; this.acc=0;
+    if(this.filled.size>=this.slots){ this.filled.clear(); this.cells.forEach(c=>c.textContent=""); this.msg.textContent="↺ table reset"; this.msg.setAttribute("fill","#8b8b93"); return; }
+    let tries=0, slot;
+    do{ slot=randi(0,this.slots-1); tries++; }while(this.filled.has(slot)&&tries<20);
+    const code=B62[randi(0,61)]+B62[randi(0,61)]+B62[randi(0,61)];
+    if(this.filled.has(slot)){ this.msg.textContent="collision on every slot — grow the table"; this.msg.setAttribute("fill","#fbbf24"); return; }
+    this.filled.add(slot); this.cells[slot].textContent=code;
+    if(tries>1){ this.msg.textContent="collision × "+(tries-1)+" → regenerated code ✓"; this.msg.setAttribute("fill","#fbbf24"); }
+    else { this.msg.textContent="free slot on first try ✓"; this.msg.setAttribute("fill","#34d399"); }
+  }
+}
+
+/* ---- 4. Redirect read-path: cache hit vs miss ---- */
+class CacheViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.box(30,95,90,46,"Client","#3a3a42","👤");
+    this.box(255,40,110,46,"Redis","#34d399","⚡ cache");
+    this.box(255,150,110,46,"Postgres","#fbbf24","🗄️ db");
+    this.box(470,95,120,46,"301 Redirect","#7C3AED","→ long URL");
+    this.arrow(120,118,255,63); this.arrow(120,118,255,173);
+    this.arrow(365,63,470,118); this.arrow(365,173,470,118);
+    this.svg.appendChild(T(187,52,"lookup",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.hits=0; this.miss=0; this.packets=[]; this.spawn=0;
+    this.hitEl=T(320,218,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.hitEl);
+    this.cap("Cache-aside: most reads are served by Redis in <1ms (green). On a miss, the URL Service reads PostgreSQL, then back-fills the cache.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.35,.7); const hit=Math.random()<.82;
+      const p={hit,ph:0,dead:false,el:S("circle",{r:5,cx:75,cy:118,fill:"#c4a2ff",filter:"drop-shadow(0 0 5px rgba(255,255,255,.5))"})};
+      this.svg.appendChild(p.el); this.packets.push(p); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.6;
+      const midY=p.hit?63:173;
+      if(p.ph<1){ p.el.setAttribute("cx",75+(310-75)*p.ph); p.el.setAttribute("cy",118+(midY-118)*p.ph); p.el.setAttribute("fill",p.hit?"#34d399":"#fbbf24"); }
+      else if(p.ph<2){ const f=p.ph-1; p.el.setAttribute("cx",310+(530-310)*f); p.el.setAttribute("cy",midY+(118-midY)*f); }
+      else { p.dead=true; p.el.remove(); if(p.hit)this.hits++; else this.miss++; }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+    const tot=this.hits+this.miss; this.hitEl.textContent=`hits ${this.hits} · misses ${this.miss} · hit rate ${tot?Math.round(this.hits/tot*100):0}%`;
+  }
+}
+
+/* ---- 5. Click analytics via Kafka ---- */
+class AnalyticsViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.box(24,88,96,46,"Redirect","#7C3AED","click event");
+    this.box(250,40,120,40,"Kafka P0","#3a3a42");
+    this.box(250,92,120,40,"Kafka P1","#3a3a42");
+    this.box(250,144,120,40,"Kafka P2","#3a3a42");
+    this.box(470,88,130,46,"Analytics DB","#34d399","aggregate");
+    this.arrow(120,111,250,60); this.arrow(120,111,250,112); this.arrow(120,111,250,164);
+    this.arrow(370,60,470,111); this.arrow(370,112,470,111); this.arrow(370,164,470,111);
+    this.svg.appendChild(T(185,30,"partition by short code",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    this.packets=[]; this.spawn=0;
+    this.cap("Redirects are non-blocking: each click is published to Kafka and consumed asynchronously, so analytics never slows the redirect itself.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.28,.55); const part=randi(0,2); const py=[60,112,164][part];
+      const p={part,py,ph:0,dead:false,el:S("circle",{r:4.5,cx:72,cy:111,fill:"#c4a2ff",filter:"drop-shadow(0 0 4px rgba(255,255,255,.6))"})};
+      this.svg.appendChild(p.el); this.packets.push(p); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.5;
+      if(p.ph<1){ p.el.setAttribute("cx",72+(310-72)*p.ph); p.el.setAttribute("cy",111+(p.py-111)*p.ph); }
+      else if(p.ph<2){ const f=p.ph-1; p.el.setAttribute("cx",310+(535-310)*f); p.el.setAttribute("cy",p.py+(111-p.py)*f); p.el.setAttribute("fill","#34d399"); }
+      else { p.dead=true; p.el.remove(); }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 6. Sharding + replication + failover ---- */
+class ReplicationViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.primary=this.box(255,30,130,46,"Primary","#7C3AED","writes");
+    this.r1=this.box(120,150,130,46,"Replica A","#34d399","reads");
+    this.r2=this.box(390,150,130,46,"Replica B","#34d399","reads");
+    this.a1=S("path",{d:"M 300 76 L 200 150",stroke:"#3a3a42","stroke-width":1.5,"stroke-dasharray":"5 4"}); this.svg.appendChild(this.a1);
+    this.a2=S("path",{d:"M 340 76 L 440 150",stroke:"#3a3a42","stroke-width":1.5,"stroke-dasharray":"5 4"}); this.svg.appendChild(this.a2);
+    this.svg.appendChild(T(320,110,"async replication",{fill:"#8b8b93","font-size":9.5,"text-anchor":"middle"}));
+    this.msg=T(320,214,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.msg);
+    this.dots=[]; this.spawn=0; this.failTimer=0; this.failed=false;
+    this.cap("The primary handles writes and streams changes to read replicas. If the primary fails, a replica is promoted (leader election).");
+  }
+  frame(dt){ this.spawn-=dt; this.failTimer+=dt;
+    // periodic failover demo
+    if(this.failTimer>7 && !this.failed){ this.failed=true; this.primary.querySelector("rect").setAttribute("stroke","#f87171");
+      this.msg.textContent="⚠ primary down — promoting Replica A to primary"; this.msg.setAttribute("fill","#f87171"); }
+    if(this.failTimer>10){ this.failTimer=0; this.failed=false; this.primary.querySelector("rect").setAttribute("stroke","#7C3AED");
+      this.msg.textContent=""; }
+    if(this.spawn<=0 && !this.failed){ this.spawn=rand(.5,.9);
+      [[300,200],[340,440]].forEach(([sx,ex])=>{ const p={ph:0,sx,ex,dead:false,el:S("circle",{r:4,cx:sx,cy:76,fill:"#c4a2ff"})}; this.svg.appendChild(p.el); this.dots.push(p); }); }
+    this.dots.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.2; p.el.setAttribute("cx",p.sx+(p.ex-p.sx)*p.ph); p.el.setAttribute("cy",76+(150-76)*p.ph);
+      if(p.ph>=1){ p.dead=true; p.el.remove(); } });
+    this.dots=this.dots.filter(p=>!p.dead);
+  }
+}
+
+/* =====================================================================
+   CONTENT — code snippets (declared before SECTIONS to avoid TDZ)
+   template literals via string concat: no ASI / no backticks inside
+   ===================================================================== */
+const CODE_flow =
+"1. GET short.ly/aZ3kQ\n" +
+"2. LB  -> pick healthy URL-Service instance\n" +
+"3. Gateway -> auth + rate-limit\n" +
+"4. URL-Service -> Redis.get(\"aZ3kQ\")\n" +
+"     hit  -> 301 Location: <longUrl>       (~1 ms)\n" +
+"     miss -> SELECT long_url FROM urls ...  -> warm cache\n" +
+"5. publish {code, ts, ip} to Kafka (async)\n" +
+"6. browser follows redirect to the long URL";
+
+const CODE_create_java =
+"@PostMapping(\"/shorten\")\n" +
+"public ShortUrl create(@RequestBody CreateReq req){\n" +
+"  long id = idGenerator.next();        // distributed unique ID\n" +
+"  String code = Base62.encode(id);     // e.g. 15ftgG\n" +
+"  urlRepo.save(new Url(code, req.longUrl()));\n" +
+"  redis.set(code, req.longUrl(), Duration.ofHours(24));\n" +
+"  return new ShortUrl(\"https://short.ly/\" + code);\n" +
+"}";
+
+const CODE_create_sql =
+"CREATE TABLE urls (\n" +
+"  id        BIGSERIAL PRIMARY KEY,   -- auto-increment source of the code\n" +
+"  code      VARCHAR(10) UNIQUE NOT NULL,\n" +
+"  long_url  TEXT NOT NULL,\n" +
+"  created_at TIMESTAMPTZ DEFAULT now()\n" +
+");\n" +
+"CREATE INDEX idx_urls_code ON urls(code);";
+
+const CODE_create_py =
+"def shorten(long_url: str) -> str:\n" +
+"    new_id = db.next_id()            # atomic sequence / range block\n" +
+"    code = base62(new_id)\n" +
+"    db.insert(code=code, long_url=long_url)\n" +
+"    cache.set(code, long_url, ex=86400)\n" +
+"    return f'https://short.ly/{code}'";
+
+const CODE_base62_java =
+"static final String B62 =\n" +
+"  \"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\";\n\n" +
+"static String encode(long n){\n" +
+"  StringBuilder sb = new StringBuilder();\n" +
+"  if (n == 0) return \"0\";\n" +
+"  while (n > 0){ sb.append(B62.charAt((int)(n % 62))); n /= 62; }\n" +
+"  return sb.reverse().toString();\n" +
+"}";
+
+const CODE_base62_py =
+"B62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'\n\n" +
+"def base62(n: int) -> str:\n" +
+"    if n == 0: return '0'\n" +
+"    out = []\n" +
+"    while n > 0:\n" +
+"        out.append(B62[n % 62]); n //= 62\n" +
+"    return ''.join(reversed(out))";
+
+const CODE_base62_js =
+"const B62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';\n\n" +
+"function base62(n){\n" +
+"  if (n === 0) return '0';\n" +
+"  let s = '';\n" +
+"  while (n > 0){ s = B62[n % 62] + s; n = Math.floor(n / 62); }\n" +
+"  return s;\n" +
+"}";
+
+const CODE_collision_java =
+"String code;\n" +
+"int attempts = 0;\n" +
+"do {\n" +
+"  code = Base62.encode(hash(longUrl + attempts));  // hash-based\n" +
+"  attempts++;\n" +
+"} while (urlRepo.existsByCode(code) && attempts < 5);\n\n" +
+"// INSERT with a UNIQUE constraint is the real safety net\n" +
+"urlRepo.save(new Url(code, longUrl));";
+
+const CODE_collision_sql =
+"-- UNIQUE makes the DB reject duplicate codes atomically\n" +
+"INSERT INTO urls (code, long_url) VALUES ('aZ3kQ', 'https://...')\n" +
+"ON CONFLICT (code) DO NOTHING;\n" +
+"-- 0 rows affected => collision => regenerate and retry";
+
+const CODE_redirect_java =
+"@GetMapping(\"/{code}\")\n" +
+"public ResponseEntity<Void> redirect(@PathVariable String code){\n" +
+"  String longUrl = redis.get(code);            // cache-aside\n" +
+"  if (longUrl == null){\n" +
+"    longUrl = urlRepo.findLongUrl(code);        // miss -> DB\n" +
+"    if (longUrl == null) return ResponseEntity.notFound().build();\n" +
+"    redis.set(code, longUrl, Duration.ofHours(24));\n" +
+"  }\n" +
+"  kafka.send(\"clicks\", code);                  // async analytics\n" +
+"  return ResponseEntity.status(302)\n" +
+"     .location(URI.create(longUrl)).build();\n" +
+"}";
+
+const CODE_redirect_redis =
+"# read path\n" +
+"GET url:aZ3kQ                 # hit -> return immediately\n" +
+"# on miss, after reading Postgres:\n" +
+"SET url:aZ3kQ \"https://...\" EX 86400   # back-fill with 24h TTL";
+
+const CODE_analytics_java =
+"// redirect thread: fire-and-forget, never blocks the response\n" +
+"kafka.send(\"clicks\", code, new Click(code, now(), ip, referrer));\n\n" +
+"@KafkaListener(topics = \"clicks\", groupId = \"analytics\")\n" +
+"public void consume(Click c){\n" +
+"  analyticsRepo.increment(c.code(), c.day());   // aggregate async\n" +
+"}";
+
+const CODE_shard_sql =
+"-- shard by hash(code) across N nodes; each node primary + replicas\n" +
+"-- routing (app-side or via a proxy like Vitess / Citus):\n" +
+"shard = consistentHash(code) % NUM_SHARDS;\n" +
+"-- writes -> primary of that shard\n" +
+"-- reads  -> any replica of that shard (read-heavy traffic)";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A URL shortener maps a long URL to a short, unique code (e.g. <b>short.ly/aZ3kП</b>) and redirects users from the code back to the original URL. It is a classic <b>read-heavy</b> system — reads (redirects) outnumber writes (creations) by roughly 100:1.",
+    problem:"Long URLs are hard to share, break in emails/SMS, and can't be tracked. A shortener makes them compact, brandable and analytics-friendly — while serving billions of redirects with sub-100ms latency.",
+    how:["Client sends the request; DNS resolves and a Load Balancer picks a healthy instance.","The API Gateway handles TLS, auth and rate limiting, then routes to the URL Service.","For a redirect, the service checks Redis first (cache-aside).","On a cache miss it reads the sharded PostgreSQL store and back-fills Redis.","It returns a 301/302 redirect; the click is published to Kafka for async analytics."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Read path is cache-first → very low latency","Stateless services scale horizontally behind the LB","Analytics is async so it never slows redirects"],
+    disadvantages:["Extra hops (LB, gateway, cache) add operational complexity","Cache/DB consistency must be managed","Hot keys (viral links) need special handling"],
+    interview:[["Why is a URL shortener read-heavy and why does it matter?","Each short URL is created once but redirected many times (often 100:1). That shapes the whole design: optimize the read path with a cache, use read replicas, and keep writes simple (an atomic counter + Base62)."]] },
+
+  { id:"create", num:2, icon:"✍️", tag:"Write Path", title:"Creating a Short URL", viz:Base62Viz,
+    definition:"On creation, the system assigns a globally unique number to the URL (from an auto-increment sequence or a distributed ID generator) and encodes that number in <b>Base62</b> to get a short, URL-safe code.",
+    problem:"You need short codes that are unique, non-guessable enough, and generated fast at scale — without two requests ever producing the same code.",
+    how:["Receive the long URL (and validate/normalize it).","Get the next unique ID from a counter / ID generator (e.g. a range block, Snowflake, or DB sequence).","Base62-encode the ID → a 6-7 character code.","Store code → long URL in PostgreSQL (and warm Redis).","Return short.ly/<code> to the client."],
+    code:{ "Java":CODE_create_java, "SQL":CODE_create_sql, "Python":CODE_create_py },
+    advantages:["Counter + Base62 guarantees uniqueness with no collision checks","O(log₆₂ n) tiny codes — 7 chars covers trillions","Sequential IDs are index-friendly in the DB"],
+    disadvantages:["Sequential codes are guessable/enumerable (use a salt/offset or hashids if that matters)","A single global counter is a bottleneck → hand out ID ranges per node","Custom aliases need a separate uniqueness check"],
+    interview:[["Counter+Base62 vs hashing the URL — which is better?","Counter+Base62 is collision-free and fast but produces predictable codes. Hashing (e.g. MD5→Base62, take first 7) is unpredictable but needs collision detection/retries. Most designs prefer a distributed counter with per-node ID ranges."]] },
+
+  { id:"base62", num:3, icon:"🔢", tag:"Encoding", title:"Base62 Encoding", viz:Base62Viz,
+    definition:"Base62 represents a number using 62 characters — <code>0-9</code>, <code>a-z</code>, <code>A-Z</code>. It packs far more values per character than Base10, producing short, URL-safe codes with no special characters to escape.",
+    problem:"You want the shortest possible code from a numeric ID while keeping it copy-paste and URL safe (no <code>+</code>, <code>/</code>, <code>=</code> like Base64).",
+    how:["Take the numeric ID.","Repeatedly divide by 62; map each remainder to a Base62 character.","Read the characters in reverse to form the code.","Decoding reverses it: for each char, result = result×62 + value(char)."],
+    code:{ "Java":CODE_base62_java, "Python":CODE_base62_py, "JavaScript":CODE_base62_js },
+    advantages:["62⁷ ≈ 3.5 trillion codes in just 7 chars","URL-safe — unlike Base64 (which has +, /, =)","Reversible: code ↔ ID without a lookup if you want"],
+    disadvantages:["Case-sensitive (aZ ≠ Az) — can confuse users typing manually","Reveals order if IDs are sequential","Not human-memorable"],
+    interview:[["Why Base62 and not Base64?","Base64 includes +, / and = which are unsafe or need URL-encoding. Base62 sticks to alphanumerics, so codes are clean in URLs. Base62 of 7 chars still yields ~3.5 trillion combinations."]] },
+
+  { id:"collision", num:4, icon:"💥", tag:"Correctness", title:"Uniqueness & Collision Handling", viz:CollisionViz,
+    definition:"Two URLs must never map to the same code. With a counter+Base62 approach collisions are impossible by design; with hashing you must <b>detect and resolve</b> collisions.",
+    problem:"If you hash the URL to make codes unpredictable, different inputs can hash to the same short code (the birthday problem) — corrupting redirects.",
+    how:["Generate a candidate code (hash → Base62, or random).","Attempt an INSERT with a UNIQUE constraint on the code column.","If it fails (collision) → regenerate and retry.","Optionally use a Bloom filter to cheaply pre-check existence and skip most DB round-trips.","Cap retries; grow code length if the space fills up."],
+    code:{ "Java":CODE_collision_java, "SQL":CODE_collision_sql },
+    advantages:["UNIQUE constraint makes correctness the DB's job","Bloom filter removes ~99% of existence checks cheaply","Retries are rare when the keyspace is large"],
+    disadvantages:["Each collision costs an extra round-trip","Bloom filters have false positives (never false negatives)","Random codes waste keyspace vs sequential"],
+    interview:[["How does a Bloom filter help here?","Before hitting the DB, check a Bloom filter of existing codes. If it says 'definitely not present', you can insert without a lookup. If it says 'maybe present', you verify in the DB. It trades a small false-positive rate for far fewer DB reads."]] },
+
+  { id:"redirect", num:5, icon:"⚡", tag:"Read Path", title:"Redirect & Caching", viz:CacheViz,
+    definition:"A redirect looks up the code and returns an HTTP <b>301</b> (permanent) or <b>302</b> (temporary) to the original URL. Because reads dominate, a <b>Redis cache</b> (cache-aside) serves the vast majority of lookups.",
+    problem:"Billions of redirects must resolve in a few milliseconds. Hitting PostgreSQL for every redirect would overwhelm it.",
+    how:["Look up the code in Redis.","Cache hit → return the redirect immediately (<1ms).","Cache miss → read PostgreSQL, then write the result back to Redis with a TTL.","Return 301/302 to the browser.","Publish the click event to Kafka (fire-and-forget)."],
+    code:{ "Java":CODE_redirect_java, "Redis":CODE_redirect_redis },
+    advantages:["~85-95% of reads served from memory","Back-filling keeps the cache hot automatically","301 lets browsers cache the redirect too"],
+    disadvantages:["301 is cached by browsers → you lose per-click analytics (use 302 if you must count every hit)","Cache invalidation needed if a URL is edited/deleted","Hot keys can overload a single Redis shard"],
+    interview:[["301 vs 302 for redirects — trade-offs?","301 (permanent) is cached by browsers/proxies, so subsequent clicks skip your server — great for latency/load but you lose analytics on cached hits. 302 (temporary) forces the browser to ask every time, giving accurate analytics at higher load. Many shorteners use 302 to track clicks."]] },
+
+  { id:"analytics", num:6, icon:"📊", tag:"Async", title:"Click Analytics (Kafka)", viz:AnalyticsViz,
+    definition:"Every redirect emits a click event (code, timestamp, geo, referrer, device). These are streamed through <b>Kafka</b> and consumed asynchronously into an analytics store — decoupled from the redirect hot path.",
+    problem:"Writing analytics synchronously on each redirect would add latency and couple availability of the redirect to the analytics DB.",
+    how:["On redirect, publish a lightweight event to a Kafka topic, keyed by short code.","The redirect returns immediately — it does not wait for analytics.","Consumer groups read partitions in parallel and aggregate (counts, geo, time-series).","Results land in a columnar/analytics DB (e.g. ClickHouse, Cassandra, or a warehouse).","Dashboards query the aggregated data."],
+    code:{ "Java":CODE_analytics_java },
+    advantages:["Redirect latency is unaffected by analytics","Kafka buffers spikes and enables replay","Horizontal scale via partitions + consumer groups"],
+    disadvantages:["Eventual consistency — counts lag slightly","More moving parts to operate","Ordering only within a partition (key by code)"],
+    interview:[["Why use Kafka for click analytics instead of writing to the DB directly?","It decouples the fast redirect path from the slower analytics write, absorbs traffic spikes, allows multiple independent consumers (real-time + batch), and supports replay if a consumer fails — all without slowing redirects."]] },
+
+  { id:"scale", num:7, icon:"🗄️", tag:"Scale", title:"Sharding & Replication", viz:ReplicationViz,
+    definition:"To scale storage and reads, the URL table is <b>sharded</b> (partitioned across nodes) and each shard is <b>replicated</b> (a primary for writes plus read replicas). <b>Consistent hashing</b> spreads keys evenly and minimizes reshuffling when nodes change.",
+    problem:"A single database can't hold trillions of rows or serve global read traffic. You must partition data and add read capacity without huge re-balancing.",
+    how:["Choose a shard key (the short code / its hash).","Route each code to a shard via consistent hashing.","Each shard has a primary (writes) and replicas (reads).","Replicas serve the read-heavy redirect traffic.","On primary failure, promote a replica (leader election)."],
+    code:{ "SQL":CODE_shard_sql },
+    advantages:["Near-linear read scaling via replicas","Consistent hashing remaps only K/N keys when scaling","Failover keeps the system available"],
+    disadvantages:["Replication lag → replicas may be briefly stale","Cross-shard queries are hard (avoid them)","Rebalancing and hotspots need monitoring"],
+    interview:[["Why consistent hashing for sharding?","With plain modulo hashing, adding/removing a node remaps almost every key. Consistent hashing maps nodes and keys onto a ring so only ~K/N keys move when a node joins or leaves — critical for caches and sharded stores at scale."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      // sidebar entry
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      // section
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      // viz
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap"));
+      card.appendChild(viz);
+
+      // how
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      // code
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      // pros / cons
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      // interview mini
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+
+      // wire viz
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["🔑","Hashing","MD5/SHA or a counter turns a URL into a fixed key. Counter+Base62 avoids collisions; hashing needs retries."],
+  ["🔢","Base62","0-9a-zA-Z encoding gives 62⁷ ≈ 3.5T codes in 7 URL-safe characters — no +, / or = to escape."],
+  ["💥","Collision Resolution","UNIQUE constraint + regenerate-on-conflict, or a distributed counter that is collision-free by design."],
+  ["⚡","Redis Cache","Cache-aside read path serves ~85-95% of redirects from memory in <1ms; back-fill on miss with a TTL."],
+  ["🌸","Bloom Filter","Probabilistic set to cheaply pre-check if a code exists, removing most DB lookups (false positives only)."],
+  ["🗄️","Sharding","Partition the URL table by hash(code) so no single DB holds trillions of rows or all the read traffic."],
+  ["⭕","Consistent Hashing","Map nodes+keys on a ring so adding/removing a node remaps only K/N keys — vital for caches & shards."],
+  ["🛡️","Rate Limiting","Throttle abusive creators/redirect scrapers at the gateway (token bucket) to protect the backend."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   CAPACITY table
+   ===================================================================== */
+const CAP=[
+  ["New URLs / day","100 million","~1,160 writes/sec average"],
+  ["Redirects / day","10 billion","100:1 read:write → ~116K reads/sec"],
+  ["Storage / URL","~500 bytes","code + long URL + metadata"],
+  ["Storage / year","~18 TB","100M/day × 500B × 365"],
+  ["Keyspace (7 chars)","62⁷ ≈ 3.5 trillion","~95 years at 100M/day"],
+  ["Cache size (hot 20%)","~a few hundred GB","Redis holds the hottest codes"]
+];
+function buildCapacity(){ const t=$("capTable");
+  t.innerHTML="<thead><tr><th>Metric</th><th>Estimate</th><th>Reasoning</th></tr></thead><tbody>"+
+    CAP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td style="color:var(--muted)">${r[2]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["How would you design a URL shortener end to end?","Clarify scale (reads>>writes), then: generate a unique ID (distributed counter) → Base62 encode → store code→URL in a sharded DB → serve redirects from a Redis cache-aside layer → stream clicks to Kafka for async analytics → put a gateway with rate limiting in front. Discuss 301 vs 302 and capacity numbers."],
+  ["How do you generate unique short codes at scale?","Prefer a distributed counter that hands out ID ranges (blocks) to each node, then Base62-encode. This is collision-free and fast. Alternatives: Snowflake IDs, or hashing the URL with collision detection via a UNIQUE constraint."],
+  ["How do you guarantee no two URLs get the same code?","With counter+Base62 it's impossible by construction. With hashing, put a UNIQUE constraint on the code column and regenerate on conflict; optionally use a Bloom filter to skip most existence checks."],
+  ["301 vs 302 redirect — which and why?","301 is permanent and cached by browsers (fast, less load, but you miss cached clicks in analytics). 302 is temporary and hits your server every time (accurate analytics, more load). Choose based on whether per-click tracking matters."],
+  ["How do you make redirects fast?","Cache-aside with Redis: check cache first, serve hits from memory (<1ms); on a miss read the DB and back-fill. Use read replicas and keep the hot set in cache. ~85-95% hit rate is typical."],
+  ["How do you scale the database?","Shard by hash(code) using consistent hashing, with a primary + read replicas per shard. Reads (redirects) go to replicas; writes go to the primary. Avoid cross-shard queries."],
+  ["How do you handle analytics without slowing redirects?","Publish each click to Kafka (fire-and-forget) and process asynchronously with consumer groups into an analytics store. The redirect returns immediately, independent of analytics availability."],
+  ["What about custom aliases and expiry?","Custom aliases need an explicit uniqueness check (UNIQUE constraint) before accepting. For expiry, store a TTL/expires_at and lazily delete or filter expired codes; mirror the TTL in Redis."],
+  ["How do you prevent abuse (spam/malicious links)?","Rate-limit creation at the gateway, validate/scan target URLs against blocklists, require auth for high volume, and monitor for scanning of the code space."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE (create + redirect)
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Create (Java)":CODE_create_java,
+  "Redirect (Java)":CODE_redirect_java,
+  "Base62 (Python)":CODE_base62_py,
+  "Schema (SQL)":CODE_create_sql,
+  "Redis":CODE_redirect_redis
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"],
+    ["Kafka","🪵","Click event streaming","kafka.html"],
+    ["Architecture","🏗️","Full system diagram","system-design.html"],
+    ["Interview Prep","🧑‍💻","Last-hour revision","interview-last-hour.html"],
+    ["Q&A Hub","❓","Topic question bank","../interview-quetions/index.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — shorten + redirect traffic simulator
+   ===================================================================== */
+class Playground {
+  constructor(){ this.counter=1000000; this.urls=[]; this.hits=0; this.miss=0; this.playing=false;
+    this.host=$("pgViz"); this.svg=S("svg",{viewBox:"0 0 620 300"}); this.host.appendChild(this.svg);
+    this.buildStage(); this.bind(); this.last=performance.now(); this.packets=[]; this.spawn=0;
+    const loop=now=>{ const dt=Math.min(.05,(now-this.last)/1000); this.last=now; if(this.playing)this.frame(dt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+  buildStage(){
+    const b=(x,y,w,h,label,color,sub)=>{ const g=S("g");
+      g.appendChild(S("rect",{x,y,width:w,height:h,rx:10,fill:"#1a1a1c",stroke:color,"stroke-width":1.5}));
+      g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":12,"font-weight":600,"text-anchor":"middle"}));
+      if(sub)g.appendChild(T(x+w/2,y+h/2+13,sub,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+      this.svg.appendChild(g); return g; };
+    b(30,125,90,48,"Client","#3a3a42","👤");
+    b(250,55,120,48,"Redis","#34d399","⚡ cache");
+    b(250,195,120,48,"Postgres","#fbbf24","🗄️ db");
+    b(470,125,120,48,"301/302","#7C3AED","redirect");
+    this.svg.appendChild(S("path",{d:"M 120 149 L 250 79",stroke:"#3a3a42","stroke-width":1.5}));
+    this.svg.appendChild(S("path",{d:"M 120 149 L 250 219",stroke:"#3a3a42","stroke-width":1.5}));
+    this.svg.appendChild(S("path",{d:"M 370 79 L 470 149",stroke:"#3a3a42","stroke-width":1.5}));
+    this.svg.appendChild(S("path",{d:"M 370 219 L 470 149",stroke:"#3a3a42","stroke-width":1.5}));
+    this.svg.appendChild(T(310,45,"cache-aside lookup",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+  }
+  bind(){
+    const sync=()=>{ $("pgRpsV").textContent=$("pgRps").value; $("pgHitV").textContent=$("pgHit").value+"%"; };
+    ["pgRps","pgHit"].forEach(id=>$(id).addEventListener("input",sync)); sync();
+    $("pgShorten").onclick=()=>this.shorten();
+    $("pgUrl").addEventListener("keydown",e=>{ if(e.key==="Enter")this.shorten(); });
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.playing=false; this.hits=0; this.miss=0; this.packets.forEach(p=>p.el.remove()); this.packets=[]; this.updateStats(); };
+  }
+  shorten(){
+    const url=($("pgUrl").value||"").trim(); if(!url){ return; }
+    this.counter+=randi(1,7);
+    const code=base62(this.counter);
+    this.urls.push({code,url});
+    $("pgOut").innerHTML=`<span style="color:var(--muted)">${CodeViewer.esc(url).slice(0,46)}${url.length>46?"…":""}</span><br>→ <span class="code">short.ly/${code}</span> &nbsp;<span style="color:var(--muted)">(id ${this.counter.toLocaleString()})</span>`;
+    const row=el("div","short-row",`<span class="sc">/${code}</span><span class="lu">${CodeViewer.esc(url)}</span>`);
+    const list=$("pgList"); list.insertBefore(row,list.firstChild);
+    while(list.children.length>8) list.removeChild(list.lastChild);
+    this.updateStats();
+  }
+  frame(dt){ this.spawn-=dt; const rps=+$("pgRps").value; const hitRatio=(+$("pgHit").value)/100;
+    if(this.spawn<=0){ this.spawn=1/Math.max(1,rps);
+      const hit=Math.random()<hitRatio;
+      const p={hit,ph:0,dead:false,el:S("circle",{r:5,cx:75,cy:149,fill:"#c4a2ff",filter:"drop-shadow(0 0 5px rgba(255,255,255,.5))"})};
+      this.svg.appendChild(p.el); this.packets.push(p); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.5; const my=p.hit?79:219;
+      if(p.ph<1){ p.el.setAttribute("cx",75+(310-75)*p.ph); p.el.setAttribute("cy",149+(my-149)*p.ph); p.el.setAttribute("fill",p.hit?"#34d399":"#fbbf24"); }
+      else if(p.ph<2){ const f=p.ph-1; p.el.setAttribute("cx",310+(530-310)*f); p.el.setAttribute("cy",my+(149-my)*f); }
+      else { p.dead=true; p.el.remove(); p.hit?this.hits++:this.miss++; this.updateStats(); }
+    });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+  updateStats(){ $("pgCount").textContent=this.urls.length; $("pgHits").textContent=this.hits; $("pgMiss").textContent=this.miss;
+    const tot=this.hits+this.miss; $("pgRate").textContent=tot?Math.round(this.hits/tot*100)+"%":"—"; }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCapacity(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Checkpointing — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    const y=100,x0=50,x1=570;g.appendChild(S("line",{x1:x0,y1:y,x2:x1,y2:y,stroke:"#2f3742","stroke-width":3}));
+    const ckpts=[130,230,330,430];ckpts.forEach((x,i)=>{g.appendChild(S("line",{x1:x,y1:y-14,x2:x,y2:y+14,stroke:"#38bdf8","stroke-width":2}));g.appendChild(TX(x,y-20,"ckpt "+(i+1),{fill:"#38bdf8","font-size":8,"text-anchor":"middle"}));});
+    const crash=500;g.appendChild(TX(crash,y-20,"💥",{fill:"#f87171","font-size":13,"text-anchor":"middle"}));
+    g.appendChild(S("line",{x1:crash,y1:y-14,x2:crash,y2:y+14,stroke:"#f87171","stroke-width":2}));
+    if(phase===0){g.appendChild(S("line",{x1:x0,y1:y,x2:crash,y2:y,stroke:"#f87171","stroke-width":3}));
+      g.appendChild(S("path",{d:"M"+crash+" "+y+" Q "+((crash+x0)/2)+" 150 "+x0+" "+y,fill:"none",stroke:"#f87171","stroke-width":2,"stroke-dasharray":"5 4","marker-end":"url(#a)"}));
+      g.appendChild(TX((crash+x0)/2,160,"restart from ZERO — all work lost",{fill:"#f87171","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="no checkpoints — crash means redo everything";lbl.setAttribute("fill","#f87171");sub.textContent="a long job that crashes near the end must start over from the beginning";}
+    else{g.appendChild(S("line",{x1:x0,y1:y,x2:crash,y2:y,stroke:"#34d399","stroke-width":3}));
+      g.appendChild(S("path",{d:"M"+crash+" "+y+" Q 465 150 430 "+y,fill:"none",stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(TX(465,162,"resume from last ckpt",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(S("rect",{x:430,y:y-6,width:70,height:12,rx:3,fill:"rgba(251,191,36,.3)",stroke:"#fbbf24"}));g.appendChild(TX(465,y+26,"only redo this",{fill:"#fbbf24","font-size":8,"text-anchor":"middle"}));
+      lbl.textContent="checkpoints — resume, redo only the last slice";lbl.setAttribute("fill","#34d399");sub.textContent="restore the latest saved state; you only lose work done since the last checkpoint";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Run a 100-step job that periodically <b>checkpoints</b> its progress. Crash it partway, then resume: with checkpointing you restore the last saved state and only redo the work since then; without it you restart from zero. Tune the checkpoint interval to see the trade-off between overhead and wasted work.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Checkpoint every <b id="pgIV">20</b> steps</label><input id="pgInt" type="range" min="0" max="40" value="20" step="5"></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRun" class="go">▶ Run job</button><button id="pgCrash">💥 Crash now</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgResume">↩ Resume</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Interval 0 = no checkpointing. Frequent checkpoints reduce wasted work but add I/O overhead each time. Set it from your job length and failure rate.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Progress</div><div class="v ac" id="pgProg">0%</div></div>
+        <div class="pg-stat"><div class="k">Last checkpoint</div><div class="v ok" id="pgLast">—</div></div>
+        <div class="pg-stat"><div class="k">Checkpoints</div><div class="v" id="pgCkN">0</div></div>
+        <div class="pg-stat"><div class="k">Work wasted</div><div class="v wa" id="pgWaste">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=100,W=560,H=110;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let step,last,ckpts,waste,raf3=null,crashed;
+  function reset(){step=0;last=0;ckpts=[];waste=0;crashed=false;if(raf3)cancelAnimationFrame(raf3);raf3=null;draw();stats();$("pgLog").innerHTML="";log("run the job, then crash it to test recovery","ac");}
+  function interval(){return +$("pgInt").value||0;}
+  function run(){if(raf3)return;crashed=false;let t=performance.now();
+    function fr(now){if(now-t>=90){t=now;step++;
+      const iv=interval();if(iv>0&&step%iv===0){last=step;ckpts.push(step);log("💾 checkpoint saved at step "+step,"ok");}
+      if(step>=N){log("✅ job complete at step "+N,"ok");draw();stats();raf3=null;return;}}
+      draw();stats();raf3=requestAnimationFrame(fr);}
+    log("▶ job started"+(interval()>0?" (checkpoint every "+interval()+" steps)":" (NO checkpointing)"),"ac");
+    raf3=requestAnimationFrame(fr);}
+  function crash(){if(raf3){cancelAnimationFrame(raf3);raf3=null;}if(step===0){log("nothing running","wa");return;}
+    crashed=true;log("💥 CRASH at step "+step+"! In-memory progress since last checkpoint is gone.","bad");draw();stats();}
+  function resume(){if(!crashed){log("no crash to resume from","wa");return;}
+    const lost=step-last;waste+=lost;
+    if(interval()>0){log("↩ resume: restore checkpoint at step "+last+" → redo only "+lost+" step"+(lost!==1?"s":"")+" (saved "+last+")","ok");step=last;}
+    else{log("↩ no checkpoint → restart from step 0 → redo ALL "+step+" steps of work","bad");step=0;last=0;}
+    crashed=false;draw();stats();run();}
+  function stats(){$("pgProg").textContent=Math.round(100*step/N)+"%";$("pgLast").textContent=last?("step "+last):"—";
+    $("pgCkN").textContent=ckpts.length;$("pgWaste").textContent=waste+" steps";}
+  function draw(){svg.innerHTML="";
+    const x0=20,x1=W-20,y=50;svg.appendChild(TX(x0,24,"job progress:",{fill:"#8b8b93","font-size":10}));
+    svg.appendChild(S("rect",{x:x0,y:y,width:x1-x0,height:26,rx:6,fill:"#141416",stroke:"#242a33"}));
+    const w=(x1-x0)*(step/N);
+    svg.appendChild(S("rect",{x:x0,y:y,width:Math.max(0,w),height:26,rx:6,fill:crashed?"#f87171":"#34d399"}));
+    // saved portion overlay
+    const sw=(x1-x0)*(last/N);
+    if(last>0){svg.appendChild(S("line",{x1:x0+sw,y1:y-6,x2:x0+sw,y2:y+32,stroke:"#38bdf8","stroke-width":2}));svg.appendChild(TX(x0+sw,y+44,"✓ saved: "+last,{fill:"#38bdf8","font-size":9,"text-anchor":"middle"}));}
+    ckpts.forEach(c=>{const cx=x0+(x1-x0)*(c/N);svg.appendChild(S("circle",{cx,cy:y+13,r:3,fill:"#38bdf8"}));});
+    if(crashed)svg.appendChild(TX(x0+w,y-8,"💥",{fill:"#f87171","font-size":12,"text-anchor":"middle"}));
+    svg.appendChild(TX(W/2,H-6,"blue markers = checkpoints · blue line = last saved state (resume point)",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgInt").oninput=()=>$("pgIV").textContent=$("pgInt").value;
+  $("pgRun").onclick=run;$("pgCrash").onclick=crash;$("pgResume").onclick=resume;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"📌",title:"Checkpointing",category:"Resilience",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Saving State to Resume After Failure",
+  tagline:"Periodically persist a job's progress so that, after a crash, it can <b>resume</b> from the last saved state instead of restarting from scratch. Essential for long-running computations, stream processors, and stateful jobs.",
+  pills:["<b>Snapshot</b> state","<b>Resume</b> not restart","<b>Bounded</b> lost work","<b>Interval</b> trade-off"],
+  overview:"A <b>checkpoint</b> is a saved snapshot of a computation's state at a point in time, written to durable storage. If the process crashes, is preempted, or the machine dies, the job restores the most recent checkpoint and continues from there — only the work done <b>since</b> that checkpoint is lost and must be redone. Without checkpointing, any failure in a long job means restarting from the beginning, which can waste hours or days of compute. Checkpointing is fundamental in many domains: <b>stream processing</b> (Flink/Spark save operator state and input offsets so exactly-once processing survives failures), <b>ML training</b> (save model weights and optimizer state every N steps so a crashed multi-day run resumes), <b>batch/HPC</b> jobs, <b>databases</b> (checkpoints flush dirty pages and bound crash-recovery/WAL replay time), and <b>VM/container migration</b>. The key design decision is the <b>checkpoint interval</b>: frequent checkpoints minimize lost work on failure but add I/O overhead and can slow the job; infrequent checkpoints are cheap but risk redoing more work. The optimal interval balances checkpoint cost against expected failure rate and recovery cost.",
+  problem:"Long-running or stateful jobs are vulnerable: a crash, spot-instance preemption, deploy, or node failure at hour 20 of a 24-hour job destroys all progress if state lives only in memory. Recomputing from scratch is expensive and sometimes infeasible. Checkpointing makes progress durable and recoverable, bounding the cost of any single failure.",
+  diagram,diagramCaption:"Without checkpoints a crash restarts from zero; with them you resume from the last snapshot, redoing only the tail.",
+  how:[
+    "Periodically serialize the job's state (progress, in-memory data, offsets) to durable storage.",
+    "Write checkpoints atomically/consistently (e.g., write-new-then-swap) so a crash mid-write can't corrupt them.",
+    "On restart, load the most recent valid checkpoint and resume from that point.",
+    "For streams, checkpoint operator state together with input offsets so replay is consistent (exactly-once).",
+    "Tune the interval and prune old checkpoints; keep the last known-good to guard against a bad latest one."
+  ],
+  complexity:[["Interval","balance overhead vs loss"],["Lost work","≤ one interval"],["Storage","state snapshot"],["Recovery","load + replay tail"]],
+  advantages:["Bounds wasted work to one interval on failure","Enables long/preemptible (spot) jobs to survive interruptions","Foundation of exactly-once stream processing","Bounds database crash-recovery time","Allows pause/resume and migration of stateful work"],
+  disadvantages:["Checkpoint I/O adds overhead & can pause the job","Large state = expensive/slow snapshots","Frequency tuning is workload-specific","Consistency of the snapshot must be ensured","Storage cost for retained checkpoints"],
+  tradeoffs:"Checkpointing trades runtime overhead for recovery speed and bounded loss. Checkpoint too often and the constant serialization/I/O (and any stop-the-world pauses) slow the job and inflate storage; checkpoint too rarely and a failure forces redoing a large slice of work. The optimal interval depends on how long a checkpoint takes to write, how often failures occur, and how costly re-computation is — classic results (e.g., Young/Daly) derive an optimal interval roughly proportional to √(2 × checkpoint_cost × mean_time_between_failures). Large state makes checkpoints expensive, motivating <b>incremental</b> checkpoints (save only changes) and asynchronous/non-blocking snapshots. You also must ensure the snapshot is <b>consistent</b> — for distributed jobs this requires coordinated snapshots (e.g., Chandy-Lamport) so the saved state is a valid global state, not a torn mix.",
+  whenNot:"Skip checkpointing for short jobs where a full restart is cheap, for stateless work that can simply be retried, or when the checkpoint overhead would exceed the expected cost of recomputation (rare failures + cheap recompute). Very small, idempotent tasks are better handled by retries than snapshots. Also avoid over-frequent checkpoints on jobs with huge state where snapshotting dominates runtime.",
+  sim,
+  code:{
+"ML training":`# Save model + optimizer state every N steps so a crash resumes, not restarts.\nfor step in range(start_step, total_steps):\n    loss = train_one_step(batch)\n    if step % CHECKPOINT_EVERY == 0:\n        torch.save({                     # atomic-ish: write tmp then rename\n            "step": step,\n            "model": model.state_dict(),\n            "optim": optimizer.state_dict(),\n        }, f"ckpt-{step}.tmp")\n        os.replace(f"ckpt-{step}.tmp", "latest.ckpt")   # swap in atomically\n\n# On restart:\nif os.path.exists("latest.ckpt"):\n    c = torch.load("latest.ckpt")\n    model.load_state_dict(c["model"]); optimizer.load_state_dict(c["optim"])\n    start_step = c["step"] + 1        # resume from the last checkpoint`,
+"Stream processing":`// Flink: periodic, consistent checkpoints of operator state + source offsets.\nenv.enableCheckpointing(10_000);                       // every 10s\nenv.getCheckpointConfig()\n   .setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE)\n   .setMinPauseBetweenCheckpoints(5_000)\n   .enableExternalizedCheckpoints(RETAIN_ON_CANCELLATION);\n// On failure: restore state + rewind Kafka offsets to the checkpoint =>\n// records between failure and last checkpoint are re-read -> exactly-once effect.`,
+"Optimal interval":`# Frequent checkpoints -> less lost work but more overhead. Rough optimum:\n#   T_opt ≈ sqrt(2 * C * MTBF)\n#     C    = time to write one checkpoint\n#     MTBF = mean time between failures\n# e.g. C = 30s, MTBF = 2h(7200s):  T_opt ≈ sqrt(2*30*7200) ≈ 657s (~11 min)\n\n# Reduce C with INCREMENTAL checkpoints (save only changed state) and\n# ASYNC/non-blocking snapshots so the job keeps running while it saves.`
+  },
+  realWorld:[
+    ["Apache Flink / Spark","Consistent checkpoints of state + offsets for exactly-once stream processing."],
+    ["ML training (PyTorch/TF)","Periodic weight/optimizer checkpoints for multi-day/spot-instance runs."],
+    ["Databases (Postgres/MySQL)","Checkpoints flush dirty pages, bounding WAL replay on crash recovery."],
+    ["HPC / scientific computing","Checkpoint-restart for long simulations on shared clusters."],
+    ["VM / container migration","Snapshot memory/state to pause, move, or resume workloads."]
+  ],
+  interview:[
+    ["basic","What is checkpointing and why is it used?","Checkpointing periodically saves a computation's state to durable storage so that, after a crash or interruption, the job resumes from the last snapshot instead of restarting from scratch. It bounds the work lost by any single failure to at most one checkpoint interval, which is essential for long-running or stateful jobs where restarting would waste enormous compute."],
+    ["basic","What's the trade-off in choosing checkpoint frequency?","More frequent checkpoints reduce how much work is lost on failure (you resume closer to the crash point) but add I/O overhead and can pause the job, slowing it and using more storage. Less frequent checkpoints are cheaper but risk redoing more work. You balance checkpoint cost against failure rate — roughly, the optimal interval grows with checkpoint cost and mean time between failures."],
+    ["inter","How does checkpointing enable exactly-once stream processing?","Stream processors like Flink periodically take a consistent checkpoint of all operator state together with the input source offsets. On failure, they restore that state and rewind the sources (e.g., Kafka offsets) to the checkpoint, so records after the checkpoint are reprocessed from the restored state. Combined with idempotent/transactional sinks, this yields exactly-once effect despite reprocessing."],
+    ["inter","How do you ensure a checkpoint isn't corrupted by a crash mid-write?","Write atomically: save to a temporary file/object and then atomically rename/swap it into place, so the 'latest' pointer only ever references a fully-written checkpoint. Keep the previous known-good checkpoint too, so if the newest is bad you can fall back. For object stores, write a new versioned object and update a manifest pointer last."],
+    ["adv","How do you checkpoint a distributed computation consistently?","You need a coordinated/global snapshot so the saved state is a valid global state, not a torn mix of different moments. Algorithms like Chandy-Lamport use marker messages to capture each process's state and the in-flight messages on channels consistently. Flink uses a variant (asynchronous barrier snapshotting): barriers flow through the dataflow, and each operator snapshots when it has received barriers on all inputs."],
+    ["adv","How do you reduce the cost of checkpointing large state?","Use incremental checkpoints (persist only the state that changed since the last checkpoint rather than the whole thing), asynchronous/non-blocking snapshots so the job keeps computing while state is written in the background, compression, and tiered/remote storage. RocksDB-backed state (as in Flink) supports incremental snapshots. These cut both the pause time and storage per checkpoint, letting you checkpoint frequently even with terabytes of state."],
+    ["sd","Design fault tolerance for a multi-day ML training job on spot instances.","Checkpoint model weights, optimizer state, RNG seeds, and the current step to durable storage (e.g., cloud object storage) every N steps, writing atomically (temp + rename) and retaining the last few known-good checkpoints. On preemption/crash, a new instance loads the latest valid checkpoint and resumes from that step. Tune N from checkpoint write time and preemption rate; use asynchronous/incremental checkpointing to minimize overhead. Monitor for and skip corrupt checkpoints."]
+  ],
+  mistakes:["No checkpoints on long jobs — a late crash wastes everything.","Checkpointing too often, so I/O overhead dominates runtime.","Non-atomic writes that corrupt the checkpoint on a mid-write crash.","Saving state without input offsets in streams (inconsistent recovery).","Keeping only the latest checkpoint (a bad one leaves no fallback)."],
+  best:["Checkpoint at an interval tuned to checkpoint cost and failure rate.","Write checkpoints atomically (temp + swap) and keep a known-good fallback.","For streams, snapshot state + offsets together for consistent recovery.","Use incremental & async checkpoints to cut overhead on large state.","Test recovery from checkpoints, not just the happy path."],
+  related:[["Backup Strategies","💾","Durable data copies","backup.html"],["Disaster Recovery","🌐","Recover from disasters","disaster-recovery.html"],["Idempotency","🔁","Safe reprocessing","idempotency.html"],["Message Queues","📨","Offsets & replay","kafka.html"],["High Availability","🟢","Survive failures","high-availability.html"],["LSM Tree","🌲","WAL & flushing","lsm-tree.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

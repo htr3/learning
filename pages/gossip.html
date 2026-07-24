@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gossip Protocol — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,188,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const pts=[];for(let i=0;i<16;i++)pts.push([120+(i%8)*54,70+Math.floor(i/8)*54]);
+  let phase=0,timer=0,running=false,raf,last;const inf=[new Set([0]),new Set([0,1,7,9]),new Set([0,1,2,5,7,8,9,11,13]),new Set(Array.from({length:16},(_,i)=>i))];
+  function render(){svg.querySelectorAll("circle,line").forEach(n=>n.remove());
+    const on=inf[phase];
+    pts.forEach((p,i)=>{const hot=on.has(i);
+      svg.appendChild(S("circle",{cx:p[0],cy:p[1],r:12,fill:hot?"rgba(124,58,237,.45)":"#161619",stroke:hot?"#7C3AED":"#3a3a42","stroke-width":1.8}));});
+    lbl.textContent="round "+phase+" — "+on.size+" of 16 nodes know the update";
+    sub.textContent=phase===3?"full convergence in ~log(n) rounds":"each node forwards to a few random peers → exponential spread";}
+  function step(){phase=(phase+1)%4;timer=1.8;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">A cluster of 40 nodes. One learns a new value; each round, every informed node "gossips" it to a few random peers. Watch it spread like an epidemic — reaching everyone in roughly <b>log(n)</b> rounds, with no central coordinator and full resilience to node failures.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Fan-out (peers per round): <b id="pgFV">2</b></label>
+        <input id="pgFan" type="range" min="1" max="5" value="2"></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgRound" class="go">Next round</button><button id="pgAuto">▶ Auto</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset (infect 1)</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Higher fan-out converges faster but sends more redundant messages. Even fan-out 1–2 reaches the whole cluster quickly because the informed set grows exponentially.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Round</div><div class="v ac" id="pgR">0</div></div>
+        <div class="pg-stat"><div class="k">Informed</div><div class="v ok" id="pgInf">1/40</div></div>
+        <div class="pg-stat"><div class="k">Coverage</div><div class="v wa" id="pgCov">2.5%</div></div>
+        <div class="pg-stat"><div class="k">Messages</div><div class="v" id="pgMsg">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=40,W=560,H=250,cols=8;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const pts=[];for(let i=0;i<N;i++)pts.push([60+(i%cols)*62,40+Math.floor(i/cols)*42]);
+  let informed,round,msgs,timer=null;
+  function reset(){informed=new Array(N).fill(false);informed[Math.floor(Math.random()*N)]=true;round=0;msgs=0;draw([]);stats();$("pgLog").innerHTML="";log("one random node now knows the update","ac");}
+  function count(){return informed.filter(Boolean).length;}
+  function nextRound(){if(count()===N){log("already fully converged in "+round+" rounds","ok");return;}
+    const fan=+$("pgFan").value;round++;const newly=[];const edges=[];
+    for(let i=0;i<N;i++){if(!informed[i])continue;
+      for(let k=0;k<fan;k++){const t=Math.floor(Math.random()*N);msgs++;edges.push([i,t]);if(!informed[t]){newly.push(t);}}}
+    newly.forEach(t=>informed[t]=true);
+    draw(edges);stats();
+    log("round "+round+": +"+new Set(newly).size+" newly informed → "+count()+"/"+N+" ("+msgs+" msgs sent)",count()===N?"ok":"ac");
+    if(count()===N)log("✓ full convergence after "+round+" rounds (log₂40 ≈ 5.3)","ok");}
+  function draw(edges){svg.innerHTML="";
+    edges.forEach(([a,b])=>{if(a!==b)svg.appendChild(S("line",{x1:pts[a][0],y1:pts[a][1],x2:pts[b][0],y2:pts[b][1],stroke:"rgba(124,58,237,.35)","stroke-width":1}));});
+    pts.forEach((p,i)=>{const hot=informed[i];
+      svg.appendChild(S("circle",{cx:p[0],cy:p[1],r:11,fill:hot?"rgba(124,58,237,.5)":"#161619",stroke:hot?"#a06bff":"#3a3a42","stroke-width":1.6}));});}
+  function stats(){$("pgR").textContent=round;const c=count();$("pgInf").textContent=c+"/"+N;$("pgCov").textContent=(100*c/N).toFixed(0)+"%";$("pgMsg").textContent=msgs;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgFan").oninput=()=>$("pgFV").textContent=$("pgFan").value;
+  $("pgRound").onclick=nextRound;$("pgReset").onclick=()=>{if(timer){clearInterval(timer);timer=null;$("pgAuto").textContent="▶ Auto";}reset();};
+  $("pgAuto").onclick=()=>{if(timer){clearInterval(timer);timer=null;$("pgAuto").textContent="▶ Auto";}
+    else{$("pgAuto").textContent="⏸ Stop";timer=setInterval(()=>{nextRound();if(count()===N){clearInterval(timer);timer=null;$("pgAuto").textContent="▶ Auto";}},900);}};
+  reset();
+}
+
+const DATA={
+  badge:"🗣️",title:"Gossip Protocol",category:"Distributed Systems",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Epidemic Information Dissemination",
+  tagline:"Nodes spread information like a rumor: each periodically picks a few random peers and shares what it knows. With no coordinator, the whole cluster converges in <b>~log(n)</b> rounds — scalable, decentralized, and remarkably fault-tolerant.",
+  pills:["<b>Decentralized</b>","<b>~log(n)</b> convergence","<b>Fault-tolerant</b>","<b>Eventually consistent</b>"],
+  overview:"Gossip (epidemic) protocols disseminate state across a cluster the way rumors spread through a crowd. On each round, every node picks a small random set of peers (the <b>fan-out</b>) and exchanges information — new membership, failure suspicions, metadata, or key-value updates. Because the set of informed nodes roughly multiplies each round, an update reaches all n nodes in <b>O(log n)</b> rounds while each node sends only a constant amount of traffic. There are three exchange styles: <b>push</b> (tell peers what I know), <b>pull</b> (ask peers what they know), and <b>push-pull</b> (both, which converges fastest). Gossip underpins failure detection (SWIM), membership, and anti-entropy reconciliation in systems like Cassandra, DynamoDB, and Consul.",
+  problem:"Broadcasting from a central coordinator doesn't scale (bottleneck, single point of failure) and reliable all-to-all multicast is fragile at scale. You need a way to propagate cluster state — who's alive, config, metadata — that keeps working as nodes join, leave, and crash, without any node being critical. Gossip provides robust, scalable, eventually-consistent dissemination.",
+  diagram,diagramCaption:"Each round the informed set multiplies, so a rumor reaches every node in about log(n) rounds.",
+  how:[
+    "Each node keeps local state and a list of cluster peers.",
+    "Periodically (every gossip interval) it selects a few random peers — the fan-out.",
+    "It exchanges state via push, pull, or push-pull; peers merge newer information.",
+    "Merging uses version numbers, timestamps, or vector clocks to keep the latest value (anti-entropy).",
+    "Failure detection: nodes gossip heartbeats/suspicions; a node not heard about for a while is marked suspect then dead (SWIM-style)."
+  ],
+  complexity:[["Rounds to converge","O(log n)"],["Msgs / node / round","O(fan-out)"],["Total msgs","O(n log n)"],["Coordinator","none"]],
+  advantages:["Fully decentralized — no single point of failure","Scales to thousands of nodes","Highly fault-tolerant (loss/crashes tolerated)","Constant per-node load; self-healing"],
+  disadvantages:["Only eventually consistent (propagation delay)","Redundant/duplicate messages waste bandwidth","Convergence time grows with cluster size","Hard to know when everyone has the update"],
+  tradeoffs:"Fan-out and gossip interval trade convergence speed against network overhead: higher fan-out or shorter intervals converge faster but send more redundant messages. Push-pull converges in fewer rounds than push-only but doubles message size. Gossip deliberately trades strong consistency for availability and scalability — it's ideal for state that can be eventually consistent (membership, metadata, failure info) but wrong for anything needing immediate agreement (use consensus instead).",
+  whenNot:"Don't use gossip when you need strong/immediate consistency or a definitive 'commit' (use Raft/Paxos), for small clusters where direct broadcast is simpler, or when bandwidth is scarce and the redundant traffic matters. It's also a poor fit for ordered delivery guarantees.",
+  sim,
+  code:{
+"Python":`import random, time\nclass GossipNode:\n    def __init__(self, id, peers): self.id=id; self.peers=peers; self.state={}\n    def update(self, key, value, version):\n        cur = self.state.get(key)\n        if cur is None or version > cur[1]:          # keep newest version\n            self.state[key] = (value, version)\n    def gossip_round(self, fanout=3):\n        for p in random.sample(self.peers, min(fanout, len(self.peers))):\n            # push-pull: send my state, merge theirs back (anti-entropy)\n            p.receive(self.state)\n            self.merge(p.state)\n    def merge(self, other):\n        for k,(v,ver) in other.items(): self.update(k, v, ver)`,
+"SWIM":`// SWIM-style failure detection over gossip\n// 1. periodically ping a random member\nfunc (n *Node) probe() {\n    target := n.randomMember()\n    if !n.ping(target, timeout) {\n        // 2. indirect probe: ask k peers to ping it for us\n        if !n.indirectPing(target, k) {\n            n.mark(target, SUSPECT)     // not confirmed dead yet\n        }\n    }\n}\n// 3. suspicion + refutation gossiped around; SUSPECT -> DEAD after a timeout\n// membership changes piggyback on normal gossip messages (no extra traffic)`,
+"Cassandra":`# Cassandra gossips node state 3x per second to spread cluster topology,\n# schema versions, and load info. Check what a node has learned:\nnodetool gossipinfo        # shows STATUS, LOAD, SCHEMA, HOST_ID per peer\nnodetool status           # UN = Up/Normal (learned via gossip)\n# Generation + version numbers on each gossip entry ensure nodes keep\n# only the freshest info (anti-entropy) as it propagates.`
+  },
+  realWorld:[
+    ["Cassandra / ScyllaDB","Gossip spreads membership, token ranges, schema versions, and load several times per second."],
+    ["Amazon DynamoDB / Dynamo","Uses gossip for membership and failure detection in its ring."],
+    ["HashiCorp Consul / Serf","Serf's gossip (SWIM) powers membership and failure detection across the cluster."],
+    ["Redis Cluster","Nodes gossip over a cluster bus to share slot ownership and node health."],
+    ["Blockchain networks","Bitcoin/Ethereum flood transactions and blocks to peers via gossip."]
+  ],
+  interview:[
+    ["basic","What is a gossip protocol?","A decentralized way to spread information where each node periodically shares its state with a few randomly-chosen peers. Like a rumor, the update propagates exponentially and reaches the whole cluster in about log(n) rounds, with no central coordinator."],
+    ["basic","What is gossip typically used for?","Cluster membership, failure detection, and disseminating metadata/config or eventually-consistent data. Examples: Cassandra topology/schema propagation, Consul/Serf membership, Redis Cluster health, and anti-entropy reconciliation in Dynamo-style stores."],
+    ["inter","Why does gossip converge in O(log n) rounds?","Because the number of informed nodes roughly multiplies by the fan-out each round (exponential growth), similar to an epidemic. To go from 1 to n informed nodes therefore takes on the order of log(n) rounds, regardless of how large n is — that's what makes it scalable."],
+    ["inter","Explain push vs pull vs push-pull gossip.","Push: an informed node sends updates to random peers (fast early, slow to finish since informed nodes may pick each other). Pull: nodes ask peers for updates (fast to finish). Push-pull does both in one exchange and converges fastest (roughly halves the rounds), at the cost of larger messages."],
+    ["adv","How does gossip-based failure detection (SWIM) work?","Each node periodically pings a random member; if it doesn't respond, the node asks k other peers to ping it indirectly (ruling out its own network issues). If still unreachable, the target is marked SUSPECT, gossiped around, and promoted to DEAD after a timeout unless refuted. Membership updates piggyback on normal gossip, keeping overhead constant."],
+    ["adv","How is conflicting information reconciled during gossip?","Each piece of state carries a version — a counter, timestamp, generation, or vector clock. When two nodes exchange, they keep the entry with the higher version (last-writer-wins or causal merge). This anti-entropy process ensures all replicas eventually converge to the same, freshest value."],
+    ["sd","When would you choose gossip over a coordinator or consensus?","Choose gossip for large, dynamic clusters that need scalable, self-healing dissemination of eventually-consistent state — membership, health, metadata — where no single node should be critical. Choose consensus (Raft/Paxos) instead when you need a strongly-consistent, ordered, committed decision. They're often combined: gossip for membership, consensus for the authoritative log."]
+  ],
+  mistakes:["Using gossip where strong consistency is required (it's eventually consistent).","Setting fan-out too high, flooding the network with duplicates.","Forgetting version/timestamps, so merges can't resolve conflicts.","Assuming instantaneous propagation instead of accounting for convergence delay.","Not bounding suspicion timeouts, causing flapping false-positive failures."],
+  best:["Use push-pull with a modest fan-out (≈2–4) for fast, cheap convergence.","Attach versions/generations to every entry for clean anti-entropy merges.","Piggyback membership/failure data on existing gossip to avoid extra traffic.","Tune gossip interval and suspicion timeout to your latency and churn.","Combine with consensus: gossip for membership, Raft/Paxos for the source of truth."],
+  related:[["Consensus / Raft","🧭","Strong agreement instead","consensus-raft.html"],["Vector Clocks","🕰️","Merge conflicting updates","vector-clocks.html"],["Quorum","🗳️","Read/write reconciliation","quorum.html"],["CAP Theorem","🔺","Gossip favors AP","system-designed.html"],["Consistent Hashing","🔵","Dynamo-style ring","system-designed.html"],["Bloom Filter","🌸","Efficient set reconciliation","bloom-filter.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

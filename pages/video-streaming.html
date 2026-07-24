@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Video Streaming Platform — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:760px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:560px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-btns button.drop{background:#3a1414;border-color:#7c2d2d;color:#ffb4b4}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+  .pg-stage svg{width:100%;height:auto;display:block;overflow:visible}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🎬</span> Video Streaming Platform</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Video Streaming</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Protocols</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> ABR Simulator</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Video Streaming Platform</h1>
+      <p class="tagline">How YouTube / Netflix stream video to billions — a creator uploads once, the platform
+        <b>transcodes</b> it into a ladder of resolutions, cuts each into short <b>segments</b>, pushes them to
+        <b>CDN</b> edges, and the player pulls segments while <b>adaptive bitrate</b> continuously matches quality to your
+        network so the <b>buffer</b> never runs dry. Explore each stage with live visualizations and a real ABR simulator.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>HLS</b>&nbsp;/&nbsp;<b>MPEG-DASH</b></span>
+        <span class="hpill"><b>Adaptive</b>&nbsp;bitrate</span>
+        <span class="hpill"><b>CDN</b>&nbsp;edge caching</span>
+        <span class="hpill"><b>Live</b>&nbsp;ABR simulator</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Design Choices</div><h2>Streaming Protocols</h2></div></div>
+      <div class="card">
+        <div class="block-title">HLS vs MPEG-DASH vs Progressive</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>In practice —</b> both <b>HLS</b> and <b>MPEG-DASH</b> are adaptive, segment-based protocols driven by a manifest (playlist/MPD). HLS dominates Apple devices; DASH is codec-agnostic and open. Many platforms ship both, or use <b>CMAF</b> segments so one set of files serves both protocols.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The core pieces — the pipeline, ffmpeg transcode ladder + segmenting, an HLS manifest, a client ABR loop, CDN cache headers and MSE playback.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Adaptive Bitrate Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Network bandwidth <b id="pgBwV">6.0 Mbps</b></label><input id="pgBw" type="range" min="0.5" max="25" step="0.5" value="6"></div>
+            <div class="pg-field">
+              <label>ABR strategy</label>
+              <select id="pgABR"><option value="bw" selected>Bandwidth-based</option><option value="buf">Buffer-based</option></select>
+            </div>
+            <div class="pg-field"><label>Buffer target <b id="pgTargetV">30 s</b></label><input id="pgTarget" type="range" min="10" max="60" step="5" value="30"></div>
+            <div class="pg-btns"><button id="pgDrop" class="drop">⚡ Drop network</button></div>
+            <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Drag bandwidth up/down and watch the player switch renditions. Hit <b>Drop network</b> to force a bandwidth crash and watch the buffer drain into a rebuffer.</p>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Quality</div><div class="v ac" id="pgQuality">—</div></div>
+              <div class="pg-stat"><div class="k">Avg bitrate</div><div class="v" id="pgBitrate">— Mbps</div></div>
+              <div class="pg-stat"><div class="k">Switches</div><div class="v wa" id="pgSwitches">0</div></div>
+              <div class="pg-stat"><div class="k">Stalls</div><div class="v bad" id="pgStalls">0</div></div>
+              <div class="pg-stat"><div class="k">Buffer</div><div class="v ok" id="pgBuffer">0 s</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   VIDEO STREAMING PLATFORM — modular vanilla JS (SVG, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* NAVIGATION */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* SIDEBAR */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* CODE VIEWER */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally "+
+    "function const let var await async of in typeof this export default stream throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None while not and or true false null val "+
+    "String List Map Set Node char").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(#[^\n]*|\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* ANIMATION ENGINE */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* VIZ base */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":10.5,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 660 200"); }
+  setup(){
+    this.defs=[["👤","User"],["🌐","CDN"],["🚪","API GW"],["🗂️","Metadata"],["🎯","Recommend"],["🎞️","Transcode"],["💾","Storage"],["🧩","Chunks"],["📊","Analytics"]];
+    this.w=68; const gap=6; this.xs=[];
+    let x=4; this.defs.forEach((d,i)=>{ this.xs.push(x);
+      const col=i===1?"#38bdf8":i===5?"#7C3AED":i===7?"#fbbf24":i===8?"#34d399":"#3a3a42";
+      this.box(x,84,this.w,44,d[1],col,d[0]);
+      if(i<this.defs.length-1) this.arrow(x+this.w,106,x+this.w+gap,106);
+      x+=this.w+gap; });
+    this.centers=this.xs.map(x=>x+this.w/2);
+    this.packets=[]; this.spawn=0;
+    this.cap("A creator uploads once; the platform transcodes to many renditions, segments them, and pushes to CDN edges. Viewers pull segments from the nearest edge — metadata, recommendations and analytics ride alongside the media path.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.8); this.packets.push({prog:0,dead:false,el:this.dot(this.centers[0],106,"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.9;
+      if(p.prog>=this.centers.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog),f=p.prog-seg; p.el.setAttribute("cx",this.centers[seg]+(this.centers[seg+1]-this.centers[seg])*f);
+      p.el.setAttribute("fill",p.prog>=7?"#34d399":p.prog>=5?"#fbbf24":p.prog>=1?"#38bdf8":"#c4a2ff"); });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. Video Upload ---- */
+class UploadViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.box(24,74,96,52,"raw.mp4","#3a3a42","4 GB source");
+    this.box(486,74,110,52,"Storage","#34d399","object store");
+    this.svg.appendChild(T(300,40,"multipart / resumable upload",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    // progress bar
+    this.svg.appendChild(S("rect",{x:170,y:150,width:300,height:14,rx:7,fill:"#141416",stroke:"#26262e"}));
+    this.pbar=S("rect",{x:170,y:150,width:0,height:14,rx:7,fill:"#7C3AED"}); this.svg.appendChild(this.pbar);
+    this.plabel=T(320,140,"0%",{fill:"#c4a2ff","font-size":11,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.plabel);
+    this.parts=[]; this.spawn=0; this.progress=0;
+    this.cap("Large uploads are split into parts and sent in parallel (multipart / resumable). If a part fails, only that part is retried — you never re-upload the whole file. Completed parts are assembled in object storage.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0 && this.progress<1){ this.spawn=rand(.12,.28);
+      this.parts.push({prog:0,dead:false,y:rand(88,116),el:this.dot(120,rand(88,116),"#c4a2ff",4)}); }
+    this.parts.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.4;
+      p.el.setAttribute("cx",120+(486-120)*p.prog); p.el.setAttribute("cy",p.y);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); this.progress=Math.min(1,this.progress+0.028); } });
+    this.parts=this.parts.filter(p=>!p.dead);
+    if(this.progress>=1){ this.progress=0; } // loop
+    this.pbar.setAttribute("width",this.progress*300);
+    this.plabel.textContent=Math.round(this.progress*100)+"% uploaded";
+  }
+}
+
+/* ---- 3. Chunking / Segmenting ---- */
+class ChunkingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.svg.appendChild(T(320,30,"one rendition → fixed-duration segments (≈4s, GOP-aligned)",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.n=8; this.x0=40; this.w=560; this.segW=this.w/this.n; this.y=60; this.h=46;
+    this.svg.appendChild(S("rect",{x:this.x0,y:this.y,width:this.w,height:this.h,rx:8,fill:"#141416",stroke:"#26262e"}));
+    this.segs=[]; this.dividers=[];
+    for(let i=0;i<this.n;i++){ const sx=this.x0+i*this.segW;
+      const r=S("rect",{x:sx+2,y:this.y+2,width:this.segW-4,height:this.h-4,rx:5,fill:"#1a1a1c",stroke:"#2a2a32",opacity:0}); this.svg.appendChild(r);
+      const lbl=T(sx+this.segW/2,this.y+this.h/2+4,"seg"+i,{fill:"#d4d4d8","font-size":10,"text-anchor":"middle","opacity":0,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(lbl);
+      const file=T(sx+this.segW/2,this.y+this.h+22,"seg"+i+".ts",{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle","opacity":0,"font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(file);
+      this.segs.push({r,lbl,file}); }
+    this.ptr=0; this.timer=0;
+    this.cap("Each rendition is cut into short, independently-decodable segments (typically 2–10s), aligned to a GOP boundary so each starts with a keyframe. Segments are what the CDN caches and the player requests one at a time.");
+  }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return;
+    if(this.ptr<this.n){ const s=this.segs[this.ptr];
+      s.r.setAttribute("opacity",1); s.r.setAttribute("stroke","#7C3AED"); s.r.setAttribute("fill","rgba(124,58,237,.18)");
+      s.lbl.setAttribute("opacity",1); s.file.setAttribute("opacity",1);
+      this.ptr++; this.timer=.32; }
+    else { this.timer=1.4; this.ptr=0; this.segs.forEach(s=>{ s.r.setAttribute("opacity",0); s.lbl.setAttribute("opacity",0); s.file.setAttribute("opacity",0); s.r.setAttribute("stroke","#2a2a32"); s.r.setAttribute("fill","#1a1a1c"); }); }
+  }
+}
+
+/* ---- 4. Encoding / Transcode ladder ---- */
+class EncodingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 240"); }
+  setup(){
+    this.box(24,96,96,52,"source","#3a3a42","master");
+    this.rungs=[["1080p","5.0 Mbps",5.0],["720p","2.8 Mbps",2.8],["480p","1.4 Mbps",1.4],["360p","0.8 Mbps",0.8],["240p","0.4 Mbps",0.4]];
+    this.y0=20; this.rh=42; this.bx=300; this.bmax=610;
+    this.items=this.rungs.map((r,i)=>{ const y=this.y0+i*this.rh;
+      this.arrow(120,122,200,y+16); const g=S("g"); this.svg.appendChild(g);
+      g.appendChild(S("rect",{x:200,y,width:96,height:30,rx:7,fill:"#1a1a1c",stroke:"#7C3AED","stroke-width":1.3}));
+      g.appendChild(T(248,y+14,r[0],{fill:"#f4f4f5","font-size":11,"font-weight":600,"text-anchor":"middle"}));
+      g.appendChild(T(248,y+25,r[1],{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));
+      g.appendChild(S("rect",{x:this.bx,y:y+9,width:this.bmax-this.bx,height:12,rx:5,fill:"#141416",stroke:"#26262e"}));
+      const pr=S("rect",{x:this.bx,y:y+9,width:0,height:12,rx:5,fill:"#7C3AED"}); g.appendChild(pr);
+      return {pr,prog:rand(0,.3),speed:rand(.18,.4)}; });
+    this.svg.appendChild(T(300,232,"parallel encode into an ABR ladder",{fill:"#8b8b93","font-size":10.5,"text-anchor":"middle"}));
+    this.cap("Transcoding re-encodes the master into a ladder of resolution/bitrate renditions (e.g. 1080p→240p). Each targets a different network condition, so the player can pick the best one it can currently sustain.");
+  }
+  frame(dt){ this.items.forEach(it=>{ it.prog+=it.speed*dt; if(it.prog>=1){ it.prog=0; }
+    it.pr.setAttribute("width",(this.bmax-this.bx)*it.prog);
+    it.pr.setAttribute("fill", it.prog>.92?"#34d399":"#7C3AED"); }); }
+}
+
+/* ---- 5. Adaptive Bitrate ---- */
+class ABRViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.gx=40; this.gw=560; this.gy=20; this.gh=140; this.maxBw=6;
+    this.svg.appendChild(S("rect",{x:this.gx,y:this.gy,width:this.gw,height:this.gh,rx:8,fill:"#0e0e11",stroke:"#26262e"}));
+    this.ladder=[["240p",.4],["360p",.8],["480p",1.4],["720p",2.8],["1080p",5.0]];
+    // rendition guide lines
+    this.ladder.forEach(r=>{ const y=this.yFor(r[1]);
+      this.svg.appendChild(S("line",{x1:this.gx,y1:y,x2:this.gx+this.gw,y2:y,stroke:"#22222a","stroke-dasharray":"3 4"}));
+      this.svg.appendChild(T(this.gx+4,y-3,r[0],{fill:"#5b5b66","font-size":8})); });
+    this.bwPath=S("path",{d:"",stroke:"#38bdf8","stroke-width":2,fill:"none"}); this.svg.appendChild(this.bwPath);
+    this.qPath=S("path",{d:"",stroke:"#7C3AED","stroke-width":2.5,fill:"none"}); this.svg.appendChild(this.qPath);
+    this.lbl=T(320,200,"",{fill:"#c4a2ff","font-size":12,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.lbl);
+    this.svg.appendChild(T(this.gx+this.gw,14,"— bandwidth  — chosen quality",{fill:"#8b8b93","font-size":9,"text-anchor":"end"}));
+    this.bwHist=[]; this.qHist=[]; this.tt=0; this.qIndex=2;
+    this.cap("The player estimates available bandwidth and picks the highest rendition it can safely sustain (with headroom + hysteresis). When bandwidth drops, it steps down to avoid stalling; when it recovers, it climbs back up.");
+  }
+  yFor(bw){ return this.gy+this.gh - clamp(bw/this.maxBw,0,1)*this.gh; }
+  frame(dt){ this.tt+=dt;
+    const bw = 3 + 2.4*Math.sin(this.tt*0.9) + 0.7*Math.sin(this.tt*2.7) + rand(-.15,.15);
+    const bwC=clamp(bw,.2,this.maxBw);
+    // ABR choose: highest rendition <= bw*0.85 with hysteresis
+    let want=0; for(let i=0;i<this.ladder.length;i++){ if(this.ladder[i][1]<=bwC*0.85) want=i; }
+    if(want>this.qIndex) this.qIndex++; else if(want<this.qIndex) this.qIndex--; this.qIndex=clamp(this.qIndex,0,4);
+    this.bwHist.push(bwC); this.qHist.push(this.ladder[this.qIndex][1]);
+    const maxN=Math.floor(this.gw/4);
+    if(this.bwHist.length>maxN){ this.bwHist.shift(); this.qHist.shift(); }
+    const step=this.gw/maxN;
+    const toPath=arr=>arr.map((v,i)=>`${i===0?"M":"L"} ${(this.gx+i*step).toFixed(1)} ${this.yFor(v).toFixed(1)}`).join(" ");
+    this.bwPath.setAttribute("d",toPath(this.bwHist)); this.qPath.setAttribute("d",toPath(this.qHist));
+    this.lbl.textContent=`bandwidth ${bwC.toFixed(1)} Mbps → play ${this.ladder[this.qIndex][0]} (${this.ladder[this.qIndex][1]} Mbps)`;
+  }
+}
+
+/* ---- 6. CDN cache ---- */
+class CDNViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.box(24,94,96,50,"Origin","#3a3a42","storage");
+    this.edges=[[250,34],[250,94],[250,154]].map((p,i)=>({x:p[0],y:p[1],g:this.box(p[0],p[1],104,40,"Edge "+(i+1),"#38bdf8","cache")}));
+    this.box(500,94,104,50,"Viewers","#7C3AED","many");
+    this.edges.forEach(e=>{ this.arrow(120,119,e.x,e.y+20,"#2a2a32"); this.arrow(e.x+104,e.y+20,500,119,"#2a2a32"); });
+    this.hits=0; this.miss=0; this.packets=[]; this.spawn=0;
+    this.stat=T(320,220,"",{fill:"#8b8b93","font-size":11.5,"text-anchor":"middle"}); this.svg.appendChild(this.stat);
+    this.cap("The first request for a segment misses the edge and is fetched from origin, then cached at the edge. Every subsequent viewer near that edge gets a cache hit — served from close by, cheap and fast. Popular content hits ~99%.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.22,.45); const e=this.edges[randi(0,2)]; const hit=Math.random()<.82;
+      this.packets.push({e,hit,ph:0,dead:false,el:this.dot(552,119,"#c4a2ff",4.5)}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.ph+=dt*1.6; const ex=p.e.x+104, ey=p.e.y+20;
+      if(p.ph<1){ const f=p.ph; p.el.setAttribute("cx",552-(552-ex)*f); p.el.setAttribute("cy",119+(ey-119)*f); }
+      else if(p.hit){ // served from edge, back to viewer
+        const f=p.ph-1; if(f>=1){ p.dead=true;p.el.remove();this.hits++;return; }
+        p.el.setAttribute("fill","#34d399"); p.el.setAttribute("cx",ex+(552-ex)*f); p.el.setAttribute("cy",ey+(119-ey)*f); }
+      else { // miss → origin → back
+        p.el.setAttribute("fill","#fbbf24");
+        if(p.ph<2){ const f=p.ph-1; p.el.setAttribute("cx",p.e.x-(p.e.x-120)*f); p.el.setAttribute("cy",ey+(119-ey)*f); }
+        else if(p.ph<3){ const f=p.ph-2; p.el.setAttribute("cx",120+(552-120)*f); p.el.setAttribute("cy",119); }
+        else { p.dead=true;p.el.remove(); this.miss++; } } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    const tot=this.hits+this.miss; this.stat.textContent=`edge hits ${this.hits} · misses ${this.miss} · hit rate ${tot?Math.round(this.hits/tot*100):0}%`;
+  }
+}
+
+/* ---- 7. Playback ---- */
+class PlaybackViz extends Viz {
+  constructor(host){ super(host,"0 0 640 200"); }
+  setup(){
+    this.tx=40; this.tw=560; this.ty=90; this.th=34;
+    this.svg.appendChild(S("rect",{x:this.tx,y:this.ty,width:this.tw,height:this.th,rx:8,fill:"#141416",stroke:"#26262e"}));
+    this.buffered=S("rect",{x:this.tx,y:this.ty,width:0,height:this.th,rx:8,fill:"rgba(52,211,153,.28)"}); this.svg.appendChild(this.buffered);
+    this.played=S("rect",{x:this.tx,y:this.ty,width:0,height:this.th,rx:8,fill:"rgba(124,58,237,.5)"}); this.svg.appendChild(this.played);
+    this.head=S("line",{x1:this.tx,y1:this.ty-8,x2:this.tx,y2:this.ty+this.th+8,stroke:"#7C3AED","stroke-width":2}); this.svg.appendChild(this.head);
+    this.svg.appendChild(T(this.tx,this.ty-16,"◀ playhead advances as buffered segments play ▶",{fill:"#8b8b93","font-size":10}));
+    this.svg.appendChild(T(this.tx,this.ty+this.th+30,"purple = played · green = buffered ahead",{fill:"#5b5b66","font-size":9}));
+    this.play=0; this.buf=0.15; this.dl=[]; this.spawn=0;
+    this.cap("The player keeps a buffer of downloaded segments ahead of the playhead. It fetches the next segment(s) while the current one plays — as long as downloads stay ahead of playback, video plays smoothly.");
+  }
+  frame(dt){ this.play+=dt*0.05; this.buf=Math.min(0.55,this.buf+dt*0.07);
+    if(this.play>=this.buf){ this.play=this.buf; }
+    if(this.buf>=0.55 && this.play>=0.55){ this.play=0; this.buf=0.15; }
+    this.spawn-=dt; if(this.spawn<=0){ this.spawn=rand(.3,.5); this.dl.push({p:0,dead:false,el:this.dot(this.tx+this.tw+18,this.ty-24,"#38bdf8",4)}); }
+    this.dl.forEach(d=>{ if(d.dead)return; d.p+=dt*1.5; const tgt=this.tx+this.buf*this.tw;
+      d.el.setAttribute("cx",this.tx+this.tw+18-(this.tx+this.tw+18-tgt)*d.p); d.el.setAttribute("cy",this.ty-24+((this.ty+8)-(this.ty-24))*d.p);
+      if(d.p>=1){ d.dead=true; d.el.remove(); } });
+    this.dl=this.dl.filter(d=>!d.dead);
+    this.buffered.setAttribute("width",this.buf*this.tw); this.played.setAttribute("width",this.play*this.tw);
+    this.head.setAttribute("x1",this.tx+this.play*this.tw); this.head.setAttribute("x2",this.tx+this.play*this.tw);
+  }
+}
+
+/* ---- 8. Buffering ---- */
+class BufferingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.tankX=60; this.tankY=20; this.tankW=90; this.tankH=170;
+    this.svg.appendChild(S("rect",{x:this.tankX,y:this.tankY,width:this.tankW,height:this.tankH,rx:10,fill:"#0e0e11",stroke:"#26262e"}));
+    this.fill=S("rect",{x:this.tankX+3,y:this.tankY+this.tankH-3,width:this.tankW-6,height:0,rx:8,fill:"rgba(52,211,153,.4)"}); this.svg.appendChild(this.fill);
+    this.svg.appendChild(T(this.tankX+this.tankW/2,this.tankY+this.tankH+18,"buffer (s)",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    this.arrow(220,50,300,50,"#34d399"); this.svg.appendChild(T(226,42,"download →",{fill:"#34d399","font-size":10}));
+    this.arrow(300,160,220,160,"#fbbf24"); this.svg.appendChild(T(226,178,"← playback 1×",{fill:"#fbbf24","font-size":10}));
+    this.status=T(430,90,"",{fill:"#34d399","font-size":16,"text-anchor":"middle","font-weight":800}); this.svg.appendChild(this.status);
+    this.sub=T(430,116,"",{fill:"#8b8b93","font-size":10.5,"text-anchor":"middle"}); this.svg.appendChild(this.sub);
+    this.level=8; this.max=30; this.state="play"; this.tt=0;
+    this.cap("Buffer = downloaded-but-unplayed seconds. It rises when download rate beats playback and drains at 1× while playing. If bandwidth drops so downloads fall behind, the buffer empties → the player stalls (rebuffers) until it refills.");
+  }
+  frame(dt){ this.tt+=dt;
+    // simulate a periodic bandwidth crash between t in a window
+    const crash = (this.tt%14)>8 && (this.tt%14)<11.5;
+    const dlRate = crash? 0.2 : 1.8;  // seconds of media downloaded per real second
+    this.level += dlRate*dt*2;
+    if(this.state==="play"){ this.level -= dt*2; // playback drains 1x (scaled)
+      if(this.level<=0){ this.level=0; this.state="stall"; }
+    } else { if(this.level>=6) this.state="play"; }
+    this.level=clamp(this.level,0,this.max);
+    const h=(this.level/this.max)*(this.tankH-6);
+    this.fill.setAttribute("y",this.tankY+this.tankH-3-h); this.fill.setAttribute("height",h);
+    const low=this.level<6;
+    this.fill.setAttribute("fill", this.state==="stall"?"rgba(248,113,113,.45)": low?"rgba(251,191,36,.4)":"rgba(52,211,153,.4)");
+    if(this.state==="stall"){ this.status.textContent="⏳ REBUFFERING"; this.status.setAttribute("fill","#f87171"); this.sub.textContent="buffer empty — waiting for segments"; }
+    else if(crash){ this.status.textContent="▶ PLAYING"; this.status.setAttribute("fill","#fbbf24"); this.sub.textContent="bandwidth low — buffer draining, ABR steps down"; }
+    else { this.status.textContent="▶ PLAYING"; this.status.setAttribute("fill","#34d399"); this.sub.textContent=`healthy buffer · ${this.level.toFixed(0)}s ahead`; }
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS)
+   ===================================================================== */
+const CODE_flow =
+"Creator upload ──▶ Object storage (raw master)\n" +
+"        │\n" +
+"        ▼  (async job)\n" +
+"  Transcoder  ─▶ renditions: 1080p / 720p / 480p / 360p / 240p\n" +
+"        │\n" +
+"        ▼\n" +
+"  Segmenter   ─▶ 4s segments (.ts / .m4s) + manifest (.m3u8 / .mpd)\n" +
+"        │\n" +
+"        ▼\n" +
+"  CDN edges   ◀── viewers pull segments (cache hit near user)\n" +
+"        │\n" +
+"  Player: fetch manifest → ABR picks rendition → fill buffer → play";
+
+const CODE_encode =
+"# transcode master into an adaptive bitrate ladder (ffmpeg)\n" +
+"ffmpeg -i master.mp4 \\\n" +
+"  -vf scale=-2:1080 -c:v h264 -b:v 5000k -c:a aac out_1080.mp4 \\\n" +
+"  -vf scale=-2:720  -c:v h264 -b:v 2800k -c:a aac out_720.mp4  \\\n" +
+"  -vf scale=-2:480  -c:v h264 -b:v 1400k -c:a aac out_480.mp4  \\\n" +
+"  -vf scale=-2:360  -c:v h264 -b:v 800k  -c:a aac out_360.mp4  \\\n" +
+"  -vf scale=-2:240  -c:v h264 -b:v 400k  -c:a aac out_240.mp4";
+
+const CODE_chunk =
+"# cut each rendition into 4s HLS segments + a variant playlist\n" +
+"ffmpeg -i out_720.mp4 \\\n" +
+"  -c copy -f hls \\\n" +
+"  -hls_time 4 \\                 # segment duration (GOP-aligned)\n" +
+"  -hls_playlist_type vod \\\n" +
+"  -hls_segment_filename '720/seg_%03d.ts' \\\n" +
+"  720/index.m3u8";
+
+const CODE_manifest =
+"#EXTM3U\n" +
+"#EXT-X-VERSION:6\n" +
+"# master playlist advertises each rendition (the ABR ladder)\n" +
+"#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\n" +
+"1080/index.m3u8\n" +
+"#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1280x720\n" +
+"720/index.m3u8\n" +
+"#EXT-X-STREAM-INF:BANDWIDTH=1400000,RESOLUTION=854x480\n" +
+"480/index.m3u8";
+
+const CODE_abr =
+"// simplified client ABR: pick highest rendition we can sustain\n" +
+"function chooseRendition(ladder, estBps, bufferSec){\n" +
+"  const SAFETY = 0.85;              // leave headroom\n" +
+"  // bandwidth rule\n" +
+"  let pick = ladder[0];\n" +
+"  for (const r of ladder)\n" +
+"    if (r.bitrate <= estBps * SAFETY) pick = r;\n" +
+"  // buffer guard: if buffer is low, don't be greedy\n" +
+"  if (bufferSec < 10 && pick.index > 0) pick = ladder[pick.index - 1];\n" +
+"  return pick;                       // + hysteresis to avoid flip-flop\n" +
+"}";
+
+const CODE_cdn =
+"// origin sets cache headers so edges/browsers cache segments\n" +
+"// immutable segments: cache hard; playlists: short TTL\n" +
+"location ~ \\.ts$  { add_header Cache-Control \"public, max-age=31536000, immutable\"; }\n" +
+"location ~ \\.m3u8$ { add_header Cache-Control \"public, max-age=2\"; }\n" +
+"# first viewer near an edge = MISS -> fetch origin -> cache\n" +
+"# every later viewer near that edge = HIT (served from edge)";
+
+const CODE_playback =
+"// browser playback via Media Source Extensions (what hls.js does)\n" +
+"const media = new MediaSource();\n" +
+"video.src = URL.createObjectURL(media);\n" +
+"media.addEventListener('sourceopen', () => {\n" +
+"  const sb = media.addSourceBuffer('video/mp4; codecs=\"avc1.640028\"');\n" +
+"  async function pump(){\n" +
+"    while (bufferAhead() < TARGET) {            // keep buffer full\n" +
+"      const r = chooseRendition(ladder, estBps, bufferAhead());\n" +
+"      const seg = await fetch(r.nextSegmentUrl); // from CDN edge\n" +
+"      sb.appendBuffer(await seg.arrayBuffer());\n" +
+"    }\n" +
+"  }\n" +
+"  pump();\n" +
+"});";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A streaming platform decouples <b>upload/processing</b> (write once, offline) from <b>delivery</b> (read billions of times). A creator uploads a master file; transcoding produces multiple renditions; segmenting cuts them into cacheable chunks; CDN edges deliver them close to viewers; and the player adapts quality on the fly.",
+    problem:"You must deliver high-quality video to millions of concurrent viewers on wildly varying networks and devices — with low startup time, minimal buffering, and manageable bandwidth cost.",
+    how:["Creator uploads a master file to object storage.","Transcoder encodes an ABR ladder of renditions.","Segmenter cuts each rendition into short chunks + a manifest.","Segments are distributed to CDN edges worldwide.","The player fetches the manifest, then pulls segments, adapting quality."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Process once, serve everywhere","CDN offloads origin, cuts latency","Adapts to any device / network"],
+    disadvantages:["Heavy, costly transcoding pipeline","Storage × renditions × segments is large","Many moving parts to operate"],
+    interview:[["Design a video streaming service like YouTube/Netflix.","Separate the write path (upload → transcode into an ABR ladder → segment → store) from the read path (CDN edges → player). Store segments + a manifest (HLS/DASH) in object storage, push to a CDN so viewers pull from the nearest edge, and let the client do adaptive bitrate. Metadata lives in a DB, recommendations/analytics are async off the media path. Scale the read path with CDN caching and the write path with a distributed transcoding queue."]] },
+
+  { id:"upload", num:2, icon:"⬆️", tag:"Ingest", title:"Video Upload", viz:UploadViz,
+    definition:"Source files are huge (GBs), so uploads use <b>multipart / resumable</b> transfer: the file is split into parts uploaded in parallel and reassembled in object storage. A failed part is retried alone — you never restart the whole upload.",
+    problem:"A single long-lived upload of a multi-GB file over a flaky connection will fail and force a full restart, wasting bandwidth and frustrating creators.",
+    how:["Split the file into fixed-size parts (e.g. 8–64 MB).","Request upload URLs and send parts in parallel.","Retry only the parts that fail (resumable).","Object store assembles parts into the final object.","A message kicks off the async transcode job."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Resilient to network failures","Parallel parts = faster upload","Resumable, no full restarts"],
+    disadvantages:["Client/coordination complexity","Must track & assemble parts","Orphaned parts need cleanup"],
+    interview:[["How do you handle very large video uploads reliably?","Use multipart/resumable uploads: split the file into parts, upload them in parallel directly to object storage (often via pre-signed URLs), and retry only failed parts. The store assembles them on completion, then emits an event to trigger transcoding. This survives flaky networks and avoids re-sending gigabytes on a single failure."]] },
+
+  { id:"chunking", num:3, icon:"🧩", tag:"Segmenting", title:"Chunking", viz:ChunkingViz,
+    definition:"Each rendition is cut into short, independently-decodable <b>segments</b> (typically 2–10 seconds), each starting at a keyframe (GOP-aligned). A manifest lists the segments. Segments — not whole files — are what the CDN caches and the player requests.",
+    problem:"Delivering one giant file blocks adaptive switching and seeking, and can't be cached or partially fetched efficiently. You need small, cacheable, switch-friendly units.",
+    how:["Encode with regular keyframes (fixed GOP).","Split each rendition into equal-duration segments.","Ensure each segment begins with a keyframe (self-contained).","Write a manifest (playlist/MPD) referencing the segments.","Segments become immutable, highly cacheable objects."],
+    code:{ "Segmenting":CODE_chunk, "Manifest":CODE_manifest },
+    advantages:["Enables mid-stream quality switching","Small, immutable = highly cacheable","Fast seeking and partial fetch"],
+    disadvantages:["Segment size trades latency vs overhead","More files/requests to manage","Must keep renditions time-aligned"],
+    interview:[["Why segment video instead of serving one file?","Segments are short, self-contained (keyframe-aligned) units, so the player can switch renditions at any segment boundary (adaptive bitrate), seek quickly, and the CDN can cache each segment as an immutable object. Segment duration is a trade-off: shorter = lower latency and finer adaptation but more requests/overhead; longer = better compression efficiency, higher latency."]] },
+
+  { id:"encoding", num:4, icon:"🎞️", tag:"Transcode", title:"Encoding", viz:EncodingViz,
+    definition:"<b>Transcoding</b> re-encodes the master into a <b>ladder</b> of renditions at different resolutions and bitrates (e.g. 1080p@5Mbps down to 240p@0.4Mbps), using codecs like H.264/H.265/AV1. Each rung targets a different network condition and device.",
+    problem:"One bitrate can't serve everyone: it will stall on slow networks and look bad on fast ones. You need multiple quality levels so every viewer gets the best their connection allows.",
+    how:["Decode the master, then re-encode per rung of the ladder.","Pick resolution + bitrate + codec for each rung.","Run encodes in parallel across a worker fleet.","Optionally per-title encoding (bitrate tuned to content).","Segment each rendition and publish."],
+    code:{ "Encode ladder":CODE_encode },
+    advantages:["Best quality per network condition","Device/codec compatibility","Per-title encoding saves bandwidth"],
+    disadvantages:["CPU/GPU-intensive and slow","Storage multiplies per rendition","Codec licensing / support matrix"],
+    interview:[["What is a bitrate ladder and how do you choose it?","A bitrate ladder is the set of rendition (resolution, bitrate) pairs you encode, spanning low to high so ABR can adapt. Choose rungs spaced so each is a meaningful quality step (roughly geometric bitrate spacing), covering target devices/networks. Advanced approaches use per-title encoding — analyzing each video's complexity to pick optimal bitrates — saving bandwidth on simple content."]] },
+
+  { id:"abr", num:5, icon:"📶", tag:"Client", title:"Adaptive Bitrate", viz:ABRViz,
+    definition:"<b>Adaptive Bitrate (ABR)</b> lets the player choose which rendition to fetch for each segment based on measured bandwidth and buffer level. It steps up quality when the network is strong and steps down before the buffer empties — trading resolution for smooth playback.",
+    problem:"Networks fluctuate constantly. A fixed quality either stalls (too high) or looks bad (too low). The player must continuously match quality to current conditions, per segment.",
+    how:["Estimate throughput from recent segment downloads.","Pick the highest rendition sustainable with safety headroom.","Guard with buffer level (don't be greedy when low).","Apply hysteresis to avoid rapid flip-flopping.","Re-decide at every segment boundary."],
+    code:{ "ABR":CODE_abr },
+    advantages:["Smooth playback across networks","Maximizes quality per conditions","Per-segment, fine-grained control"],
+    disadvantages:["Estimation errors cause stalls / drops","Tuning (hysteresis) is tricky","Quality oscillation if naive"],
+    interview:[["How does adaptive bitrate streaming decide the quality?","The player estimates available bandwidth (from recent segment download speeds) and buffer occupancy. Bandwidth-based ABR picks the top rendition below a fraction of the estimate; buffer-based ABR raises quality when the buffer is full and lowers it when it drains. Real players (e.g. BOLA, hybrid) combine both with hysteresis to stay stable, deciding fresh at each segment boundary."]] },
+
+  { id:"cdn", num:6, icon:"🌐", tag:"Delivery", title:"CDN Cache", viz:CDNViz,
+    definition:"A <b>CDN</b> is a global network of edge caches. Viewers fetch segments from the nearest edge; the first request for a segment misses and is fetched from origin, then cached — so every later nearby viewer gets a fast, cheap <b>cache hit</b>. This is how one origin serves billions.",
+    problem:"Serving every segment from a central origin can't handle global scale — it's slow (far away), expensive (egress), and the origin becomes a bottleneck.",
+    how:["Segments are immutable → aggressively cacheable.","Viewer requests route to the nearest edge PoP.","Cache hit → served from the edge instantly.","Cache miss → edge fetches from origin, then caches.","Short TTLs on playlists; long TTLs on segments."],
+    code:{ "Cache headers":CODE_cdn },
+    advantages:["Low latency (content near viewers)","Massive origin offload (~99% hit)","Handles huge concurrent viewership"],
+    disadvantages:["Cache invalidation for live/updates","Cost of many PoPs","Cold caches on brand-new content"],
+    interview:[["What role does a CDN play and why are segments cacheable?","A CDN caches content at edge locations near users, so most requests are served locally — cutting latency and offloading the origin. Video segments are immutable (a given segment never changes), so they get long TTLs and near-100% hit rates for popular content. Manifests get short TTLs (especially for live). The CDN is what makes global-scale streaming economically and technically feasible."]] },
+
+  { id:"playback", num:7, icon:"▶️", tag:"Player", title:"Playback", viz:PlaybackViz,
+    definition:"The player downloads the manifest, then continuously fetches segments (via ABR) and feeds them into a decode buffer using <b>Media Source Extensions</b>. It keeps a buffer of media <i>ahead</i> of the playhead so playback stays smooth while the next segments download.",
+    problem:"You can't wait for the whole video to download, and you can't decode from a raw URL. You need to progressively fetch, buffer, and feed the decoder while playing.",
+    how:["Fetch and parse the manifest (renditions + segments).","ABR chooses the rendition for the next segment.","Fetch the segment from the CDN edge.","Append it to the source buffer (MSE).","Play; keep buffering ahead until the target is reached."],
+    code:{ "MSE playback":CODE_playback },
+    advantages:["Fast start (only first segments needed)","Seek / switch quality any time","Buffer absorbs network jitter"],
+    disadvantages:["Complex client state machine","Codec/DRM/browser quirks","Buffer tuning affects UX"],
+    interview:[["How does the browser play adaptive streams?","Via Media Source Extensions (MSE): JS fetches segments (using ABR) and appends them to a SourceBuffer, which the browser decodes and plays — libraries like hls.js/dash.js do exactly this. The player parses the manifest, keeps a target buffer ahead of the playhead, and switches renditions at segment boundaries. DRM adds Encrypted Media Extensions (EME)."]] },
+
+  { id:"buffering", num:8, icon:"⏳", tag:"Health", title:"Buffering", viz:BufferingViz,
+    definition:"The <b>buffer</b> is downloaded-but-unplayed media (measured in seconds). It fills when download rate beats playback and drains at 1× while playing. If bandwidth drops enough that downloads fall behind, the buffer empties and playback <b>stalls (rebuffers)</b> — the metric users hate most.",
+    problem:"Rebuffering is the #1 driver of viewer abandonment. The system must keep the buffer healthy despite fluctuating networks, without wasting bandwidth by over-buffering.",
+    how:["Maintain a target buffer (e.g. 20–30s ahead).","Download the next segment while the current plays.","If bandwidth drops, ABR steps down to a lower rendition.","If the buffer still empties → stall and rebuffer.","Resume once enough buffer is rebuilt (hysteresis)."],
+    code:{ "ABR":CODE_abr },
+    advantages:["Buffer absorbs network variability","ABR down-switch avoids most stalls","Target buffer bounds memory/latency"],
+    disadvantages:["Too small → stalls; too large → wasted data & latency","Live streams limit buffer depth","Sudden drops can still stall"],
+    interview:[["What causes rebuffering and how do you minimize it?","Rebuffering happens when the buffer drains to zero because download rate falls below playback rate. Minimize it by: maintaining a healthy target buffer, using ABR to step down quality before the buffer empties, accurate throughput estimation with hysteresis, CDN proximity to reduce latency, and shorter segments for faster adaptation. It's a trade-off — bigger buffers resist stalls but increase startup latency and waste data if the user quits."]] }
+];
+
+/* SECTION RENDERER */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ tabs[k]=s.code[k]; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* INTERVIEW TOPICS */
+const TOPICS=[
+  ["🍎","HLS","Apple's HTTP Live Streaming — .m3u8 playlists + .ts/.m4s segments; ubiquitous, especially on iOS/Safari."],
+  ["📦","MPEG-DASH","Open, codec-agnostic adaptive protocol driven by an .mpd manifest; the standards-based alternative to HLS."],
+  ["🌐","CDN","Global edge caches that serve segments close to viewers — near-100% hit rate makes global scale affordable."],
+  ["🧩","Chunking","Cutting renditions into short keyframe-aligned segments so they're cacheable and switch-friendly."],
+  ["🎞️","Encoding","Transcoding the master into a bitrate ladder (H.264/H.265/AV1) so every network gets a suitable rendition."],
+  ["🗃️","Caching","Immutable segments cache aggressively (long TTL); playlists use short TTLs — the backbone of delivery."],
+  ["📶","Adaptive Bitrate","Client picks per-segment quality from bandwidth + buffer to stay smooth while maximizing quality."],
+  ["🎬","CMAF","Common Media Application Format — one set of fMP4 segments served to both HLS and DASH, halving storage."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* COMPARISON */
+const CMP=[
+  ["HLS","MPEG-TS / fMP4 (.ts/.m4s)","Yes","2–6s (LL-HLS lower)","Apple / broad device support"],
+  ["MPEG-DASH","fMP4 segments (.m4s)","Yes","2–6s","Open standard, codec-agnostic"],
+  ["Smooth Streaming","fMP4 fragments","Yes","~2s","Legacy Microsoft ecosystems"],
+  ["Progressive (MP4)","single file","No","instant seek-limited","Short clips, simple hosting"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Protocol</th><th>Segment format</th><th>Adaptive</th><th>Latency</th><th>Best for</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* INTERVIEW Q&A */
+const QA=[
+  ["Design a video streaming platform (YouTube/Netflix).","Split write and read paths. Write: creator uploads (multipart) → object storage → async transcode into an ABR ladder → segment into short keyframe-aligned chunks + manifest → publish. Read: CDN edges cache segments; the player fetches the manifest and pulls segments using adaptive bitrate. Metadata in a DB, recommendations & analytics async via Kafka off the media path. Scale reads with CDN caching, writes with a distributed transcode queue."],
+  ["HLS vs MPEG-DASH — what's the difference?","Both are HTTP-based adaptive streaming with a manifest + segments. HLS is Apple's (m3u8 playlists, .ts/fMP4), universally supported especially on iOS/Safari. DASH is an open, codec-agnostic ISO standard (.mpd, fMP4). DASH isn't natively supported on Safari. Many services ship both, or use CMAF fMP4 segments so one file set serves both."],
+  ["Why segment video and how long should segments be?","Segments let the player switch quality (ABR) and seek at boundaries, and let the CDN cache small immutable objects. Duration is a trade-off: shorter (2s) = lower latency and finer adaptation but more requests/overhead; longer (6–10s) = better compression and fewer requests but higher latency and coarser switching. ~4s is common for VOD; low-latency live uses shorter/partial segments."],
+  ["How does adaptive bitrate work?","The player measures throughput (recent segment download speeds) and buffer level, then per segment picks the highest rendition it can sustain with safety headroom, guarded by buffer occupancy and hysteresis to avoid oscillation. Bandwidth-based, buffer-based (e.g. BOLA), and hybrid algorithms exist. It down-switches before the buffer empties and up-switches when the network recovers."],
+  ["What is a bitrate ladder / per-title encoding?","The ladder is the set of (resolution, bitrate) renditions you encode so ABR has choices from low to high, spaced roughly geometrically. Per-title (content-aware) encoding analyzes each video's complexity to choose optimal bitrates — a cartoon needs far fewer bits than fast sports at the same quality — saving significant bandwidth."],
+  ["How does the CDN make this scale?","Segments are immutable, so edges cache them with long TTLs and serve ~99% of requests locally, near the viewer — cutting latency and massively offloading origin egress. Only the first request per edge misses to origin. Playlists get short TTLs. Without a CDN, a single origin couldn't handle global concurrent viewership affordably."],
+  ["What causes rebuffering and how do you reduce it?","The buffer drains to zero because download rate < playback rate. Reduce it with a healthy target buffer, ABR down-switching before the buffer empties, accurate throughput estimation + hysteresis, CDN proximity, and appropriately short segments. It's a trade-off: bigger buffers resist stalls but raise startup latency and waste data if the viewer leaves."],
+  ["How do you handle live streaming vs VOD?","VOD can pre-transcode and deeply buffer. Live must transcode in real time, keep buffers small (low latency), and use short/partial segments (LL-HLS / LL-DASH with chunked transfer). Manifests update continuously with short TTLs. Trade-offs shift toward latency over buffer safety, and you need real-time encoder scaling and tighter failure handling."],
+  ["How do you secure/monetize video (DRM, tokens)?","Protect delivery with signed/expiring URLs or token auth at the CDN so links can't be shared indefinitely; protect content with DRM (Widevine/PlayReady/FairPlay via EME) encrypting segments and gating decryption keys by license. Add geo/entitlement checks, watermarking for leak tracing, and separate ad-insertion (SSAI) for monetization."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* GLOBAL CODE */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Flow":CODE_flow, "Encode ladder":CODE_encode, "Segmenting":CODE_chunk,
+  "Manifest":CODE_manifest, "ABR":CODE_abr, "CDN headers":CODE_cdn, "MSE playback":CODE_playback
+}); }
+
+/* RELATED */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Typeahead Search","🔍","Trie + ranking","typeahead-search.html"],
+    ["Web Crawler","🕷️","Bloom + frontier","web-crawler.html"],
+    ["Twitter News Feed","🐦","Fan-out + Redis","news-feed.html"],
+    ["Notification System","🔔","Kafka pipeline","notification-system.html"],
+    ["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — adaptive bitrate streaming simulator
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.LADDER=[["240p",0.4],["360p",0.8],["480p",1.4],["720p",2.8],["1080p",5.0]];
+    this.MAXBW=25; this.segDur=4; this.simSpeed=2.2;
+    this.host=$("pgViz"); this.buildStage(); this.bind(); this.reset();
+    this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t));
+  }
+  reset(){
+    this.buffer=6; this.dlAccum=0; this.qIndex=2; this.est=+$("pgBw").value;
+    this.state="play"; this.switches=0; this.stalls=0; this.playSec=0; this.bitrateSum=0;
+    this.dropTimer=0; this.tt=0; this.updateStats();
+  }
+  buildStage(){
+    this.svg=S("svg",{viewBox:"0 0 600 300"}); this.host.appendChild(this.svg);
+    // bandwidth
+    this.svg.appendChild(T(20,16,"Network throughput",{fill:"#8b8b93","font-size":11}));
+    this.svg.appendChild(S("rect",{x:20,y:24,width:560,height:16,rx:8,fill:"#141416",stroke:"#26262e"}));
+    this.bwFill=S("rect",{x:20,y:24,width:0,height:16,rx:8,fill:"#38bdf8"}); this.svg.appendChild(this.bwFill);
+    this.bwLbl=T(576,20,"",{fill:"#38bdf8","font-size":10,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.bwLbl);
+    // buffer
+    this.svg.appendChild(T(20,64,"Buffer health",{fill:"#8b8b93","font-size":11}));
+    this.svg.appendChild(S("rect",{x:20,y:72,width:560,height:24,rx:8,fill:"#141416",stroke:"#26262e"}));
+    this.bufFill=S("rect",{x:20,y:72,width:0,height:24,rx:8,fill:"#34d399"}); this.svg.appendChild(this.bufFill);
+    this.bufLbl=T(576,89,"",{fill:"#34d399","font-size":10,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.bufLbl);
+    // ladder
+    this.svg.appendChild(T(20,128,"Rendition ladder",{fill:"#8b8b93","font-size":11}));
+    this.rungEls=[]; const y0=140, rh=28;
+    for(let i=this.LADDER.length-1;i>=0;i--){ const idx=i; const y=y0+(this.LADDER.length-1-i)*rh;
+      const g=S("g"); this.svg.appendChild(g);
+      const r=S("rect",{x:20,y,width:230,height:24,rx:7,fill:"#1a1a1c",stroke:"#2a2a32","stroke-width":1.3}); g.appendChild(r);
+      g.appendChild(T(32,y+16,this.LADDER[idx][0],{fill:"#d4d4d8","font-size":11,"font-weight":600}));
+      g.appendChild(T(238,y+16,this.LADDER[idx][1]+" Mbps",{fill:"#8b8b93","font-size":9.5,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}));
+      this.rungEls[idx]={r}; }
+    // status panel
+    this.svg.appendChild(S("rect",{x:300,y:140,width:280,height:140,rx:10,fill:"#0e0e11",stroke:"#26262e"}));
+    this.statusBig=T(440,196,"",{fill:"#34d399","font-size":22,"text-anchor":"middle","font-weight":800}); this.svg.appendChild(this.statusBig);
+    this.statusSub=T(440,224,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.statusSub);
+    this.statusQ=T(440,164,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700}); this.svg.appendChild(this.statusQ);
+  }
+  bind(){
+    $("pgBw").addEventListener("input",()=>$("pgBwV").textContent=(+$("pgBw").value).toFixed(1)+" Mbps");
+    $("pgTarget").addEventListener("input",()=>$("pgTargetV").textContent=$("pgTarget").value+" s");
+    $("pgDrop").onclick=()=>{ this.dropTimer=4.5; };
+    $("pgReset").onclick=()=>this.reset();
+  }
+  chooseRendition(){
+    const abr=$("pgABR").value; const target=+$("pgTarget").value; let want;
+    if(abr==="bw"){ want=0; for(let i=0;i<this.LADDER.length;i++){ if(this.LADDER[i][1]<=this.est*0.85) want=i; }
+      if(this.buffer<10 && want>0) want--; }
+    else { want=this.qIndex;
+      if(this.buffer>target*0.6 && want<4) want++;
+      else if(this.buffer<target*0.28 && want>0) want--; }
+    want=clamp(want,0,4);
+    if(want!==this.qIndex){ this.switches++; this.qIndex=want; }
+  }
+  loop(now){ const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){ this.tt+=dt;
+    const target=+$("pgTarget").value;
+    let base=+$("pgBw").value;
+    if(this.dropTimer>0){ this.dropTimer-=dt; base=0.5; }
+    const bwNow=clamp(base*(1+0.10*Math.sin(this.tt*1.6)) + rand(-0.25,0.25), 0.15, this.MAXBW);
+    this.est += (bwNow-this.est)*Math.min(1,dt*1.6);   // smoothed throughput estimate
+    this.chooseRendition();
+    const br=this.LADDER[this.qIndex][1];
+    // download toward current segment (megabits)
+    if(this.buffer<target){ this.dlAccum += bwNow*dt*this.simSpeed;
+      const need=br*this.segDur;
+      while(this.dlAccum>=need && this.buffer<target){ this.dlAccum-=need; this.buffer=Math.min(target,this.buffer+this.segDur); } }
+    // playback
+    if(this.state==="play"){ this.buffer -= dt*this.simSpeed; this.playSec+=dt*this.simSpeed; this.bitrateSum+=br*dt*this.simSpeed;
+      if(this.buffer<=0){ this.buffer=0; this.state="stall"; this.stalls++; } }
+    else { if(this.buffer>=Math.min(target,6)) this.state="play"; }
+    this.render(bwNow,br); this.updateStats();
+  }
+  render(bwNow,br){
+    this.bwFill.setAttribute("width", clamp(bwNow/this.MAXBW,0,1)*560);
+    this.bwLbl.textContent=bwNow.toFixed(1)+" Mbps";
+    const target=+$("pgTarget").value;
+    const bufFrac=clamp(this.buffer/target,0,1);
+    this.bufFill.setAttribute("width",bufFrac*560);
+    const low=this.buffer<6;
+    this.bufFill.setAttribute("fill", this.state==="stall"?"#f87171": low?"#fbbf24":"#34d399");
+    this.bufLbl.textContent=this.buffer.toFixed(1)+" s";
+    this.rungEls.forEach((e,i)=>{ const on=i===this.qIndex;
+      e.r.setAttribute("stroke",on?"#7C3AED":"#2a2a32"); e.r.setAttribute("stroke-width",on?2.2:1.3);
+      e.r.setAttribute("fill",on?"rgba(124,58,237,.22)":"#1a1a1c"); });
+    this.statusQ.textContent="▶ "+this.LADDER[this.qIndex][0]+" · "+br+" Mbps";
+    if(this.state==="stall"){ this.statusBig.textContent="⏳ REBUFFERING"; this.statusBig.setAttribute("fill","#f87171"); this.statusSub.textContent="buffer empty — waiting for segments"; }
+    else if(this.dropTimer>0){ this.statusBig.textContent="▶ PLAYING"; this.statusBig.setAttribute("fill","#fbbf24"); this.statusSub.textContent="network dropped — ABR stepping down"; }
+    else { this.statusBig.textContent="▶ PLAYING"; this.statusBig.setAttribute("fill","#34d399"); this.statusSub.textContent="smooth · "+this.buffer.toFixed(0)+"s buffered"; }
+  }
+  updateStats(){
+    $("pgQuality").textContent=this.LADDER[this.qIndex][0];
+    $("pgBitrate").textContent=(this.playSec>0?(this.bitrateSum/this.playSec):0).toFixed(1)+" Mbps";
+    $("pgSwitches").textContent=this.switches;
+    $("pgStalls").textContent=this.stalls;
+    $("pgBuffer").textContent=this.buffer.toFixed(0)+" s";
+    const be=$("pgBuffer"); be.className="v "+(this.state==="stall"?"bad":this.buffer<6?"wa":"ok");
+  }
+}
+
+/* BOOT */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

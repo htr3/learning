@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CSRF — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const nodes=[["😈 evil.com",90,90,"#f87171"],["🧑 browser",320,90,"#38bdf8"],["🏦 bank.com",550,90,"#34d399"]];
+  function box(x,y,t,c){g.appendChild(S("rect",{x:x-64,y:y-20,width:128,height:40,rx:8,fill:c+"22",stroke:c,"stroke-width":2}));g.appendChild(TX(x,y+5,t,{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";nodes.forEach(n=>box(n[1],n[2],n[0],n[3]));
+    if(phase===0){arrow(g,154,80,256,80,"#f87171");g.appendChild(TX(205,72,"hidden form auto-submits",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="1 — you visit a malicious page while logged into the bank";lbl.setAttribute("fill","#f87171");sub.textContent="the page contains a hidden form/​image targeting bank.com";}
+    else if(phase===1){arrow(g,384,80,486,80,"#fbbf24");g.appendChild(TX(435,72,"POST /transfer + cookies 🍪",{fill:"#fbbf24","font-size":8.5,"text-anchor":"middle"}));
+      lbl.textContent="2 — browser sends the request WITH your session cookie";lbl.setAttribute("fill","#fbbf24");sub.textContent="cookies are attached automatically to any request to bank.com";}
+    else if(phase===2){g.appendChild(S("rect",{x:486,y:108,width:128,height:26,rx:6,fill:"rgba(248,113,113,.2)",stroke:"#f87171"}));g.appendChild(TX(550,125,"$$$ transferred ✗",{fill:"#f87171","font-size":10,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="3 — no CSRF token → bank trusts the forged request";lbl.setAttribute("fill","#f87171");sub.textContent="the attacker rode your authenticated session";}
+    else{g.appendChild(S("rect",{x:256,y:120,width:128,height:26,rx:6,fill:"rgba(52,211,153,.2)",stroke:"#34d399"}));g.appendChild(TX(320,137,"token missing → 403 ✓",{fill:"#34d399","font-size":10,"text-anchor":"middle","font-weight":700}));
+      arrow(g,384,80,486,80,"#34d399");g.appendChild(TX(435,72,"POST — no CSRF token",{fill:"#34d399","font-size":8.5,"text-anchor":"middle"}));
+      lbl.textContent="defense — server requires an unguessable CSRF token";lbl.setAttribute("fill","#34d399");sub.textContent="attacker can't read it (Same-Origin) → forged request rejected";}}
+  function step(){phase=(phase+1)%4;timer=phase===3?4:2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">You're logged into <b>bank.com</b> in one tab. In another tab you open a page on <b>evil.com</b> that silently fires a <code>POST /transfer</code> at the bank. Because the browser attaches your <b>session cookie automatically</b>, the bank can't tell a forged cross-site request from a real one — unless you add a defense. Toggle protections and fire the attack.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label><input type="checkbox" id="pgTok"> CSRF token (synchronizer)</label></div>
+      <div class="pg-field"><label><input type="checkbox" id="pgSs"> SameSite=Lax cookie</label></div>
+      <div class="pg-field"><label><input type="checkbox" id="pgOrigin"> Verify Origin header</label></div>
+      <button class="pg-btn" id="pgEvil">😈 fire forged request (evil.com)</button>
+      <button class="pg-btn secondary" id="pgReal">🧑 legit request (bank.com)</button>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">A forged request comes from another origin and cannot read the token or set custom origins. A legit request originates on bank.com and carries the token.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Forged attempts</div><div class="v" id="pgAtt">0</div></div>
+        <div class="pg-stat"><div class="k">Blocked</div><div class="v ok" id="pgBlk">0</div></div>
+        <div class="pg-stat"><div class="k">Money stolen</div><div class="v wa" id="pgStolen">$0</div></div>
+        <div class="pg-stat"><div class="k">Protection</div><div class="v ac" id="pgProt">none</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=170;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let att=0,blk=0,stolen=0;
+  function prot(){const p=[];if($("pgTok").checked)p.push("CSRF token");if($("pgSs").checked)p.push("SameSite");if($("pgOrigin").checked)p.push("Origin check");return p;}
+  function stats(){$("pgAtt").textContent=att;$("pgBlk").textContent=blk;$("pgStolen").textContent="$"+stolen;
+    const p=prot();$("pgProt").textContent=p.length?p.length+" active":"none";}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function draw(from,ok){svg.innerHTML="";
+    const bank={x:470,y:85},evil={x:90,y:50},brow={x:280,y:85};
+    [[evil.x,evil.y,"😈 evil.com","#f87171"],[brow.x,brow.y,"🧑 browser","#38bdf8"],[bank.x,bank.y,"🏦 bank.com","#34d399"]].forEach(n=>{
+      svg.appendChild(S("rect",{x:n[0]-58,y:n[1]-18,width:116,height:36,rx:8,fill:n[3]+"22",stroke:n[3],"stroke-width":2}));
+      svg.appendChild(TX(n[0],n[1]+5,n[2],{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700}));});
+    const c=ok?"#34d399":"#f87171";const src=from==="evil"?evil:brow;
+    arrow(svg,src.x+58,brow.y,bank.x-58,brow.y,c);
+    svg.appendChild(TX((src.x+bank.x)/2,brow.y-8,from==="evil"?"forged POST /transfer":"POST /transfer",{fill:c,"font-size":9,"text-anchor":"middle"}));
+    svg.appendChild(S("rect",{x:bank.x-58,y:120,width:116,height:26,rx:6,fill:c+"22",stroke:c}));
+    svg.appendChild(TX(bank.x,137,ok?"accepted ✓":"rejected 403 ✗",{fill:c,"font-size":10,"text-anchor":"middle","font-weight":700}));}
+  function evil(){att++;const p=prot();
+    let blocked=false,reason="";
+    if(p.includes("CSRF token")){blocked=true;reason="no valid CSRF token (can't read it cross-origin)";}
+    else if(p.includes("Origin check")){blocked=true;reason="Origin header = evil.com ≠ bank.com";}
+    else if(p.includes("SameSite")){blocked=true;reason="SameSite=Lax → cookie not sent on cross-site POST";}
+    if(blocked){blk++;log("😈 forged request BLOCKED — "+reason,"ok");draw("evil",false);}
+    else{stolen+=500;log("😈 forged request SUCCEEDED — $500 transferred! no defense stopped it","bad");draw("evil",true);}
+    stats();}
+  function real(){log("🧑 legit request from bank.com — token present, same origin → accepted","ac");draw("browser",true);}
+  $("pgEvil").onclick=evil;$("pgReal").onclick=real;
+  ["pgTok","pgSs","pgOrigin"].forEach(id=>$(id).onchange=stats);
+  draw("browser",true);stats();log("logged into bank.com. open evil.com and fire a forged request →","ac");
+}
+
+const DATA={
+  badge:"🎭",title:"CSRF",category:"Security",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Cross-Site Request Forgery",
+  tagline:"CSRF tricks an authenticated user's browser into sending a <b>forged state-changing request</b> to a site they're logged into. Because browsers attach cookies <b>automatically</b>, the target can't distinguish the forgery from a real action — unless it demands an <b>unguessable token</b> the attacker can't read.",
+  pills:["Rides your <b>session cookie</b>","<b>Synchronizer token</b> defense","<b>SameSite</b> cookies","Verify <b>Origin</b>"],
+  overview:"<b>Cross-Site Request Forgery (CSRF)</b> exploits the fact that browsers automatically attach a site's cookies to <em>every</em> request to that site — including requests triggered by a totally different site. If you're logged into <b>bank.com</b> and then visit a malicious page, that page can embed a hidden form or image that fires <code>POST https://bank.com/transfer</code>. Your browser dutifully attaches your bank session cookie, and the bank — seeing a valid session — processes the transfer. The attacker never sees your cookie or session; they simply cause your browser to <em>use</em> it. The classic defense is the <b>synchronizer token pattern</b>: the server embeds a random, per-session (or per-request) token in each legitimate form, and rejects any state-changing request lacking the matching token. The attacker's cross-origin page <b>cannot read</b> that token (the Same-Origin Policy blocks it), so it can't forge a valid request. Modern defenses add <b>SameSite cookies</b> (the browser won't send the cookie on cross-site requests) and server-side <b>Origin/Referer verification</b>. CSRF only affects <b>cookie/session-based auth</b> that the browser sends automatically — APIs using bearer tokens in an <code>Authorization</code> header (which must be added explicitly by JS) are not vulnerable to classic CSRF.",
+  problem:"Cookie-based sessions are convenient because the browser attaches them automatically — but that same automatic behavior means any site can cause the browser to send an authenticated request to your app. Without an extra proof that the request originated from your own pages, the server cannot tell a genuine user action from one forged by a malicious site, allowing attackers to perform actions (transfers, password changes, purchases) on the victim's behalf.",
+  diagram,diagramCaption:"An attacker page forges an authenticated request; a CSRF token the attacker can't read rejects it.",
+  how:[
+    "User authenticates to the target site; the browser stores a session cookie.",
+    "Attacker lures the user to a malicious page containing a hidden form/image targeting the site.",
+    "The browser auto-sends the forged request WITH the session cookie attached.",
+    "Without a defense, the server sees a valid session and executes the state-changing action.",
+    "Defense: require an unguessable CSRF token (and/or SameSite cookies + Origin checks) that a cross-site page cannot supply."
+  ],
+  complexity:[["Attack needs","victim logged in + a visit"],["Token","random, per session"],["SameSite","Lax / Strict"],["Scope","cookie-auth only"]],
+  advantages:["Synchronizer token: strong, well-understood defense","SameSite=Lax/Strict blocks most CSRF by default","Double-submit cookie: stateless token option","Origin/Referer checks add defense in depth","Bearer-token (header) auth is immune to classic CSRF"],
+  disadvantages:["Cookie auth is CSRF-prone by default","Tokens must be per-session & unpredictable","GET endpoints must never change state","SameSite=Strict can break legit cross-site navigation","Subdomains/misconfig can weaken SameSite protections"],
+  tradeoffs:"CSRF defenses trade a little complexity for safety, and the choices interact. The <b>synchronizer token</b> is the gold standard but requires server-side state (or a signed <b>double-submit cookie</b> variant that's stateless but slightly weaker). <b>SameSite cookies</b> are nearly free and now default to <code>Lax</code> in modern browsers — blocking cross-site POSTs automatically — but <code>Strict</code> can break legitimate flows (a link from an email won't carry the session), and older browsers or subdomain misconfigurations can leave gaps, so it shouldn't be your only layer. <b>Origin/Referer checks</b> are cheap but the headers are occasionally stripped by proxies. The deeper design tension is auth strategy: <b>cookie-based sessions</b> give automatic, HttpOnly-protected credentials (good against XSS token theft) but need CSRF protection; <b>bearer tokens</b> in headers sidestep CSRF entirely but are readable by JavaScript and thus exposed to XSS. There's no free lunch — you pick which class of attack to defend against explicitly.",
+  whenNot:"You don't need classic CSRF tokens for APIs authenticated purely by a bearer token in the <code>Authorization</code> header, since browsers never attach those automatically and the attacker's page can't add them. Purely read-only endpoints (properly using GET with no side effects) also aren't a CSRF target. And if you rely on <code>SameSite=Strict</code> everywhere with no cross-site entry points, tokens add little — though defense in depth is still recommended for anything sensitive.",
+  sim,
+  code:{
+"Synchronizer token":`# 1) Server generates a random token, stores it in the session,\n#    and embeds it in every form:\n<form method="POST" action="/transfer">\n  <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">\n  ...\n</form>\n\n# 2) On any state-changing request, verify it (constant-time compare):\n@app.post("/transfer")\ndef transfer(req):\n    if not constant_time_eq(req.form["csrf_token"], session["csrf_token"]):\n        abort(403)                    # forged request: token missing/wrong\n    do_transfer(...)\n# Attacker's cross-origin page cannot READ the token (Same-Origin Policy).`,
+"SameSite cookie":`# Tell the browser NOT to send the cookie on cross-site requests.\nSet-Cookie: session=abc123; HttpOnly; Secure; SameSite=Lax\n\n#  Lax    -> sent on top-level GET navigations, NOT on cross-site POST/iframe\n#  Strict -> never sent on any cross-site request (can break email links)\n#  None   -> always sent (requires Secure) — needed for legit cross-site use\n\n# Lax is the modern default and blocks most CSRF automatically.`,
+"Double-submit + Origin":`// Stateless CSRF: send the same random value as BOTH a cookie and a header.\n// The attacker can't read the cookie to copy it into the header (Same-Origin).\nres.cookie("csrf", token, { sameSite: "Lax", secure: true });   // readable by our JS\n// client JS copies cookie -> header on each request:\nfetch("/transfer", { method:"POST", headers:{ "X-CSRF-Token": token } });\n\n// Server verifies header === cookie AND checks Origin:\nif (req.headers["x-csrf-token"] !== req.cookies.csrf) return res.status(403).end();\nif (req.headers.origin !== "https://bank.com")        return res.status(403).end();`
+  },
+  realWorld:[
+    ["Django / Rails / Spring","Built-in CSRF middleware inject and verify per-session tokens."],
+    ["OWASP CSRF cheat sheet","Recommends synchronizer token + SameSite as layered defense."],
+    ["Browsers (Chrome/FF)","SameSite=Lax is now the default for cookies without an explicit attribute."],
+    ["Banking / e-commerce","Every state-changing form carries an anti-CSRF token."],
+    ["OAuth flows","The state parameter is a CSRF token protecting the redirect step."]
+  ],
+  interview:[
+    ["basic","What is CSRF?","Cross-Site Request Forgery: an attack that tricks a logged-in user's browser into sending a forged state-changing request to a site they're authenticated with. Because browsers automatically attach cookies to any request to that site, the target processes the forged request as if the user intended it — enabling actions like transfers or password changes without the user's knowledge."],
+    ["basic","Why does CSRF work — what's the root cause?","The browser's ambient authority: it automatically attaches a site's cookies to every request to that site, regardless of which site initiated the request. So a malicious page can cause the victim's browser to send an authenticated request. The server sees a valid session and can't tell the forgery apart from a real action unless it requires additional proof the attacker can't provide."],
+    ["inter","How does the synchronizer token pattern stop CSRF?","The server generates a random, unpredictable token tied to the user's session and embeds it in every legitimate form/page. Any state-changing request must include the matching token, which the server verifies. A cross-origin attacker page cannot read the token (blocked by the Same-Origin Policy), so it cannot include a valid one — and the forged request is rejected with a 403."],
+    ["inter","What is SameSite and how does it help?","SameSite is a cookie attribute controlling whether the browser sends the cookie on cross-site requests. Lax (the modern default) sends it on top-level GET navigations but not on cross-site POSTs or iframes; Strict never sends it cross-site. This blocks most CSRF automatically because the forged cross-site request simply won't carry the session cookie. It's a strong baseline but should be paired with tokens for defense in depth."],
+    ["adv","Why are bearer-token APIs immune to classic CSRF?","Because bearer tokens live in the Authorization header, which browsers do NOT attach automatically — JavaScript must add it on each request. A cross-site attacker page can't read the token (it's not a cookie) and can't set custom headers on a simple cross-origin request without triggering CORS. Since the forged request lacks the credential, the API rejects it. The trade-off is that header tokens are readable by JS, exposing them to XSS."],
+    ["adv","What is the double-submit cookie pattern and when is it used?","A stateless CSRF defense: the server sets a random value as a cookie and the client also sends that value in a custom header (or form field). The server accepts the request only if the header and cookie match. It works because a cross-origin attacker can't read the cookie to copy it into the header (Same-Origin Policy). It's used when you can't keep server-side session state; it's slightly weaker than synchronizer tokens and is usually combined with Origin checks."],
+    ["sd","How would you protect a web app against CSRF end-to-end?","Layered defense: set session cookies HttpOnly, Secure, SameSite=Lax (or Strict where UX allows); implement synchronizer CSRF tokens on all state-changing endpoints (or double-submit if stateless); verify the Origin/Referer header server-side; ensure GET requests never change state; and for pure APIs use bearer tokens in headers. Also add per-form tokens for sensitive actions and re-authentication for high-risk operations like changing email/password."]
+  ],
+  mistakes:["Using GET requests for state-changing actions (trivially forgeable).","Relying on the Referer header alone (can be stripped).","Non-random or shared CSRF tokens the attacker can predict.","Forgetting SameSite, leaving cookie auth exposed by default.","Assuming a bearer-token API needs CSRF tokens (it doesn't)."],
+  best:["Use synchronizer (or double-submit) CSRF tokens on all writes.","Set cookies HttpOnly, Secure, and SameSite=Lax/Strict.","Verify the Origin header on state-changing requests.","Never let GET requests mutate state.","Re-authenticate for the most sensitive actions; layer defenses."],
+  related:[["XSS","💉","Can steal tokens & bypass CSRF","xss.html"],["Session Management","🎫","Cookies are the CSRF target","session-management.html"],["CORS","🔗","Same-Origin Policy underlies defense","cors.html"],["OAuth2 / OIDC","🔑","state param = CSRF token","oauth2-oidc.html"],["REST API","🌐","Bearer-token APIs sidestep CSRF","rest.html"],["Secrets Management","🔐","Protect signing keys","secrets-management.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

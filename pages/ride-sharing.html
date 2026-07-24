@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ride Sharing Backend — System Design</title>
+<style>
+  :root{
+    --bg:#111111; --panel:#1a1a1c; --panel-2:#202024; --line:#f4f4f5;
+    --muted:#8b8b93; --accent:#7C3AED; --accent-soft:rgba(124,58,237,.35);
+    --gray:#2a2a30; --gray-border:#3a3a42; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --blue:#38bdf8;
+    --nav-h:56px; --side-w:250px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--line);font-family:"Segoe UI","Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#4b4c56}
+
+  #fade{position:fixed;inset:0;z-index:200;background:var(--bg);pointer-events:none;opacity:1;transition:opacity .45s ease}
+  #fade.hide{opacity:0}
+  #fade.show{opacity:1;pointer-events:all}
+
+  /* TOP NAV */
+  #topnav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);z-index:60;display:flex;align-items:center;gap:14px;
+    padding:0 18px;background:rgba(20,20,22,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--gray-border)}
+  .back{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--line)}
+  .back:hover{border-color:var(--accent);color:#fff;box-shadow:0 0 12px var(--accent-soft);transform:translateX(-2px)}
+  .nav-title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  .nav-title .badge{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 14px var(--accent-soft)}
+  .breadcrumb{margin-left:6px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+  .breadcrumb .sep{opacity:.5}
+  .breadcrumb .cur{color:var(--accent);font-weight:600}
+  #topnav .spacer{flex:1}
+  #menuBtn{display:none;background:var(--panel-2);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:8px;width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:var(--nav-h);left:0;bottom:0;width:var(--side-w);z-index:40;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--gray-border);padding:16px 12px}
+  #sidebar .s-title{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:6px 12px 10px}
+  .snav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;
+    color:#c9c9d1;transition:background .14s,color .14s;position:relative}
+  .snav:hover{background:var(--panel-2);color:#fff}
+  .snav.active{background:var(--accent-soft);color:#fff}
+  .snav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+  .snav .num{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;font-weight:700}
+  .snav.active .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .s-div{height:1px;background:var(--gray-border);margin:12px 10px}
+  #sidebar .s-foot{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+
+  /* MAIN */
+  main{margin-left:var(--side-w);margin-top:var(--nav-h);padding:40px clamp(20px,5vw,64px) 120px;max-width:1180px}
+  .hero{margin-bottom:44px}
+  .hero h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.6px;line-height:1.08}
+  .hero .tagline{color:var(--muted);font-size:16px;margin-top:12px;max-width:740px}
+  .hero .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .hpill{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--gray-border);
+    border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .hpill b{color:var(--line)}
+  .hpill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+
+  section{scroll-margin-top:76px;margin-bottom:56px}
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .sec-head .s-num{width:40px;height:40px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sec-head h2{font-size:26px;font-weight:800;letter-spacing:-.3px}
+  .sec-head .s-tag{font-size:11.5px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+  .card{background:var(--panel);border:1px solid var(--gray-border);border-radius:16px;padding:22px;margin-bottom:16px}
+  .lead{font-size:15px;color:#e4e4e7;line-height:1.7}
+  .callout{background:var(--panel-2);border:1px solid var(--gray-border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;font-size:14px;color:#d4d4d8;line-height:1.65;margin-top:14px}
+  .callout.ex{border-left-color:var(--ok)}
+  .block-title{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:700;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .block-title::before{content:"";width:14px;height:2px;background:var(--accent);border-radius:2px}
+
+  .steps{counter-reset:st;display:flex;flex-direction:column;gap:9px}
+  .steps li{list-style:none;position:relative;padding:10px 12px 10px 44px;background:var(--panel-2);
+    border:1px solid var(--gray-border);border-radius:10px;font-size:13.5px;color:#d4d4d8}
+  .steps li::before{counter-increment:st;content:counter(st);position:absolute;left:11px;top:9px;width:22px;height:22px;
+    border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col-box{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:12px;padding:16px}
+  .col-box h4{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .col-box li{font-size:13px;color:#d4d4d8;padding-left:20px;position:relative;line-height:1.5}
+  .col-box.good li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .col-box.bad li::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+
+  /* VIZ */
+  .viz-wrap{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;margin:8px 0 4px;position:relative}
+  .viz-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+  .viz-cap{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px;line-height:1.5;text-align:center}
+
+  /* CODE VIEWER */
+  .cv{background:#0b0b0d;border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-top:8px}
+  .cv-tabs{display:flex;gap:2px;background:var(--panel-2);border-bottom:1px solid var(--gray-border);padding:6px 6px 0;overflow-x:auto}
+  .cv-tab{background:transparent;border:none;color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;
+    border-radius:8px 8px 0 0;white-space:nowrap;transition:all .14s;font-family:inherit}
+  .cv-tab:hover{color:#fff}
+  .cv-tab.active{background:#0b0b0d;color:var(--accent);font-weight:600}
+  .cv-body{position:relative}
+  .cv-copy{position:absolute;top:10px;right:10px;background:var(--panel-2);border:1px solid var(--gray-border);
+    color:var(--muted);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;z-index:2;transition:all .14s}
+  .cv-copy:hover{border-color:var(--accent);color:#fff}
+  .cv pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.5px;line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;color:#d4d4d8;tab-size:2}
+  .tok-cm{color:#6b7280;font-style:italic}
+  .tok-st{color:#7ee787}
+  .tok-nu{color:#f0a35e}
+  .tok-kw{color:#c4a2ff;font-weight:600}
+  .tok-fn{color:#79c0ff}
+
+  /* TABLE */
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-border);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--gray-border)}
+  th{background:var(--panel-2);color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:700}
+
+  /* TOPIC CARDS */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .rw-card{background:var(--panel);border:1px solid var(--gray-border);border-radius:14px;padding:18px;transition:all .16s}
+  .rw-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .rw-card .rw-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .rw-logo{width:42px;height:42px;border-radius:11px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .rw-name{font-size:15px;font-weight:700}
+  .rw-algo{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .rw-card p{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+  /* ACCORDION */
+  .acc{border:1px solid var(--gray-border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--panel)}
+  .acc-q{padding:15px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;transition:background .14s}
+  .acc-q:hover{background:var(--panel-2)}
+  .acc-q .qi{width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+  .acc-q .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .acc.open .chev{transform:rotate(180deg)}
+  .acc-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-a .inner{padding:0 18px 16px 54px;font-size:13.5px;color:#d4d4d8;line-height:1.65}
+  .acc.open .acc-a{max-height:520px}
+
+  /* PLAYGROUND */
+  .pg{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .pg-controls{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:14px;padding:18px}
+  .pg-field{margin-bottom:18px}
+  .pg-field label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+  .pg-field label b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .pg-field input[type=range]{width:100%;accent-color:var(--accent)}
+  .pg-field select{width:100%;background:var(--panel);border:1px solid var(--gray-border);color:var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+  .pg-field select:focus{border-color:var(--accent)}
+  .pg-btns{display:flex;gap:8px;margin-top:6px}
+  .pg-btns button{flex:1;border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--gray-border);
+    background:var(--panel);color:var(--line);transition:all .15s}
+  .pg-btns button:hover{border-color:var(--accent)}
+  .pg-btns button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .pg-stage{background:#0c0c0e;border:1px solid var(--gray-border);border-radius:14px;padding:16px;min-height:360px}
+  .pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px;margin-bottom:12px}
+  .pg-stat{background:var(--panel-2);border:1px solid var(--gray-border);border-radius:10px;padding:11px 13px}
+  .pg-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pg-stat .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;word-break:break-word}
+  .pg-stat .v.ok{color:var(--ok)} .pg-stat .v.bad{color:var(--bad)} .pg-stat .v.ac{color:var(--accent)} .pg-stat .v.wa{color:var(--warn)}
+
+  /* RELATED */
+  .rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .rel-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--gray-border);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s}
+  .rel-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .rel-card .ri{width:36px;height:36px;border-radius:9px;background:var(--panel-2);border:1px solid var(--gray-border);
+    display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .rel-card .rt{font-size:13.5px;font-weight:600}
+  .rel-card .rs{font-size:11px;color:var(--muted)}
+
+  /* RESPONSIVE */
+  @media (max-width:1000px){ .pg{grid-template-columns:1fr} .two-col{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    #menuBtn{display:flex;align-items:center;justify-content:center}
+    #sidebar{transform:translateX(-100%);transition:transform .28s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+    #sidebar.open{transform:translateX(0)}
+    main{margin-left:0}
+    .breadcrumb{display:none}
+  }
+  @media (max-width:560px){ .rw-grid,.rel-grid{grid-template-columns:1fr 1fr} .sec-head h2{font-size:22px} }
+</style>
+</head>
+<body>
+  <div id="fade"></div>
+
+  <!-- ================= TOP NAV ================= -->
+  <div id="topnav">
+    <button id="menuBtn">☰</button>
+    <button class="back" data-nav="../index.html">← Back to Hub</button>
+    <div class="nav-title"><span class="badge">🚕</span> Ride Sharing</div>
+    <div class="breadcrumb">
+      <span class="link" data-nav="../index.html">Hub</span><span class="sep">›</span>
+      <span>System Design</span><span class="sep">›</span><span class="cur">Ride Sharing Backend</span>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ================= SIDEBAR ================= -->
+  <nav id="sidebar">
+    <div class="s-title">Concepts</div>
+    <div id="snavList"></div>
+    <div class="s-div"></div>
+    <div class="s-title">More</div>
+    <div class="snav" data-scroll="topics"><span class="num">★</span> Interview Topics</div>
+    <div class="snav" data-scroll="compare"><span class="num">≡</span> Spatial Index</div>
+    <div class="snav" data-scroll="interview"><span class="num">?</span> Interview Q&amp;A</div>
+    <div class="snav" data-scroll="code"><span class="num">{}</span> Code Examples</div>
+    <div class="snav" data-scroll="playground"><span class="num">▶</span> Playground</div>
+    <div class="snav" data-scroll="related"><span class="num">🔗</span> Related</div>
+    <div class="s-div"></div>
+    <div class="s-foot">Pure HTML · CSS · Vanilla JS<br>SVG animations · no frameworks</div>
+  </nav>
+
+  <!-- ================= MAIN ================= -->
+  <main>
+    <div class="hero">
+      <h1>Ride Sharing Backend</h1>
+      <p class="tagline">How Uber / Lyft / Ola match millions of riders to nearby drivers in real time — streaming GPS over
+        WebSockets, indexing the world with geohash / H3 / QuadTrees, finding the nearest available drivers, assigning trips,
+        estimating ETAs, applying surge pricing and handling cancellations, all glued together with Kafka. Explore each with
+        live visualizations and an interactive matching + surge simulator.</p>
+      <div class="pills">
+        <span class="hpill"><span class="dot"></span> <b>Real-time</b>&nbsp;GPS streams</span>
+        <span class="hpill"><b>Geospatial</b>&nbsp;index (Geohash / H3)</span>
+        <span class="hpill"><b>Nearest-driver</b>&nbsp;matching</span>
+        <span class="hpill"><b>Live</b>&nbsp;matching + surge sim</span>
+      </div>
+    </div>
+
+    <div id="sections"><!-- concept sections injected here --></div>
+
+    <!-- ===== INTERVIEW TOPICS ===== -->
+    <section id="topics">
+      <div class="sec-head"><div class="s-num">★</div><div><div class="s-tag">Deep Dives</div><h2>Interview Topics</h2></div></div>
+      <div class="rw-grid" id="topicGrid"></div>
+    </section>
+
+    <!-- ===== COMPARE ===== -->
+    <section id="compare">
+      <div class="sec-head"><div class="s-num">📊</div><div><div class="s-tag">Geospatial Indexing</div><h2>Spatial Index Compared</h2></div></div>
+      <div class="card">
+        <div class="block-title">Geohash vs H3 vs QuadTree vs S2</div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+        <div class="callout ex" style="margin-top:16px"><b>Why Uber built H3 —</b> geohash cells are rectangles whose neighbors are at varying distances and whose sizes jump at prefix boundaries. <b>H3</b>'s hexagons have uniform neighbor distance (every neighbor shares an edge) and smoother size changes — ideal for the distance-based demand/supply math surge pricing needs.</div>
+      </div>
+    </section>
+
+    <!-- ===== INTERVIEW Q&A ===== -->
+    <section id="interview">
+      <div class="sec-head"><div class="s-num">🎯</div><div><div class="s-tag">Prep</div><h2>Interview Questions</h2></div></div>
+      <div id="accList"></div>
+    </section>
+
+    <!-- ===== CODE ===== -->
+    <section id="code">
+      <div class="sec-head"><div class="s-num">💻</div><div><div class="s-tag">Implementation</div><h2>Code Examples</h2></div></div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:14px">The key paths — ingesting a location update, geohash encoding, nearest-driver search in Redis, trip matching, ETA and surge pricing.</p>
+        <div id="globalCode"></div>
+      </div>
+    </section>
+
+    <!-- ===== PLAYGROUND ===== -->
+    <section id="playground">
+      <div class="sec-head"><div class="s-num">🎮</div><div><div class="s-tag">Interactive</div><h2>Matching &amp; Surge Simulator</h2></div></div>
+      <div class="card">
+        <div class="pg">
+          <div class="pg-controls">
+            <div class="pg-field"><label>Drivers on the road <b id="pgDriversV">14</b></label><input id="pgDrivers" type="range" min="2" max="40" value="14"></div>
+            <div class="pg-field"><label>Ride requests / sec <b id="pgDemandV">4</b></label><input id="pgDemand" type="range" min="1" max="14" value="4"></div>
+            <div class="pg-field"><label>Search radius <b id="pgRadiusV">1.5 km</b></label><input id="pgRadius" type="range" min="40" max="240" step="10" value="120"></div>
+            <div class="pg-btns" style="margin-bottom:14px"><button class="go" id="pgRequest">🙋 Request a ride</button></div>
+            <div class="pg-btns">
+              <button class="go" id="pgStart">▶ Start</button>
+              <button id="pgPause">⏸ Pause</button>
+              <button id="pgReset">↺ Reset</button>
+            </div>
+          </div>
+          <div class="pg-stage">
+            <div class="pg-stats">
+              <div class="pg-stat"><div class="k">Matched</div><div class="v ok" id="pgMatched">0</div></div>
+              <div class="pg-stat"><div class="k">Waiting</div><div class="v ac" id="pgWaiting">0</div></div>
+              <div class="pg-stat"><div class="k">Avg pickup</div><div class="v" id="pgPickup">— km</div></div>
+              <div class="pg-stat"><div class="k">Surge</div><div class="v wa" id="pgSurge">1.0x</div></div>
+              <div class="pg-stat"><div class="k">Cancels</div><div class="v bad" id="pgCancels">0</div></div>
+            </div>
+            <div id="pgViz"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RELATED ===== -->
+    <section id="related">
+      <div class="sec-head"><div class="s-num">🔗</div><div><div class="s-tag">Keep Learning</div><h2>Related Concepts</h2></div></div>
+      <div class="rel-grid" id="relGrid"></div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* =====================================================================
+   RIDE SHARING BACKEND — modular vanilla JS (SVG animations, no frameworks)
+   ===================================================================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const S=(t,a={})=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const T=(x,y,str,a={})=>{const e=S("text",Object.assign({x,y},a));e.textContent=str;return e;};
+const rand=(a,b)=>a+Math.random()*(b-a), randi=(a,b)=>Math.floor(rand(a,b+1)), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by);
+const fmt=n=>n.toLocaleString();
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+class Navigation {
+  constructor(){ this.fade=$("fade");
+    requestAnimationFrame(()=>this.fade.classList.add("hide"));
+    setTimeout(()=>this.fade.style.pointerEvents="none",500);
+    document.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>this.go(b.dataset.nav)));
+  }
+  go(url){ this.fade.style.transition="opacity .4s ease"; this.fade.classList.remove("hide"); this.fade.classList.add("show");
+    setTimeout(()=>location.href=url,400); }
+}
+
+/* =====================================================================
+   SIDEBAR
+   ===================================================================== */
+class Sidebar {
+  constructor(){ this.menu=$("sidebar");
+    $("menuBtn").addEventListener("click",()=>this.menu.classList.toggle("open"));
+    document.querySelectorAll("[data-scroll]").forEach(n=>n.addEventListener("click",()=>{
+      const t=document.getElementById(n.dataset.scroll); if(t) t.scrollIntoView({behavior:"smooth",block:"start"});
+      this.menu.classList.remove("open");
+    }));
+  }
+  observe(){
+    const links=[...document.querySelectorAll("[data-scroll]")];
+    const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle("active", l.dataset.scroll===e.target.id)); } }); },
+      {rootMargin:"-45% 0px -50% 0px",threshold:0});
+    document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+  }
+}
+
+/* =====================================================================
+   CODE VIEWER
+   ===================================================================== */
+class CodeViewer {
+  static KW=new Set(("public private protected class void int long double boolean final static return if else for while do new import package extends implements interface throws try catch finally synchronized volatile "+
+    "function const let var await async of in typeof this export default stream throw switch case break continue "+
+    "def self lambda except raise with pass elif print import from as True False None "+
+    "String Long Integer List Map Stream true false null val double float "+
+    "SELECT INSERT UPDATE FROM WHERE ORDER BY LIMIT DESC select from where order by limit desc").split(/\s+/));
+  constructor(host,tabs){ this.host=host; this.tabs=tabs; this.keys=Object.keys(tabs); this.build(); }
+  build(){
+    const wrap=el("div","cv");
+    const tabBar=el("div","cv-tabs");
+    this.keys.forEach((k,i)=>{ const b=el("button","cv-tab"+(i===0?" active":""),k); b.onclick=()=>this.select(k,b); tabBar.appendChild(b); });
+    const body=el("div","cv-body");
+    const copy=el("button","cv-copy","⧉ Copy"); copy.onclick=()=>this.copy(copy);
+    const pre=el("pre"); const code=el("code");
+    pre.appendChild(code); body.appendChild(copy); body.appendChild(pre);
+    wrap.appendChild(tabBar); wrap.appendChild(body);
+    this.host.appendChild(wrap); this.codeEl=code; this.select(this.keys[0]);
+  }
+  select(k,btn){ this.cur=k;
+    if(btn){ this.host.querySelectorAll(".cv-tab").forEach(t=>t.classList.remove("active")); btn.classList.add("active"); }
+    this.codeEl.innerHTML=CodeViewer.highlight(this.tabs[k]); }
+  copy(btn){ navigator.clipboard&&navigator.clipboard.writeText(this.tabs[this.cur]).then(()=>{ btn.textContent="✓ Copied"; setTimeout(()=>btn.textContent="⧉ Copy",1400); }); }
+  static esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  static highlight(code){
+    const src=CodeViewer.esc(code);
+    const re=/(\/\/[^\n]*|#[^\n]*|--[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|(@?\b[A-Za-z_$][\w$]*\b)/g;
+    return src.replace(re,(m,cm,st,nu,wd)=>{
+      if(cm) return `<span class="tok-cm">${cm}</span>`;
+      if(st) return `<span class="tok-st">${st}</span>`;
+      if(nu) return `<span class="tok-nu">${nu}</span>`;
+      if(wd){ if(CodeViewer.KW.has(wd)) return `<span class="tok-kw">${wd}</span>`;
+        if(wd.startsWith("@")) return `<span class="tok-fn">${wd}</span>`; }
+      return m;
+    });
+  }
+}
+
+/* =====================================================================
+   ANIMATION ENGINE
+   ===================================================================== */
+class AnimationEngine {
+  constructor(){ this.items=[];
+    this.io=new IntersectionObserver(es=>es.forEach(e=>{ const it=this.items.find(i=>i.host===e.target); if(it){ e.isIntersecting?it.viz.start():it.viz.stop(); } }),{threshold:.12});
+  }
+  register(host,viz){ this.items.push({host,viz}); this.io.observe(host); }
+}
+
+/* =====================================================================
+   VIZ — base class
+   ===================================================================== */
+class Viz {
+  constructor(host,vb="0 0 640 220"){ this.host=host; this.svg=S("svg",{viewBox:vb}); host.appendChild(this.svg);
+    this.running=false; this.t=0; this.setup(); }
+  setup(){}
+  cap(txt){ const c=this.host.parentElement.querySelector(".viz-cap"); if(c)c.textContent=txt; }
+  start(){ if(this.running)return; this.running=true; this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  stop(){ this.running=false; cancelAnimationFrame(this.raf); }
+  loop(now){ if(!this.running)return; const dt=Math.min(.05,(now-this.last)/1000); this.last=now; this.t+=dt;
+    this.frame(dt); this.raf=requestAnimationFrame(t=>this.loop(t)); }
+  frame(dt){}
+  box(x,y,w,h,label,color,sub){ const g=S("g");
+    g.appendChild(S("rect",{x,y,width:w,height:h,rx:9,fill:"#1a1a1c",stroke:color||"#3a3a42","stroke-width":1.5}));
+    g.appendChild(T(x+w/2,y+h/2+(sub?-2:4),label,{fill:"#f4f4f5","font-size":11,"font-weight":600,"text-anchor":"middle"}));
+    if(sub) g.appendChild(T(x+w/2,y+h/2+12,sub,{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+    this.svg.appendChild(g); return g; }
+  arrow(x1,y1,x2,y2,color,dash){ const p=S("path",{d:`M ${x1} ${y1} L ${x2} ${y2}`,stroke:color||"#3a3a42","stroke-width":1.5,fill:"none"});
+    if(dash)p.setAttribute("stroke-dasharray","4 4"); this.svg.appendChild(p); return p; }
+  dot(cx,cy,fill,r){ const c=S("circle",{r:r||4.5,cx,cy,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.5))"}); this.svg.appendChild(c); return c; }
+}
+
+/* ---- 1. Architecture (snake pipeline) ---- */
+class ArchitectureViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    const W=108, H=44, colX=c=>18+c*125, rowY=r=>r===0?26:120;
+    this.nodes=[["🚗","Driver App",0,0],["📍","Location",1,0],["🔲","Geohash",2,0],["🧩","Matching",3,0],["🧾","Trip",4,0],
+                ["💲","Pricing",4,1],["💳","Payment",3,1],["🪵","Kafka",2,1],["🔔","Notify",1,1]];
+    this.cx=[]; this.cy=[];
+    this.nodes.forEach(([ic,nm,c,r],i)=>{ const x=colX(c), y=rowY(r);
+      this.box(x,y,W,H,nm,nm==="Kafka"?"#38bdf8":nm==="Matching"?"#7C3AED":"#3a3a42",ic);
+      this.cx.push(x+W/2); this.cy.push(y+H/2); });
+    for(let i=0;i<this.nodes.length-1;i++) this.arrow(this.cx[i],this.cy[i],this.cx[i+1],this.cy[i+1],"#2f2f37");
+    this.packets=[]; this.spawn=0;
+    this.cap("A driver's GPS flows through the Location Service (indexed by geohash), the Matching Service pairs a rider with a nearby driver, then Trip → Pricing → Payment, with Kafka broadcasting events to notifications and analytics.");
+  }
+  frame(dt){ this.spawn-=dt;
+    if(this.spawn<=0){ this.spawn=rand(.5,.9); this.packets.push({prog:0,dead:false,el:this.dot(this.cx[0],this.cy[0],"#c4a2ff")}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.7;
+      if(p.prog>=this.cx.length-1){ p.dead=true; p.el.remove(); return; }
+      const seg=Math.floor(p.prog), f=p.prog-seg;
+      p.el.setAttribute("cx",this.cx[seg]+(this.cx[seg+1]-this.cx[seg])*f);
+      p.el.setAttribute("cy",this.cy[seg]+(this.cy[seg+1]-this.cy[seg])*f);
+      p.el.setAttribute("fill",p.prog>=7?"#38bdf8":"#c4a2ff"); });
+    this.packets=this.packets.filter(p=>!p.dead);
+  }
+}
+
+/* ---- 2. Real-time Locations & Movement ---- */
+class LocationViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.mx=[20,20,360,200];  // x0,y0,x1,y1
+    this.svg.appendChild(S("rect",{x:20,y:20,width:340,height:180,rx:10,fill:"#0e0e11",stroke:"#3a3a42"}));
+    for(let gx=60;gx<360;gx+=48) this.svg.appendChild(S("line",{x1:gx,y1:20,x2:gx,y2:200,stroke:"#1c1c22"}));
+    for(let gy=60;gy<200;gy+=45) this.svg.appendChild(S("line",{x1:20,y1:gy,x2:360,y2:gy,stroke:"#1c1c22"}));
+    this.box(430,44,170,44,"Location Service","#7C3AED","WebSocket ingest");
+    this.box(430,120,170,44,"Redis GEO","#34d399","GEOADD lat/lng");
+    this.arrow(360,66,430,66,"#2f2f37"); this.arrow(515,88,515,120,"#2f2f37");
+    this.cars=[]; for(let i=0;i<6;i++){ const x=rand(40,340), y=rand(40,180);
+      this.cars.push({x,y,vx:rand(-30,30),vy:rand(-30,30),turn:rand(.6,1.6),el:this.dot(x,y,"#38bdf8",5)}); }
+    this.packets=[]; this.spawn=0; this.updates=0;
+    this.stat=T(430,190,"",{fill:"#8b8b93","font-size":11}); this.svg.appendChild(this.stat);
+    this.cap("Each driver's phone streams GPS coordinates every few seconds over a persistent WebSocket. The Location Service writes them into a Redis geospatial index — the live map of who's where.");
+  }
+  frame(dt){ this.cars.forEach(c=>{ c.turn-=dt; if(c.turn<=0){ c.turn=rand(.6,1.6); c.vx=rand(-32,32); c.vy=rand(-32,32); }
+      c.x+=c.vx*dt; c.y+=c.vy*dt;
+      if(c.x<30){c.x=30;c.vx=Math.abs(c.vx);} if(c.x>350){c.x=350;c.vx=-Math.abs(c.vx);}
+      if(c.y<30){c.y=30;c.vy=Math.abs(c.vy);} if(c.y>190){c.y=190;c.vy=-Math.abs(c.vy);}
+      c.el.setAttribute("cx",c.x); c.el.setAttribute("cy",c.y); });
+    this.spawn-=dt; if(this.spawn<=0){ this.spawn=rand(.25,.5); const c=this.cars[randi(0,this.cars.length-1)];
+      this.packets.push({prog:0,sx:c.x,sy:c.y,dead:false,el:this.dot(c.x,c.y,"#c4a2ff",3.5)}); }
+    this.packets.forEach(p=>{ if(p.dead)return; p.prog+=dt*1.8;
+      p.el.setAttribute("cx",p.sx+(445-p.sx)*p.prog); p.el.setAttribute("cy",p.sy+(66-p.sy)*p.prog);
+      if(p.prog>=1){ p.dead=true; p.el.remove(); this.updates++; } });
+    this.packets=this.packets.filter(p=>!p.dead);
+    this.stat.textContent="location updates: "+this.updates;
+  }
+}
+
+/* ---- 3. Geohash cells ---- */
+class GeohashViz extends Viz {
+  static B32="0123456789bcdefghjkmnpqrstuvwxyz";
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.cols=8; this.rows=5; this.cw=44; this.ch=34; this.x0=24; this.y0=20;
+    this.cells=[];
+    for(let r=0;r<this.rows;r++)for(let c=0;c<this.cols;c++){ const x=this.x0+c*this.cw, y=this.y0+r*this.ch;
+      const rect=S("rect",{x,y,width:this.cw,height:this.ch,fill:"#0e0e11",stroke:"#26262e","stroke-width":1});
+      this.svg.appendChild(rect); this.cells.push({r,c,x,y,rect}); }
+    this.car=this.dot(0,0,"#38bdf8",6);
+    this.pos={x:this.x0+this.cw*1.5,y:this.y0+this.ch*1.5,vx:38,vy:26,turn:1.2};
+    this.codeLbl=T(430,70,"",{fill:"#c4a2ff","font-size":16,"text-anchor":"start","font-family":"JetBrains Mono,monospace","font-weight":700});
+    this.svg.appendChild(this.codeLbl);
+    this.svg.appendChild(T(430,44,"geohash of driver:",{fill:"#8b8b93","font-size":11}));
+    this.svg.appendChild(T(430,110,"more chars → smaller cell",{fill:"#8b8b93","font-size":10.5}));
+    this.svg.appendChild(T(430,128,"→ higher precision",{fill:"#8b8b93","font-size":10.5}));
+    this.svg.appendChild(T(430,158,"shared prefix → cells are near",{fill:"#5b5b63","font-size":10}));
+    this.cur=-1;
+    this.cap("Geohash encodes a lat/lng into a short base-32 string by recursively bisecting the world. Each character narrows the box; nearby locations share a prefix — so 'find things near me' becomes a fast prefix match.");
+  }
+  code(r,c){ return "9q8" + GeohashViz.B32[(c*3+1)%32] + GeohashViz.B32[(r*5+2)%32]; }
+  frame(dt){ const p=this.pos; p.turn-=dt; if(p.turn<=0){ p.turn=rand(1,2); p.vx=rand(-42,42); p.vy=rand(-30,30); }
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    const minX=this.x0+6,maxX=this.x0+this.cols*this.cw-6,minY=this.y0+6,maxY=this.y0+this.rows*this.ch-6;
+    if(p.x<minX){p.x=minX;p.vx=Math.abs(p.vx);} if(p.x>maxX){p.x=maxX;p.vx=-Math.abs(p.vx);}
+    if(p.y<minY){p.y=minY;p.vy=Math.abs(p.vy);} if(p.y>maxY){p.y=maxY;p.vy=-Math.abs(p.vy);}
+    this.car.setAttribute("cx",p.x); this.car.setAttribute("cy",p.y);
+    const c=clamp(Math.floor((p.x-this.x0)/this.cw),0,this.cols-1), r=clamp(Math.floor((p.y-this.y0)/this.ch),0,this.rows-1);
+    const idx=r*this.cols+c;
+    if(idx!==this.cur){ if(this.cur>=0){ this.cells[this.cur].rect.setAttribute("fill","#0e0e11"); this.cells[this.cur].rect.setAttribute("stroke","#26262e"); }
+      this.cur=idx; this.cells[idx].rect.setAttribute("fill","rgba(124,58,237,.28)"); this.cells[idx].rect.setAttribute("stroke","#7C3AED");
+      this.codeLbl.textContent=this.code(r,c); }
+  }
+}
+
+/* ---- 4. Nearest Drivers ---- */
+class NearestViz extends Viz {
+  constructor(host){ super(host,"0 0 640 240"); }
+  setup(){
+    this.cols=7; this.rows=5; this.cw=52; this.ch=42; this.x0=20; this.y0=16;
+    this.cells=[];
+    for(let r=0;r<this.rows;r++)for(let c=0;c<this.cols;c++){ const x=this.x0+c*this.cw, y=this.y0+r*this.ch;
+      const rect=S("rect",{x,y,width:this.cw,height:this.ch,fill:"#0e0e11",stroke:"#26262e"});
+      this.svg.appendChild(rect); this.cells.push({r,c,rect,cx:x+this.cw/2,cy:y+this.ch/2}); }
+    this.rider=this.dot(0,0,"#fbbf24",6);
+    this.drivers=[]; this.lines=[];
+    this.stat=T(this.x0,this.y0+this.rows*this.ch+18,"",{fill:"#8b8b93","font-size":11.5});
+    this.svg.appendChild(this.stat);
+    this.acc=99; this.reroll();
+    this.cap("To find nearby drivers you don't scan the whole city — you look only in the rider's geohash cell plus its 8 neighbours, then pick the K closest. The search is bounded to a handful of cells.");
+  }
+  reroll(){
+    this.lines.forEach(l=>l.remove()); this.lines=[];
+    this.drivers.forEach(d=>d.el.remove()); this.drivers=[];
+    this.cells.forEach(c=>{ c.rect.setAttribute("fill","#0e0e11"); c.rect.setAttribute("stroke","#26262e"); });
+    this.rc=randi(1,this.rows-2); this.cc=randi(1,this.cols-2);
+    const rcell=this.cells[this.rc*this.cols+this.cc];
+    this.rider.setAttribute("cx",rcell.cx); this.rider.setAttribute("cy",rcell.cy);
+    // highlight 3x3 search block
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){ const cell=this.cells[(this.rc+dr)*this.cols+(this.cc+dc)];
+      cell.rect.setAttribute("fill","rgba(56,189,248,.10)"); cell.rect.setAttribute("stroke","#2b4a5a"); }
+    for(let i=0;i<9;i++){ const x=rand(this.x0+10,this.x0+this.cols*this.cw-10), y=rand(this.y0+10,this.y0+this.rows*this.ch-10);
+      this.drivers.push({x,y,el:this.dot(x,y,"#3a3a42",4.5)}); }
+    // nearest 3 within the block
+    const bx0=this.x0+(this.cc-1)*this.cw, by0=this.y0+(this.rc-1)*this.ch, bx1=bx0+3*this.cw, by1=by0+3*this.ch;
+    const inBlock=this.drivers.filter(d=>d.x>=bx0&&d.x<=bx1&&d.y>=by0&&d.y<=by1);
+    inBlock.sort((a,b)=>dist(a.x,a.y,rcell.cx,rcell.cy)-dist(b.x,b.y,rcell.cx,rcell.cy));
+    this.nearest=inBlock.slice(0,3);
+    this.nearest.forEach(d=>{ d.el.setAttribute("fill","#34d399");
+      const l=S("line",{x1:rcell.cx,y1:rcell.cy,x2:d.x,y2:d.y,stroke:"#34d399","stroke-width":1.5,"stroke-dasharray":"3 3"});
+      this.svg.appendChild(l); this.lines.push(l); });
+    this.stat.textContent=`searching 9 cells · ${inBlock.length} drivers in range · ${this.nearest.length} nearest selected`;
+  }
+  frame(dt){ this.acc+=dt; if(this.acc>=2.6){ this.acc=0; this.reroll(); } }
+}
+
+/* ---- 5. Ride Matching / Assignment ---- */
+class MatchViz extends Viz {
+  constructor(host){ super(host,"0 0 640 230"); }
+  setup(){
+    this.box(20,92,110,46,"Rider","#fbbf24","requests");
+    this.box(200,92,120,46,"Matching","#7C3AED","score drivers");
+    this.arrow(130,115,200,115,"#2f2f37");
+    this.cand=[]; const ys=[16,60,104,148,192];
+    ys.forEach((y,i)=>{ const g=this.box(460,y,160,32,"driver "+(i+1),"#3a3a42");
+      const eta=T(608,y+21,"",{fill:"#8b8b93","font-size":10.5,"text-anchor":"end","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(eta);
+      this.cand.push({g,eta,y:y+16}); this.arrow(320,115,460,y+16,"#242430"); });
+    this.phase="idle"; this.timer=0; this.packets=[];
+    this.cap("The matching service scores nearby drivers by ETA, direction, rating and fairness, then assigns the best one. Losing candidates are immediately released to serve other riders.");
+  }
+  newRound(){ this.cand.forEach(c=>{ c.etaVal=rand(1.5,9); c.eta.textContent=c.etaVal.toFixed(1)+" min";
+      c.g.querySelector("rect").setAttribute("stroke","#3a3a42"); c.g.querySelector("rect").setAttribute("fill","#1a1a1c"); });
+    this.best=this.cand.reduce((a,b)=>a.etaVal<b.etaVal?a:b); }
+  frame(dt){ this.timer-=dt;
+    if(this.phase==="idle"){ if(this.timer<=0){ this.phase="request"; this.timer=.7; this.newRound();
+        this.reqPk={prog:0,el:this.dot(75,115,"#fbbf24")}; } }
+    else if(this.phase==="request"){ this.reqPk.prog+=dt*2.2; this.reqPk.el.setAttribute("cx",75+(260-75)*this.reqPk.prog);
+      if(this.reqPk.prog>=1){ this.reqPk.el.remove(); this.phase="score"; this.timer=1.0; } }
+    else if(this.phase==="score"){ if(this.timer<=0){ // reveal winner
+        this.cand.forEach(c=>{ const win=c===this.best; c.g.querySelector("rect").setAttribute("stroke",win?"#34d399":"#3a3a42");
+          c.g.querySelector("rect").setAttribute("fill",win?"rgba(52,211,153,.14)":"#141416"); });
+        this.assignPk={prog:0,el:this.dot(320,115,"#34d399")}; this.phase="assign"; } }
+    else if(this.phase==="assign"){ this.assignPk.prog+=dt*1.8;
+      this.assignPk.el.setAttribute("cx",320+(460-320)*this.assignPk.prog); this.assignPk.el.setAttribute("cy",115+(this.best.y-115)*this.assignPk.prog);
+      if(this.assignPk.prog>=1){ this.assignPk.el.remove(); this.phase="idle"; this.timer=1.4; } }
+  }
+}
+
+/* ---- 6. ETA Calculation ---- */
+class ETAViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.svg.appendChild(S("rect",{x:20,y:16,width:430,height:188,rx:10,fill:"#0e0e11",stroke:"#3a3a42"}));
+    this.pathEl=S("path",{fill:"none",stroke:"#38bdf8","stroke-width":3,"stroke-linecap":"round","stroke-dasharray":"2 6",opacity:.55}); this.svg.appendChild(this.pathEl);
+    this.car=this.dot(0,0,"#38bdf8",6);
+    this.pin=this.dot(0,0,"#f87171",6);
+    this.etaLbl=T(560,80,"",{fill:"#34d399","font-size":26,"text-anchor":"middle","font-weight":800,"font-family":"JetBrains Mono,monospace"});
+    this.svg.appendChild(this.etaLbl);
+    this.svg.appendChild(T(560,44,"ETA to pickup",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}));
+    this.distLbl=T(560,112,"",{fill:"#8b8b93","font-size":12,"text-anchor":"middle","font-family":"JetBrains Mono,monospace"}); this.svg.appendChild(this.distLbl);
+    this.newRoute();
+    this.cap("ETA isn't straight-line distance — the routing engine snaps driver and rider to the road graph and estimates travel time from live speeds and traffic. As the driver moves, the ETA is continuously recomputed.");
+  }
+  newRoute(){ const pts=[]; let x=rand(50,120), y=rand(60,170); pts.push([x,y]);
+    const n=randi(3,4); for(let i=0;i<n;i++){ x=clamp(x+rand(60,120),40,430); y=clamp(y+rand(-70,70),40,190); pts.push([x,y]); }
+    this.pts=pts; this.pathEl.setAttribute("d","M "+pts.map(p=>p[0]+" "+p[1]).join(" L "));
+    this.seg=pts.map((p,i)=> i? dist(p[0],p[1],pts[i-1][0],pts[i-1][1]):0);
+    this.total=this.seg.reduce((a,b)=>a+b,0); this.travel=0;
+    const last=pts[pts.length-1]; this.pin.setAttribute("cx",last[0]); this.pin.setAttribute("cy",last[1]);
+    this.totalMin=rand(3,8); }
+  frame(dt){ this.travel+=this.total/this.totalMin*dt*0.5;
+    if(this.travel>=this.total){ this.newRoute(); return; }
+    // find position along polyline
+    let d=this.travel, i=1; while(i<this.pts.length && d>this.seg[i]){ d-=this.seg[i]; i++; }
+    if(i>=this.pts.length){ this.newRoute(); return; }
+    const a=this.pts[i-1], b=this.pts[i], f=this.seg[i]?d/this.seg[i]:0;
+    this.car.setAttribute("cx",a[0]+(b[0]-a[0])*f); this.car.setAttribute("cy",a[1]+(b[1]-a[1])*f);
+    const frac=1-this.travel/this.total, minsLeft=this.totalMin*frac, kmLeft=(this.total-this.travel)/26;
+    const mm=Math.floor(minsLeft), ss=Math.floor((minsLeft-mm)*60);
+    this.etaLbl.textContent=mm+":"+String(ss).padStart(2,"0");
+    this.distLbl.textContent=kmLeft.toFixed(1)+" km away"; }
+}
+
+/* ---- 7. Dynamic Pricing / Surge ---- */
+class PricingViz extends Viz {
+  constructor(host){ super(host,"0 0 640 220"); }
+  setup(){
+    this.baseY=190; this.maxH=150;
+    this.dmd={x:70,w:70,v:.5,target:.5}; this.sup={x:180,w:70,v:.5,target:.6};
+    this.dRect=S("rect",{x:this.dmd.x,width:this.dmd.w,rx:6,fill:"#f87171"}); this.svg.appendChild(this.dRect);
+    this.sRect=S("rect",{x:this.sup.x,width:this.sup.w,rx:6,fill:"#38bdf8"}); this.svg.appendChild(this.sRect);
+    this.svg.appendChild(T(105,206,"Demand",{fill:"#f87171","font-size":11,"text-anchor":"middle"}));
+    this.svg.appendChild(T(215,206,"Supply",{fill:"#38bdf8","font-size":11,"text-anchor":"middle"}));
+    this.mult=T(470,110,"1.0x",{fill:"#34d399","font-size":40,"text-anchor":"middle","font-weight":800,"font-family":"JetBrains Mono,monospace"});
+    this.svg.appendChild(this.mult);
+    this.svg.appendChild(T(470,60,"surge multiplier",{fill:"#8b8b93","font-size":12,"text-anchor":"middle"}));
+    this.note=T(470,150,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"}); this.svg.appendChild(this.note);
+    this.acc=0;
+    this.cap("When demand outstrips nearby supply, surge pricing raises the multiplier. Higher prices dampen demand and lure more drivers into the area until the market rebalances toward 1.0×.");
+  }
+  frame(dt){ this.acc-=dt; if(this.acc<=0){ this.acc=rand(1.2,2.2); this.dmd.target=rand(.25,1); this.sup.target=rand(.2,.9); }
+    this.dmd.v+=(this.dmd.target-this.dmd.v)*Math.min(1,dt*1.5); this.sup.v+=(this.sup.target-this.sup.v)*Math.min(1,dt*1.5);
+    const dh=this.dmd.v*this.maxH, sh=this.sup.v*this.maxH;
+    this.dRect.setAttribute("y",this.baseY-dh); this.dRect.setAttribute("height",dh);
+    this.sRect.setAttribute("y",this.baseY-sh); this.sRect.setAttribute("height",sh);
+    const m=clamp(1+(this.dmd.v/(this.sup.v+.15)-1)*0.8,1,3.2);
+    this.mult.textContent=m.toFixed(1)+"x";
+    const col=m<1.25?"#34d399":m<1.9?"#fbbf24":"#f87171"; this.mult.setAttribute("fill",col);
+    this.note.textContent=m<1.25?"balanced market":m<1.9?"demand rising — surge on":"scarce drivers — high surge";
+  }
+}
+
+/* ---- 8. Cancellation & Reassignment ---- */
+class CancelViz extends Viz {
+  constructor(host){ super(host,"0 0 640 210"); }
+  setup(){
+    this.rider={x:70,y:105}; this.dA={x:470,y:50}; this.dB={x:470,y:160};
+    this.box(30,84,90,44,"Rider","#fbbf24");
+    this.aBox=this.box(430,30,150,40,"Driver A","#3a3a42");
+    this.bBox=this.box(430,140,150,40,"Driver B","#3a3a42");
+    this.line=S("path",{fill:"none","stroke-width":2}); this.svg.appendChild(this.line);
+    this.status=T(300,196,"",{fill:"#8b8b93","font-size":12.5,"text-anchor":"middle","font-weight":600}); this.svg.appendChild(this.status);
+    this.xMark=T(0,0,"✕",{fill:"#f87171","font-size":20,"text-anchor":"middle",opacity:0}); this.svg.appendChild(this.xMark);
+    this.phase="assignA"; this.timer=0;
+    this.cap("Cancellations are normal: if the assigned driver (or rider) cancels, the trip is released and the matching service immediately re-runs to assign the next best driver — the rider rarely notices.");
+  }
+  setLine(to,color){ this.line.setAttribute("d",`M 120 106 L ${to.x-40} ${to.y}`); this.line.setAttribute("stroke",color);
+    this.line.setAttribute("stroke-dasharray", color==="#f87171"?"5 5":"none"); }
+  frame(dt){ this.timer-=dt; if(this.timer>0)return;
+    if(this.phase==="assignA"){ this.aBox.querySelector("rect").setAttribute("stroke","#34d399"); this.aBox.querySelector("rect").setAttribute("fill","rgba(52,211,153,.14)");
+      this.setLine(this.dA,"#34d399"); this.xMark.setAttribute("opacity",0);
+      this.status.textContent="✓ assigned to Driver A"; this.status.setAttribute("fill","#34d399");
+      this.phase="cancel"; this.timer=1.8; }
+    else if(this.phase==="cancel"){ this.aBox.querySelector("rect").setAttribute("stroke","#f87171"); this.aBox.querySelector("rect").setAttribute("fill","rgba(248,113,113,.14)");
+      this.setLine(this.dA,"#f87171"); this.xMark.setAttribute("x",(120+this.dA.x-40)/2); this.xMark.setAttribute("y",(106+this.dA.y)/2+6); this.xMark.setAttribute("opacity",1);
+      this.status.textContent="✕ Driver A cancelled — re-matching…"; this.status.setAttribute("fill","#f87171");
+      this.phase="assignB"; this.timer=1.6; }
+    else if(this.phase==="assignB"){ this.aBox.querySelector("rect").setAttribute("stroke","#3a3a42"); this.aBox.querySelector("rect").setAttribute("fill","#1a1a1c");
+      this.bBox.querySelector("rect").setAttribute("stroke","#34d399"); this.bBox.querySelector("rect").setAttribute("fill","rgba(52,211,153,.14)");
+      this.setLine(this.dB,"#34d399"); this.xMark.setAttribute("opacity",0);
+      this.status.textContent="✓ reassigned to Driver B"; this.status.setAttribute("fill","#34d399");
+      this.phase="reset"; this.timer=1.8; }
+    else { this.bBox.querySelector("rect").setAttribute("stroke","#3a3a42"); this.bBox.querySelector("rect").setAttribute("fill","#1a1a1c");
+      this.line.setAttribute("d",""); this.status.textContent=""; this.phase="assignA"; this.timer=.6; }
+  }
+}
+
+/* =====================================================================
+   CODE SNIPPETS (before SECTIONS to avoid TDZ)
+   ===================================================================== */
+const CODE_flow =
+"Driver App --(GPS every ~4s over WebSocket)--> Location Service\n" +
+"  Location Service -> GEOADD drivers <lng> <lat> <driverId>   (Redis)\n" +
+"Rider requests a trip\n" +
+"  Matching Service -> GEOSEARCH drivers near rider (radius)\n" +
+"                   -> score candidates by ETA / rating / fairness\n" +
+"                   -> assign best driver, create Trip\n" +
+"  Pricing -> base fare x surge(demand, supply)\n" +
+"  Payment -> authorize; on trip end -> capture\n" +
+"  Kafka   -> emit trip events -> Notification, Analytics, Receipts";
+
+const CODE_location =
+"// driver phone streams location over a persistent WebSocket\n" +
+"@MessageMapping(\"/location\")\n" +
+"public void onLocation(LocationPing p){\n" +
+"  redis.opsForGeo().add(\"drivers\",\n" +
+"      new Point(p.lng(), p.lat()), p.driverId());   // O(log n) GEOADD\n" +
+"  redis.opsForValue().set(\"driver:\" + p.driverId() + \":last\",\n" +
+"      p, Duration.ofSeconds(30));                    // TTL = stale cutoff\n" +
+"}";
+
+const CODE_geohash =
+"# encode a lat/lng into a geohash (base32) of given precision\n" +
+"BASE32 = \"0123456789bcdefghjkmnpqrstuvwxyz\"\n" +
+"def geohash(lat, lng, precision=7):\n" +
+"    lat_r, lng_r, bits, ch, out = (-90,90), (-180,180), 0, 0, []\n" +
+"    even = True\n" +
+"    while len(out) < precision:\n" +
+"        rng = lng_r if even else lat_r\n" +
+"        mid = (rng[0] + rng[1]) / 2\n" +
+"        val = lng if even else lat\n" +
+"        if val > mid: ch = (ch << 1) | 1; rng0 = mid\n" +
+"        else:         ch = (ch << 1);     rng1 = mid   # bisect the box\n" +
+"        # ... update the active range, flip 'even', emit a char every 5 bits\n" +
+"    return \"\".join(out)";
+
+const CODE_nearest =
+"// find available drivers within a radius, nearest first\n" +
+"public List<String> nearestDrivers(double lat, double lng, double km){\n" +
+"  GeoResults<RedisGeoCommands.GeoLocation<String>> res =\n" +
+"    redis.opsForGeo().search(\"drivers\",\n" +
+"       GeoReference.fromCoordinate(lng, lat),\n" +
+"       new Distance(km, Metrics.KILOMETERS),\n" +
+"       GeoSearchArgs.newGeoSearchArgs().sortAscending().limit(20));\n" +
+"  return res.getContent().stream()\n" +
+"     .map(r -> r.getContent().getName()).toList();\n" +
+"}";
+
+const CODE_match =
+"public Trip match(RideRequest req){\n" +
+"  var candidates = nearestDrivers(req.lat(), req.lng(), 3.0);\n" +
+"  Driver best = candidates.stream()\n" +
+"     .filter(d -> d.isAvailable())\n" +
+"     .min(Comparator.comparingDouble(d ->\n" +
+"        eta(d, req) - 0.2 * d.rating()))   // ETA, tie-broken by rating\n" +
+"     .orElseThrow(NoDriverException::new);\n" +
+"  best.reserve(req.riderId());             // lock so no double-assign\n" +
+"  return tripService.create(req, best);\n" +
+"}";
+
+const CODE_eta =
+"// straight-line lower bound; real ETA uses the road graph + traffic\n" +
+"double haversineKm(double lat1,double lng1,double lat2,double lng2){\n" +
+"  double R = 6371, dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);\n" +
+"  double a = Math.sin(dLat/2)*Math.sin(dLat/2)\n" +
+"    + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))\n" +
+"    * Math.sin(dLng/2)*Math.sin(dLng/2);\n" +
+"  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));\n" +
+"}\n" +
+"double etaMinutes(Driver d, RideRequest r){\n" +
+"  return router.travelTime(d.location(), r.location());  // OSRM/Valhalla\n" +
+"}";
+
+const CODE_pricing =
+"// surge = f(demand, supply) in the rider's geo cell\n" +
+"double surgeMultiplier(GeoCell cell){\n" +
+"  long demand = openRequests(cell);       // riders waiting\n" +
+"  long supply = availableDrivers(cell);   // free drivers nearby\n" +
+"  double ratio = demand / (double)(supply + 1);\n" +
+"  double surge = 1.0 + Math.max(0, ratio - 1) * 0.8;\n" +
+"  return Math.min(surge, 3.0);            // cap the multiplier\n" +
+"}\n" +
+"double fare(double baseFare, GeoCell cell){\n" +
+"  return baseFare * surgeMultiplier(cell);\n" +
+"}";
+
+/* =====================================================================
+   CONTENT — concept sections
+   ===================================================================== */
+const SECTIONS=[
+  { id:"architecture", num:1, icon:"🏗️", tag:"Big Picture", title:"Architecture Overview", viz:ArchitectureViz,
+    definition:"A ride-sharing backend is a <b>real-time geospatial matching engine</b>. Drivers continuously stream their location; when a rider requests a trip, the system finds nearby available drivers, scores and assigns the best one, tracks the trip, prices it (with surge), takes payment, and emits events through Kafka to notifications and analytics.",
+    problem:"You must match a rider to a nearby driver in a second or two, from a constantly-moving fleet of millions, while computing ETAs, prices and payments — and stay correct under cancellations, GPS noise and demand spikes.",
+    how:["Driver apps stream GPS over WebSockets to the Location Service.","Locations are indexed spatially (geohash/H3) in Redis for fast proximity queries.","On a request, the Matching Service finds and scores nearby drivers and assigns one.","The Trip Service tracks the ride; Pricing applies surge; Payment authorizes/charges.","Kafka broadcasts trip events to notifications, analytics and receipts."],
+    code:{ "Flow":CODE_flow },
+    advantages:["Real-time proximity search via a geospatial index","Services scale independently (location, matching, trip, pricing)","Kafka decouples the write path from downstream consumers"],
+    disadvantages:["Hard real-time latency budget for matching","Location data is huge, hot and constantly changing","Many edge cases: cancellations, GPS drift, surge fairness"],
+    interview:[["How would you design Uber's backend at a high level?","Drivers stream location over WebSockets into a geospatial index (Redis with geohash/H3). A request triggers a bounded nearest-driver search, candidates are scored by ETA/rating/fairness, and the best is assigned and locked. A Trip Service tracks state, Pricing applies surge from local demand/supply, Payment authorizes then captures, and Kafka fans trip events out to notifications and analytics. Everything is partitioned geographically to scale."]] },
+
+  { id:"location", num:2, icon:"📍", tag:"Ingest", title:"Real-Time Locations", viz:LocationViz,
+    definition:"Every active driver's phone streams GPS coordinates every few seconds over a persistent <b>WebSocket</b>. The Location Service writes them into a Redis geospatial index — a constantly-updating live map of the fleet.",
+    problem:"Millions of drivers each emit a location every few seconds — a massive, write-heavy, always-changing stream that must stay fresh enough to match against, without melting the database.",
+    how:["Driver app holds a persistent WebSocket to a location gateway.","It sends a lightweight ping (id, lat, lng, heading, speed) every ~4s.","The service upserts the position into Redis (GEOADD) with a short TTL.","Stale drivers (no ping) expire and drop out of matching.","Raw pings are also streamed to Kafka for history/analytics."],
+    code:{ "WebSocket":CODE_location, "Flow":CODE_flow },
+    advantages:["WebSockets avoid per-update HTTP overhead","In-memory geo index gives sub-ms proximity reads","TTL cleanly removes offline drivers"],
+    disadvantages:["Huge sustained write volume","GPS is noisy — needs smoothing/snapping","Connection management at scale is non-trivial"],
+    interview:[["How do you handle millions of drivers reporting location constantly?","Use persistent WebSocket connections (not HTTP polling) to a horizontally-scaled gateway, write positions into an in-memory geospatial store (Redis GEO) keyed by region, and set a short TTL so stale drivers drop out. Batch/downsample updates, partition by geography, and stream raw pings to Kafka for analytics rather than the hot path."]] },
+
+  { id:"geohash", num:3, icon:"🔲", tag:"Spatial Index", title:"Geohash Cells", viz:GeohashViz,
+    definition:"A <b>geohash</b> encodes a latitude/longitude into a short base-32 string by recursively bisecting the world into a grid. Each extra character shrinks the cell (more precision), and nearby points share a common prefix — turning 'who's near me?' into a fast prefix/range lookup.",
+    problem:"Comparing a rider against every driver's raw lat/lng is O(n) and impossible at city scale. You need a way to index 2-D space so proximity becomes a cheap key lookup.",
+    how:["Interleave latitude and longitude bits and encode as base-32.","Truncate to the precision you want (e.g. 6–7 chars ≈ a neighborhood/block).","Store each driver under its geohash cell.","To search, compute the rider's cell and scan that cell + its 8 neighbours.","Longer shared prefix ⇒ the two points are closer together."],
+    code:{ "Python":CODE_geohash },
+    advantages:["Turns 2-D proximity into 1-D prefix/range queries","Compact, human-readable, DB-index friendly","Adjustable precision by string length"],
+    disadvantages:["Rectangular cells; neighbours at uneven distances","Edge/boundary effects near prefix changes","Cell size jumps sharply between precisions"],
+    interview:[["What is a geohash and why is it useful for ride-sharing?","It maps a lat/lng to a base-32 string by recursively splitting space, so nearby locations share a prefix. That lets you index drivers by cell and answer 'nearest drivers' by scanning the rider's cell plus neighbours instead of the whole map — O(1)-ish instead of O(n). The precision (string length) tunes cell size."]] },
+
+  { id:"nearest", num:4, icon:"🎯", tag:"Query", title:"Nearest Drivers", viz:NearestViz,
+    definition:"Finding the nearest drivers means querying only the rider's cell plus its <b>8 neighbouring cells</b> (to avoid missing a driver just across a boundary), collecting candidates, then ranking them by true distance and picking the closest K.",
+    problem:"A single cell isn't enough — the closest driver might be just over the cell border. But scanning the whole city is far too slow. You need a bounded search that still catches edge cases.",
+    how:["Compute the rider's geohash cell.","Gather drivers from that cell and its 8 neighbours (3×3 block).","Filter to available drivers within the radius.","Rank remaining candidates by actual (haversine/road) distance.","Return the nearest K to the matching stage."],
+    code:{ "Nearest (Redis)":CODE_nearest },
+    advantages:["Bounded work — only ~9 cells scanned","Neighbour scan avoids boundary misses","Redis GEOSEARCH does radius + sort natively"],
+    disadvantages:["Sparse areas may need a widening radius","Dense areas produce many candidates to rank","Cell size vs radius must be tuned per region"],
+    interview:[["Why search neighbouring cells and not just the rider's cell?","Because the closest driver may sit just across a cell boundary — inside a different cell but physically nearer than drivers in the rider's own cell. Scanning the 3×3 block of the cell plus its 8 neighbours (or using a radius search) prevents these boundary misses while keeping the search bounded."]] },
+
+  { id:"matching", num:5, icon:"🧩", tag:"Assignment", title:"Ride Matching", viz:MatchViz,
+    definition:"Matching picks <i>which</i> nearby driver gets the trip. It scores candidates on <b>ETA, direction, rating and fairness</b>, assigns the best, and <b>locks</b> that driver so two riders can't grab the same car.",
+    problem:"Multiple riders and drivers are matched concurrently. Without care you double-assign a driver, pick a poor match, or starve some drivers of trips.",
+    how:["Take the nearest available drivers as candidates.","Score each by ETA (primary) plus rating, heading and fairness.","Choose the best and atomically reserve/lock that driver.","Create the trip and notify both parties.","Release losing candidates immediately for other requests."],
+    code:{ "Java":CODE_match },
+    advantages:["Optimizes pickup time and rider experience","Locking prevents double-assignment","Fairness signals spread trips across drivers"],
+    disadvantages:["Concurrency/locking must be correct and fast","Greedy per-request may be globally suboptimal","Scoring weights need constant tuning"],
+    interview:[["How do you prevent two riders from being matched to the same driver?","Reserve the driver atomically at assignment — e.g. a conditional update / distributed lock (Redis SETNX or a compare-and-set on the driver's state) so only one match wins. The driver is marked unavailable the instant they're assigned; losers fall back to the next candidate. Assignments are processed per-region to bound contention."]] },
+
+  { id:"eta", num:6, icon:"⏱️", tag:"Routing", title:"ETA Calculation", viz:ETAViz,
+    definition:"ETA estimates how long the driver takes to reach the rider (and later, the destination). A quick <b>haversine</b> distance gives a lower bound, but the real number comes from a <b>routing engine</b> over the road graph using live speeds and traffic.",
+    problem:"Straight-line distance ignores roads, one-ways and traffic, so it's a poor ETA. But full routing for every candidate driver is expensive — you need a cheap pre-filter and accurate final estimate.",
+    how:["Use haversine distance as a fast candidate pre-filter.","Snap driver and rider to the nearest road-graph nodes.","Run a routing engine (OSRM/Valhalla/contraction hierarchies).","Factor in live traffic and historical speeds per segment.","Recompute continuously as the driver moves."],
+    code:{ "ETA":CODE_eta },
+    advantages:["Accurate, traffic-aware arrival times","Haversine pre-filter keeps routing cheap","Continuously refined during the trip"],
+    disadvantages:["Routing is compute-heavy at scale","Needs fresh traffic + map data","Predictions still miss unexpected delays"],
+    interview:[["How do you compute ETA efficiently for many candidate drivers?","Two stages: a cheap haversine (straight-line) distance to pre-filter and rank candidates, then a precise road-graph route (OSRM/Valhalla with contraction hierarchies + live traffic) only for the top few. This avoids running full routing for every driver. Cache and reuse routes, and recompute as the driver moves."]] },
+
+  { id:"pricing", num:7, icon:"💲", tag:"Economics", title:"Dynamic Pricing (Surge)", viz:PricingViz,
+    definition:"Surge pricing multiplies the base fare when local <b>demand exceeds nearby supply</b>. Higher prices suppress some demand and attract more drivers to the area, pushing the market back toward balance.",
+    problem:"At peak times riders vastly outnumber available drivers in an area; without a price signal, wait times explode and nobody can get a ride. Surge rations demand and incentivizes supply.",
+    how:["Continuously measure demand (open requests) and supply (free drivers) per geo cell.","Compute a multiplier from the demand/supply ratio, capped (e.g. ≤ 3×).","Apply it to the base fare and show it transparently before booking.","As drivers arrive / demand drops, the multiplier decays to 1.0×.","Smooth over time to avoid jittery price swings."],
+    code:{ "Pricing":CODE_pricing },
+    advantages:["Balances supply and demand in real time","Incentivizes drivers toward hot areas","Keeps wait times bounded during peaks"],
+    disadvantages:["Perceived as unfair / can anger riders","Needs smoothing to avoid price flapping","Risk of feedback loops and gaming"],
+    interview:[["How does surge pricing work and why?","Per geo cell, compute the ratio of demand (waiting riders) to supply (available drivers) and turn it into a capped multiplier on the base fare. Economically it does two things: raises price to dampen demand and signals drivers to move toward the hot area, increasing supply — so wait times stay reasonable. It's smoothed over time and capped to avoid wild swings."]] },
+
+  { id:"cancel", num:8, icon:"🚫", tag:"Reliability", title:"Cancellation & Reassignment", viz:CancelViz,
+    definition:"Cancellations are a normal part of the flow. If the assigned driver or the rider cancels, the trip is released and the matching service immediately <b>re-runs</b> to assign the next best driver — ideally before the rider even notices.",
+    problem:"Drivers and riders cancel for many reasons. A naive system leaves the rider stranded, the driver wrongly marked busy, or the trip in a limbo state.",
+    how:["Detect the cancel event (rider- or driver-initiated).","Release the trip and free the driver back into the available pool.","Apply cancellation policy (fees, driver metrics) as needed.","Re-run matching for the rider against fresh candidates.","Emit events so notifications, pricing and analytics stay consistent."],
+    code:{ "Match":CODE_match, "Flow":CODE_flow },
+    advantages:["Rider is quickly rematched, not stranded","Driver state stays consistent (freed correctly)","Policies discourage abusive cancellations"],
+    disadvantages:["Rapid cancel/rematch churn wastes work","Fairness of cancellation fees is tricky","Race conditions between cancel and pickup"],
+    interview:[["What happens when a driver cancels after being assigned?","The trip is released, the driver is returned to the available pool (state reset atomically), and the matching service immediately re-runs for the rider against current nearby candidates. Cancellation policy (fees, driver acceptance metrics) is applied, and events are emitted so pricing, notifications and analytics stay consistent. The goal is to rematch fast enough that the rider barely notices."]] }
+];
+
+/* =====================================================================
+   SECTION RENDERER
+   ===================================================================== */
+class SectionRenderer {
+  constructor(engine){ this.engine=engine; }
+  render(){
+    const root=$("sections"); const snav=$("snavList");
+    SECTIONS.forEach(s=>{
+      const n=el("div","snav"); n.dataset.scroll=s.id;
+      n.innerHTML=`<span class="num">${s.num}</span> ${s.title}`;
+      n.addEventListener("click",()=>{ const t=$(s.id); if(t)t.scrollIntoView({behavior:"smooth",block:"start"}); $("sidebar").classList.remove("open"); });
+      snav.appendChild(n);
+
+      const sec=el("section"); sec.id=s.id;
+      sec.innerHTML=`<div class="sec-head"><div class="s-num">${s.icon}</div><div><div class="s-tag">${s.tag}</div><h2>${s.title}</h2></div></div>`;
+      const card=el("div","card");
+      card.appendChild(el("p","lead",s.definition));
+      if(s.problem) card.appendChild(el("div","callout",`<b>Problem it solves —</b> ${s.problem}`));
+
+      card.appendChild(el("div","block-title","Interactive Visualization"));
+      const viz=el("div","viz-wrap"); const vizHost=el("div"); viz.appendChild(vizHost);
+      viz.appendChild(el("div","viz-cap")); card.appendChild(viz);
+
+      if(s.how){ card.appendChild(el("div","block-title","How it works"));
+        const ol=el("ul","steps"); s.how.forEach(x=>ol.appendChild(el("li",null,x))); card.appendChild(ol); }
+
+      if(s.code){ card.appendChild(el("div","block-title","Implementation"));
+        const codeHost=el("div"); card.appendChild(codeHost);
+        const tabs={}; for(const k in s.code){ const v=s.code[k]; tabs[k]=(typeof v==="function")?v():v; }
+        new CodeViewer(codeHost,tabs); }
+
+      if(s.advantages||s.disadvantages){
+        const tc=el("div","two-col");
+        if(s.advantages) tc.appendChild(el("div","col-box good",`<h4>👍 Advantages</h4><ul>${s.advantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        if(s.disadvantages) tc.appendChild(el("div","col-box bad",`<h4>👎 Trade-offs</h4><ul>${s.disadvantages.map(x=>`<li>${x}</li>`).join("")}</ul>`));
+        card.appendChild(el("div","block-title","Advantages & Trade-offs")); card.appendChild(tc);
+      }
+
+      if(s.interview){ card.appendChild(el("div","block-title","Interview Focus"));
+        s.interview.forEach(([q,a])=>card.appendChild(el("div","callout ex",`<b>Q: ${q}</b><br>${a}`))); }
+
+      sec.appendChild(card); root.appendChild(sec);
+      const v=new s.viz(vizHost); this.engine.register(vizHost,v);
+    });
+  }
+}
+
+/* =====================================================================
+   INTERVIEW TOPICS grid
+   ===================================================================== */
+const TOPICS=[
+  ["🔲","Geohash","Base-32 encoding of lat/lng by recursive bisection; nearby points share a prefix, turning proximity into fast key lookups."],
+  ["⬡","H3","Uber's hexagonal hierarchical grid — uniform neighbour distances and smoother size changes than square geohash cells."],
+  ["🌳","QuadTree","A tree that recursively splits space into 4 quadrants, adapting resolution to density — dense cities get finer cells."],
+  ["🪵","Kafka","Backbone for trip/location events — decouples the match path from notifications, analytics, pricing and receipts."],
+  ["🔌","WebSockets","Persistent connections carry high-frequency driver location pings and push live trip/ETA updates to riders."],
+  ["⚡","Redis","In-memory geospatial index (GEOADD/GEOSEARCH) for sub-millisecond nearest-driver queries and driver-state locks."],
+  ["🧩","Matching","Scoring and atomically assigning the best nearby driver by ETA, rating and fairness without double-assigning."],
+  ["💲","Surge Pricing","Demand/supply ratio per cell drives a capped fare multiplier that rebalances the local market in real time."]
+];
+function buildTopics(){ const g=$("topicGrid");
+  TOPICS.forEach(([ic,name,desc])=>{ const c=el("div","rw-card");
+    c.innerHTML=`<div class="rw-top"><div class="rw-logo">${ic}</div><div><div class="rw-name">${name}</div><div class="rw-algo">Interview topic</div></div></div><p>${desc}</p>`;
+    g.appendChild(c); }); }
+
+/* =====================================================================
+   COMPARISON table
+   ===================================================================== */
+const CMP=[
+  ["Geohash","Recursive base-32 grid","Rectangle","Simple, prefix search, DB-friendly","Uneven neighbours, size jumps"],
+  ["H3 (Uber)","Hierarchical hexagons","Hexagon","Uniform neighbour distance, smooth","More complex math/library"],
+  ["QuadTree","Tree of 4 quadrants","Rectangle","Adapts to density, dynamic","Rebalancing, tree upkeep"],
+  ["S2 (Google)","Hilbert curve on a cube","Spherical cell","Great sphere coverage, ranges","Steeper learning curve"]
+];
+function buildCompare(){ const t=$("cmpTable");
+  t.innerHTML="<thead><tr><th>Index</th><th>Structure</th><th>Cell shape</th><th>Strengths</th><th>Trade-offs</th></tr></thead><tbody>"+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td style="color:var(--ok)">${r[3]}</td><td style="color:var(--muted)">${r[4]}</td></tr>`).join("")+"</tbody>";
+}
+
+/* =====================================================================
+   INTERVIEW Q&A accordion
+   ===================================================================== */
+const QA=[
+  ["Design a ride-sharing service like Uber / Lyft.","Clarify scale, region and latency SLAs. Core: drivers stream GPS over WebSockets → Location Service writes to a Redis geospatial index (geohash/H3) → on a request the Matching Service does a bounded nearest-driver search, scores candidates by ETA/rating/fairness and atomically assigns one → Trip Service tracks state → Pricing applies surge from local demand/supply → Payment authorizes then captures → Kafka fans events to notifications/analytics. Partition everything geographically."],
+  ["How do you find the nearest available drivers quickly?","Index drivers in a geospatial structure (geohash/H3 in Redis). Compute the rider's cell, scan it plus the 8 neighbours (or use GEOSEARCH by radius), filter to available drivers, and rank by true distance/ETA. This bounds the search to a few cells instead of scanning the whole city."],
+  ["Geohash vs H3 — which and why?","Geohash is simple and prefix-searchable but its rectangular cells have uneven neighbour distances and abrupt size jumps. H3 uses hexagons with uniform neighbour distance and smoother resolution changes, which suits distance-based demand/supply and surge math — that's why Uber built and uses H3. QuadTrees/S2 are alternatives with density-adaptive or spherical strengths."],
+  ["How do you handle millions of location updates per second?","Persistent WebSockets (not polling), a horizontally-scaled ingest tier, and an in-memory geo index (Redis GEO) with a short TTL so stale drivers drop out. Downsample/batch updates, partition by region, and push raw pings to Kafka for analytics rather than through the hot matching path."],
+  ["How do you avoid assigning one driver to two riders?","Atomic reservation at match time — a conditional state update or distributed lock (Redis SETNX / compare-and-set) so exactly one assignment wins. The driver is flipped to unavailable instantly; concurrent matches for that driver fail and fall back to the next candidate. Process assignments per-region to limit contention."],
+  ["How is ETA calculated?","A cheap haversine straight-line distance pre-filters and ranks candidates; the precise ETA comes from a routing engine over the road graph (OSRM/Valhalla, contraction hierarchies) with live traffic, run only for the top few drivers. It's recomputed continuously as the driver moves."],
+  ["How does surge pricing work?","Per geo cell, take the ratio of demand (open requests) to supply (available drivers) and map it to a capped fare multiplier. It dampens demand and pulls drivers toward the area, rebalancing the market. Smooth it over time and cap it to prevent price flapping and extreme values."],
+  ["What happens on cancellation?","Release the trip, atomically free the driver back into the pool, apply cancellation policy (fees/metrics), and immediately re-run matching against fresh candidates. Emit events so pricing, notifications and analytics stay consistent, and guard the race between a late pickup and the cancel."],
+  ["How do you scale the system globally?","Shard by geography (city/region) so location, matching and pricing are local and independent; run the geo index and matching close to each region. Use Kafka for cross-service events, cache hot data in Redis, and keep the real-time path (location + matching) separate from batch/analytics. Statelessly scale WebSocket gateways behind consistent-hashed routing."]
+];
+function buildInterview(){ const list=$("accList");
+  QA.forEach(([q,a],i)=>{ const acc=el("div","acc");
+    acc.innerHTML=`<div class="acc-q"><span class="qi">${i+1}</span><span>${q}</span><span class="chev">▾</span></div><div class="acc-a"><div class="inner">${a}</div></div>`;
+    acc.querySelector(".acc-q").addEventListener("click",()=>acc.classList.toggle("open"));
+    list.appendChild(acc); }); }
+
+/* =====================================================================
+   GLOBAL CODE
+   ===================================================================== */
+function buildGlobalCode(){ new CodeViewer($("globalCode"),{
+  "Location ingest":CODE_location,
+  "Geohash encode":CODE_geohash,
+  "Nearest (Redis)":CODE_nearest,
+  "Matching":CODE_match,
+  "ETA":CODE_eta,
+  "Surge pricing":CODE_pricing,
+  "Flow":CODE_flow
+}); }
+
+/* =====================================================================
+   RELATED
+   ===================================================================== */
+function buildRelated(){ const g=$("relGrid");
+  const rel=[["Real-Time Chat","💬","WebSocket delivery","chat-system.html"],
+    ["Notification System","🔔","Kafka fan-out","notification-system.html"],
+    ["Twitter News Feed","🐦","Feeds & Kafka","news-feed.html"],
+    ["Rate Limiting","🛡️","Protect the API","rate-limiting.html"],
+    ["Kafka","🪵","Event streaming","kafka.html"],
+    ["System Design Lab","🎓","34 backend concepts","system-designed.html"]];
+  rel.forEach(([t,i,s,url])=>{ const c=el("div","rel-card",`<div class="ri">${i}</div><div><div class="rt">${t}</div><div class="rs">${s}</div></div>`);
+    c.dataset.nav=url; c.addEventListener("click",()=>nav.go(url)); g.appendChild(c); }); }
+
+/* =====================================================================
+   PLAYGROUND — live map matching + surge simulator
+   ===================================================================== */
+class Playground {
+  constructor(){
+    this.matched=0; this.cancels=0; this.pickupSum=0; this.pickupN=0; this.surge=1;
+    this.playing=false; this.acc=0;
+    this.bounds={x0:16,y0:16,x1:604,y1:284};
+    this.host=$("pgViz"); this.svg=S("svg",{viewBox:"0 0 620 300"}); this.host.appendChild(this.svg);
+    this.buildMap();
+    this.drivers=[]; this.riders=[];
+    this.syncDrivers();
+    this.bind();
+    this.last=performance.now();
+    const loop=now=>{ const dt=Math.min(.05,(now-this.last)/1000); this.last=now;
+      if(this.playing){ this.acc+=dt; const r=+$("pgDemand").value; if(this.acc>=1/r){ this.acc-=1/r; this.addRider(); } }
+      this.frame(dt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+    this.updateStats();
+  }
+  buildMap(){
+    this.svg.appendChild(S("rect",{x:6,y:6,width:608,height:288,rx:12,fill:"#0e0e11",stroke:"#26262e"}));
+    for(let gx=60;gx<610;gx+=54) this.svg.appendChild(S("line",{x1:gx,y1:6,x2:gx,y2:294,stroke:"#17171c"}));
+    for(let gy=60;gy<294;gy+=48) this.svg.appendChild(S("line",{x1:6,y1:gy,x2:614,y2:gy,stroke:"#17171c"}));
+    this.layer=S("g"); this.svg.appendChild(this.layer);
+  }
+  mk(x,y,fill,r){ const c=S("circle",{cx:x,cy:y,r:r||5,fill,filter:"drop-shadow(0 0 4px rgba(255,255,255,.4))"}); this.layer.appendChild(c); return c; }
+  syncDrivers(){ const want=+$("pgDrivers").value;
+    while(this.drivers.length<want){ const x=rand(this.bounds.x0,this.bounds.x1), y=rand(this.bounds.y0,this.bounds.y1);
+      this.drivers.push({x,y,vx:rand(-40,40),vy:rand(-40,40),turn:rand(.6,1.6),state:"free",rider:null,trip:0,el:this.mk(x,y,"#34d399",5)}); }
+    while(this.drivers.length>want){ const d=this.drivers.pop(); d.el.remove(); if(d.rider){ d.rider.assigned=false; } }
+  }
+  bind(){
+    $("pgDrivers").addEventListener("input",()=>{ $("pgDriversV").textContent=$("pgDrivers").value; this.syncDrivers(); });
+    $("pgDemand").addEventListener("input",()=>$("pgDemandV").textContent=$("pgDemand").value);
+    $("pgRadius").addEventListener("input",()=>$("pgRadiusV").textContent=(+$("pgRadius").value/80).toFixed(1)+" km");
+    $("pgRequest").onclick=()=>this.addRider();
+    $("pgStart").onclick=()=>{ this.playing=true; };
+    $("pgPause").onclick=()=>{ this.playing=false; };
+    $("pgReset").onclick=()=>{ this.playing=false;
+      this.matched=this.cancels=this.pickupSum=this.pickupN=0; this.surge=1;
+      this.riders.forEach(r=>r.el.remove()); this.riders=[];
+      this.drivers.forEach(d=>{ d.state="free"; d.rider=null; d.trip=0; d.el.setAttribute("fill","#34d399"); });
+      this.updateStats(); };
+  }
+  addRider(){ const x=rand(this.bounds.x0,this.bounds.x1), y=rand(this.bounds.y0,this.bounds.y1);
+    this.riders.push({x,y,assigned:false,wait:0,el:this.mk(x,y,"#fbbf24",4.5)}); this.updateStats(); }
+  wander(d,dt){ d.turn-=dt; if(d.turn<=0){ d.turn=rand(.6,1.6); d.vx=rand(-42,42); d.vy=rand(-42,42); }
+    d.x+=d.vx*dt; d.y+=d.vy*dt;
+    if(d.x<this.bounds.x0){d.x=this.bounds.x0;d.vx=Math.abs(d.vx);} if(d.x>this.bounds.x1){d.x=this.bounds.x1;d.vx=-Math.abs(d.vx);}
+    if(d.y<this.bounds.y0){d.y=this.bounds.y0;d.vy=Math.abs(d.vy);} if(d.y>this.bounds.y1){d.y=this.bounds.y1;d.vy=-Math.abs(d.vy);} }
+  frame(dt){
+    const radius=+$("pgRadius").value;
+    // assign unmatched riders
+    this.riders.forEach(rd=>{ if(rd.assigned)return;
+      let best=null,bd=Infinity;
+      this.drivers.forEach(d=>{ if(d.state!=="free")return; const dd=dist(d.x,d.y,rd.x,rd.y);
+        if(dd<=radius && dd<bd){ bd=dd; best=d; } });
+      if(best){ best.state="toRider"; best.rider=rd; rd.assigned=true;
+        best.pickupDist=bd; best.el.setAttribute("fill","#7C3AED"); rd.el.setAttribute("fill","#c4a2ff"); }
+    });
+    // move drivers
+    this.drivers.forEach(d=>{
+      if(d.state==="free"){ this.wander(d,dt); d.el.setAttribute("fill","#34d399"); }
+      else if(d.state==="toRider"){ const rd=d.rider;
+        if(!rd||!rd.el.parentNode){ d.state="free"; d.rider=null; }
+        else { const dx=rd.x-d.x, dy=rd.y-d.y, D=Math.hypot(dx,dy);
+          if(D<6){ // picked up
+            this.matched++; this.pickupSum+=(d.pickupDist||D); this.pickupN++;
+            rd.el.remove(); this.riders=this.riders.filter(r=>r!==rd);
+            d.rider=null; d.state="trip"; d.trip=rand(1.2,2.4); d.el.setAttribute("fill","#38bdf8");
+            this.updateStats();
+          } else { const s=Math.min(D,150*dt); d.x+=dx/D*s; d.y+=dy/D*s; } } }
+      else if(d.state==="trip"){ this.wander(d,dt); d.trip-=dt; if(d.trip<=0){ d.state="free"; } }
+      d.el.setAttribute("cx",d.x); d.el.setAttribute("cy",d.y);
+    });
+    // waiting riders: age + cancel
+    this.riders.forEach(rd=>{ if(rd.assigned)return; rd.wait+=dt;
+      if(rd.wait>2) rd.el.setAttribute("fill","#f87171");
+      if(rd.wait>6){ rd.el.remove(); rd._dead=true; this.cancels++; } });
+    this.riders=this.riders.filter(r=>!r._dead);
+    // surge from waiting vs free supply
+    const waiting=this.riders.filter(r=>!r.assigned).length;
+    const free=this.drivers.filter(d=>d.state==="free").length;
+    const target=clamp(1+(waiting/(free+1))*0.9,1,3.2);
+    this.surge+=(target-this.surge)*Math.min(1,dt*2);
+    this.updateStats();
+  }
+  updateStats(){
+    $("pgMatched").textContent=fmt(this.matched);
+    $("pgWaiting").textContent=fmt(this.riders.filter(r=>!r.assigned).length);
+    $("pgPickup").textContent = this.pickupN? (this.pickupSum/this.pickupN/80).toFixed(2)+" km" : "— km";
+    const sv=$("pgSurge"); sv.textContent=this.surge.toFixed(1)+"x";
+    sv.style.color = this.surge<1.25?"var(--ok)":this.surge<1.9?"var(--warn)":"var(--bad)";
+    $("pgCancels").textContent=fmt(this.cancels);
+  }
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+const nav=new Navigation();
+const sidebar=new Sidebar();
+const anim=new AnimationEngine();
+new SectionRenderer(anim).render();
+buildTopics(); buildCompare(); buildInterview(); buildGlobalCode(); buildRelated();
+sidebar.observe();
+new Playground();
+</script>
+</body>
+</html>

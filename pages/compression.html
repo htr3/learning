@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Compression — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    if(phase===0){g.appendChild(TX(320,50,"run-length encoding (RLE)",{fill:"#38bdf8","font-size":12,"text-anchor":"middle","font-weight":700}));
+      g.appendChild(TX(320,80,"AAAAAAAABBBBCCCCCCCC",{fill:"#8b8b93","font-size":13,"text-anchor":"middle","font-family":"monospace"}));
+      arrow(g,320,92,320,116,"#34d399");
+      g.appendChild(TX(320,138,"8A 4B 8C",{fill:"#34d399","font-size":15,"text-anchor":"middle","font-family":"monospace","font-weight":700}));
+      lbl.textContent="replace runs of repeats with (count, symbol)";lbl.setAttribute("fill","#38bdf8");sub.textContent="20 bytes → 6 bytes, perfectly reversible (lossless)";}
+    else if(phase===1){g.appendChild(TX(320,48,"entropy coding — frequent symbols get shorter codes",{fill:"#a78bfa","font-size":11,"text-anchor":"middle","font-weight":700}));
+      [["e (very common)","0",76,"#34d399"],["t","10",100,"#38bdf8"],["z (rare)","111011",124,"#f472b6"]].forEach(([s,code,y,c])=>{g.appendChild(TX(210,y,s,{fill:"#8b8b93","font-size":11,"text-anchor":"start"}));g.appendChild(TX(430,y,code,{fill:c,"font-size":12,"font-family":"monospace","text-anchor":"end","font-weight":700}));});
+      lbl.textContent="Huffman / arithmetic coding assigns codes by frequency";lbl.setAttribute("fill","#a78bfa");sub.textContent="common symbols → few bits; rare symbols → many bits (near entropy limit)";}
+    else{g.appendChild(TX(320,50,"lossy — discard imperceptible detail",{fill:"#fbbf24","font-size":12,"text-anchor":"middle","font-weight":700}));
+      g.appendChild(S("rect",{x:150,y:70,width:150,height:70,rx:8,fill:"rgba(56,189,248,.2)",stroke:"#38bdf8"}));g.appendChild(TX(225,100,"original",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));g.appendChild(TX(225,118,"2.4 MB",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));
+      arrow(g,305,105,345,105,"#fbbf24");
+      g.appendChild(S("rect",{x:350,y:78,width:140,height:54,rx:8,fill:"rgba(251,191,36,.2)",stroke:"#fbbf24"}));g.appendChild(TX(420,100,"JPEG q80",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));g.appendChild(TX(420,118,"240 KB (10×)",{fill:"#fbbf24","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="lossy (JPEG/MP3/H.264) trades fidelity for huge ratios";lbl.setAttribute("fill","#fbbf24");sub.textContent="not reversible — used for media where perfect accuracy isn't needed";}}
+  function step(){phase=(phase+1)%3;timer=3.4;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Compression exploits <b>redundancy</b>: the more repetitive/predictable the data, the more it shrinks. This demo runs a simplified <b>RLE + dictionary</b> pass on your text so you can watch the <b>compression ratio</b> change with how repetitive the input is — and see the classic trade-off of <b>ratio vs. speed</b> across levels.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Input text</label><input id="pgIn" type="text" value="aaaaaabbbbbbccccccaaaaaabbbbbb" style="width:230px"></div>
+      <div class="pg-field"><label>Level (ratio ↔ speed): <b id="pgLvlV">6</b></label><input id="pgLvl" type="range" min="1" max="9" value="6" step="1"></div>
+      <button class="pg-btn" id="pgGo">compress</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button class="pg-btn secondary" id="pgEx1" style="font-size:10px">very repetitive</button>
+        <button class="pg-btn secondary" id="pgEx2" style="font-size:10px">random-ish</button>
+      </div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Original</div><div class="v" id="pgOrig">0 B</div></div>
+        <div class="pg-stat"><div class="k">Compressed</div><div class="v ok" id="pgComp">0 B</div></div>
+        <div class="pg-stat"><div class="k">Ratio</div><div class="v ac" id="pgRatio">—</div></div>
+        <div class="pg-stat"><div class="k">Rel. CPU cost</div><div class="v wa" id="pgCpu">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=70;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  function rle(s){let out="",i=0;while(i<s.length){let j=i;while(j<s.length&&s[j]===s[i]&&j-i<9)j++;const n=j-i;out+=(n>=3?(n+s[i]):s.substr(i,n));i=j;}return out;}
+  function draw(o,c){svg.innerHTML="";
+    svg.appendChild(TX(20,16,"size (original vs compressed):",{fill:"#8b8b93","font-size":10}));
+    const bw=W-40;svg.appendChild(S("rect",{x:20,y:24,width:bw,height:14,rx:3,fill:"rgba(56,189,248,.3)",stroke:"#38bdf8"}));
+    svg.appendChild(S("rect",{x:20,y:44,width:Math.max(3,bw*c/Math.max(o,1)),height:14,rx:3,fill:"#34d399"}));
+    svg.appendChild(TX(24,35,"original "+o+" B",{fill:"#38bdf8","font-size":9}));
+    svg.appendChild(TX(24,66,"compressed "+c+" B",{fill:"#34d399","font-size":9}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function go(){const s=$("pgIn").value||"",lvl=+$("pgLvl").value||6;
+    // higher level = also do a tiny dictionary pass on repeated bigrams (more ratio, more cost)
+    let comp=rle(s);
+    if(lvl>=5){const seen={};let dictSaved=0;for(let i=0;i+1<s.length;i++){const bg=s.substr(i,2);seen[bg]=(seen[bg]||0)+1;}
+      Object.values(seen).forEach(c2=>{if(c2>=3)dictSaved+=Math.floor((c2-1)*(lvl-4)/6);});comp=comp.slice(0,Math.max(1,comp.length-dictSaved));}
+    const o=s.length,c=Math.max(1,comp.length);const ratio=(o/c);
+    $("pgOrig").textContent=o+" B";$("pgComp").textContent=c+" B";$("pgRatio").textContent=ratio.toFixed(2)+"×";$("pgCpu").textContent=(lvl<=3?"low":lvl<=6?"medium":"high")+" ("+lvl+")";
+    draw(o,c);
+    log("level "+lvl+": "+o+"B → "+c+"B = "+ratio.toFixed(2)+"× ("+(ratio>2?"very compressible":ratio>1.2?"some redundancy":"near-incompressible")+")",ratio>1.5?"ok":"wa");}
+  $("pgGo").onclick=go;
+  $("pgEx1").onclick=()=>{$("pgIn").value="aaaaaaaaaabbbbbbbbbbccccccccccaaaaaaaaaa";go();};
+  $("pgEx2").onclick=()=>{$("pgIn").value="a8xk2p9qzm4wr7bn3vc6ld0fjhs5tg";go();};
+  $("pgLvl").oninput=()=>{$("pgLvlV").textContent=$("pgLvl").value;};
+  draw(0,0);log("compress text and watch the ratio; repetitive input shrinks far more","ac");
+}
+
+const DATA={
+  badge:"🗜️",title:"Data Compression",category:"Storage",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Trading CPU for Space & Bandwidth",
+  tagline:"Compression shrinks data by removing <b>redundancy</b>. <b>Lossless</b> methods (gzip, zstd, LZ4) reconstruct the exact original — essential for text, code, and databases. <b>Lossy</b> methods (JPEG, MP3, H.264) discard imperceptible detail for far bigger ratios on media. The core trade-off is always <b>compression ratio vs. CPU time</b>.",
+  pills:["<b>Lossless</b> vs <b>lossy</b>","<b>Ratio</b> ↔ <b>speed</b> trade-off","<b>Entropy</b> is the limit","gzip · zstd · LZ4 · JPEG"],
+  overview:"<b>Data compression</b> encodes information using fewer bits by exploiting <b>redundancy</b> and <b>predictability</b> in the data. It splits into two families. <b>Lossless</b> compression reconstructs the original <b>bit-for-bit</b>; it's mandatory anywhere accuracy matters — text, source code, executables, databases, and archives. Classic techniques combine <b>dictionary coding</b> (LZ77/LZ78: replace repeated sequences with references to earlier occurrences), <b>run-length encoding</b> (collapse runs of identical bytes), and <b>entropy coding</b> (Huffman or arithmetic/range coding: assign shorter codes to frequent symbols, longer to rare ones). Real codecs like <b>DEFLATE</b> (gzip/zlib), <b>zstd</b>, <b>LZ4</b>, <b>brotli</b>, and <b>bzip2</b> layer these. The theoretical floor for lossless compression is the data's <b>entropy</b> (Shannon) — you cannot losslessly compress truly random data, and no algorithm shrinks <em>all</em> inputs (pigeonhole principle). <b>Lossy</b> compression achieves far higher ratios by <b>permanently discarding</b> information the human eye/ear won't notice — quantizing frequency components (JPEG's DCT, MP3/AAC psychoacoustics) or exploiting temporal redundancy between video frames (H.264/H.265/AV1). It's irreversible, so it's used only where perfect fidelity isn't required. The universal engineering trade-off is <b>compression ratio vs. computational cost</b>: higher compression levels spend more CPU (and time) to squeeze out more bytes. Which side to favor depends on context — <b>LZ4</b> compresses/decompresses extremely fast at modest ratios (great for hot paths and in-memory data), while <b>zstd</b> at a high level or <b>xz</b> maximizes ratio for cold storage and distribution. Compression also trades CPU for <b>bandwidth and storage cost</b>, which is why it's ubiquitous in HTTP (Content-Encoding), databases, log pipelines, backups, and network protocols.",
+  problem:"Data is expensive to store and move: disks, object storage, and especially network bandwidth cost money and add latency. Yet most real data is highly redundant — repeated strings, skewed symbol frequencies, predictable structure. Compression converts that redundancy into space and bandwidth savings, spending CPU cycles to reduce bytes, which is usually a very favorable trade at scale.",
+  diagram,diagramCaption:"RLE and entropy coding shrink redundant data losslessly; lossy codecs discard imperceptible detail for big ratios.",
+  how:[
+    "Model the data: find repeated sequences (dictionary/LZ) and symbol-frequency skew (entropy).",
+    "Replace repeats with back-references and encode symbols with frequency-optimal codes (Huffman/arithmetic).",
+    "For media, transform to frequency/temporal domain and quantize away imperceptible detail (lossy).",
+    "Pick a codec and level by the ratio-vs-speed needs of the use case (LZ4 fast, zstd/xz high ratio).",
+    "Decompress on read; measure ratio, throughput, and CPU to tune the level."
+  ],
+  complexity:[["Lossless limit","data entropy"],["LZ4","very fast, low ratio"],["zstd/xz","slower, high ratio"],["Random data","≈ incompressible"]],
+  advantages:["Cuts storage cost and network bandwidth","Often speeds transfers (fewer bytes over the wire)","Lossless preserves exact data (text/code/DB)","Lossy gives huge ratios for media","Tunable: pick ratio-vs-speed per workload"],
+  disadvantages:["Costs CPU time to compress/decompress","Higher ratios cost disproportionately more CPU","Lossy is irreversible (quality loss accumulates)","Compressed data is not further compressible","Random/encrypted data barely compresses"],
+  tradeoffs:"Compression is fundamentally a <b>CPU-for-space (and bandwidth)</b> trade, with several dimensions to balance. The primary dial is <b>ratio vs. speed</b>: low-effort codecs like <b>LZ4</b> and <b>Snappy</b> compress and (crucially) <b>decompress</b> extremely fast at modest ratios — ideal for hot paths, in-memory columnar data, and anything read constantly — whereas high-effort codecs (<b>zstd</b> at high levels, <b>xz/LZMA</b>, <b>brotli</b>) spend far more CPU to approach the entropy limit, worth it for <b>write-once, read-rarely</b> data like backups, archives, and software distribution where you pay compression cost once and amortize the space savings forever. Note the asymmetry: many algorithms decompress much faster than they compress, so a high compression level can be great for distributed assets read by many clients. The second axis is <b>lossless vs. lossy</b>: lossy trades <b>irreversible quality loss</b> for order-of-magnitude ratios, acceptable for images/audio/video but never for data that must be exact (and repeated lossy re-encoding degrades quality cumulatively). There are hard limits: you can't beat <b>entropy</b>, so already-compressed or <b>encrypted/random</b> data won't shrink (and trying wastes CPU) — which is why you compress <em>before</em> encrypting, not after. Finally, compression interacts with other goals: it can <em>speed up</em> systems when they're bandwidth- or I/O-bound (fewer bytes to move dominates the extra CPU), but <em>slow them down</em> when CPU-bound or for tiny payloads where framing overhead exceeds savings. The art is choosing the codec and level to fit the workload's read/write ratio, latency budget, and data characteristics.",
+  whenNot:"Skip or minimize compression for data that's already compressed or encrypted (JPEGs, video, random bytes) — it won't shrink and just burns CPU. Avoid heavy compression on latency-critical hot paths where the CPU cost outweighs the bandwidth saved, or for very small payloads where per-message framing overhead exceeds the gains (though HTTP gzip is still usually worth it above a size threshold). Don't use lossy compression for anything requiring exact reproduction (text, code, financial/medical data). And if you're CPU-bound rather than I/O/bandwidth-bound, a fast low-ratio codec (or none) may beat a high-ratio one.",
+  sim,
+  code:{
+"Lossless building blocks":`# Run-length encoding (RLE): collapse repeated runs\n"AAAAAAAABBBBCCCCCCCC"  ->  "8A4B8C"        # 20 bytes -> 6\n\n# Dictionary / LZ77: replace repeats with (distance, length) back-references\n"the cat sat on the cat"  ->  "the cat sat on <copy 8 chars from -18>"\n\n# Entropy coding (Huffman): frequent symbols get shorter bit-codes\n#   'e' (common)  -> 0        'z' (rare) -> 111011\n# Real codecs (DEFLATE/zstd) combine LZ + entropy coding.\n# Lower bound = Shannon entropy: random data cannot be compressed.`,
+"Choosing a codec/level":`# Same data, different ratio-vs-speed points:\nlz4     : ~2.1x  |  ~500 MB/s compress   (hot paths, in-memory, logs live)\nzstd -3 : ~2.8x  |  fast, great default  (general purpose)\nzstd -19: ~3.6x  |  slow compress, FAST decompress (distribute/read-many)\nxz -9   : ~3.9x  |  very slow           (archives, one-time squeeze)\n\n# Rule: write-once/read-rarely -> maximize ratio (zstd -19 / xz)\n#       read-hot / latency-critical -> maximize speed (lz4 / snappy / zstd -3)`,
+"In practice (HTTP + storage)":`// HTTP response compression (bandwidth for CPU) — above a size threshold:\napp.use(compression({ threshold: 1024 }));   // gzip/br for text, JSON, JS, CSS\n// Client:  Accept-Encoding: br, gzip     Server: Content-Encoding: br\n\n// Compress BEFORE encrypting (encrypted data is ~incompressible):\ncompressed = zstd(data)\nciphertext = aes_encrypt(compressed)          // NOT encrypt-then-compress\n\n// Column stores compress per-column (similar values) for big ratios:\n//   Parquet/ORC + zstd/snappy -> huge savings on analytical data.`
+  },
+  realWorld:[
+    ["HTTP (gzip/brotli/zstd)","Content-Encoding compresses text/JSON/JS to save bandwidth."],
+    ["Databases & column stores","Parquet/ORC, InnoDB page compression, per-column codecs."],
+    ["Backups & archives","xz/zstd maximize ratio for cold, write-once data."],
+    ["Media codecs","JPEG, MP3/AAC, H.264/H.265/AV1 (lossy) for images/audio/video."],
+    ["Log & data pipelines","Kafka, Snappy/zstd compress messages and storage."]
+  ],
+  interview:[
+    ["basic","What's the difference between lossless and lossy compression?","Lossless compression reconstructs the original data exactly, bit-for-bit — required for text, code, executables, and databases (gzip, zstd, PNG). Lossy compression permanently discards information deemed imperceptible to achieve much higher ratios — used for media where perfect fidelity isn't needed (JPEG, MP3, H.264). Lossy is irreversible and quality degrades with repeated re-encoding; lossless is reversible but achieves smaller ratios."],
+    ["basic","Why does compression work — what does it exploit?","Redundancy and predictability in data. Most real data has repeated sequences (strings, patterns) and skewed symbol frequencies (some bytes far more common than others). Compression replaces repeats with short references (dictionary/LZ) and assigns shorter codes to frequent symbols (entropy coding). Truly random data has no redundancy and can't be compressed — the theoretical limit is the data's Shannon entropy."],
+    ["inter","What is the main trade-off when choosing a compression level or codec?","Compression ratio vs. computational cost (CPU/time). Higher levels/stronger codecs spend more CPU to squeeze out more bytes. Choose based on the read/write pattern: for write-once, read-rarely data (backups, archives, distributed assets) maximize ratio (zstd high / xz), since you pay once and save space forever — and decompression is often still fast. For latency-critical, read-hot paths or in-memory data, prefer fast low-ratio codecs (LZ4, Snappy, zstd -3)."],
+    ["inter","Can you compress already-compressed or encrypted data?","No, effectively. Compressed data is already near its entropy limit, so re-compressing yields little and wastes CPU. Encrypted data looks random (that's a security property), so it's essentially incompressible. This is why you must compress before encrypting, not after — encrypt-then-compress gains nothing. It also means detecting whether data is worth compressing (sampling entropy) can avoid futile work."],
+    ["adv","Why can compression sometimes speed up a system and sometimes slow it down?","If the system is bandwidth- or I/O-bound, compressing reduces the bytes to move or store, and the time saved on transfer/disk dominates the extra CPU — net speedup (common for network responses, log shipping, columnar reads). If the system is CPU-bound, or payloads are tiny (framing overhead exceeds savings), or data is incompressible, the CPU cost of compression/decompression adds latency for little benefit — net slowdown. So the decision depends on where the bottleneck is and the data's compressibility."],
+    ["adv","How do entropy coding and dictionary coding differ, and why combine them?","Dictionary/LZ coding (LZ77/78) removes redundancy across the data by replacing repeated substrings with references to earlier occurrences — great at capturing repeated patterns. Entropy coding (Huffman, arithmetic/range) removes redundancy within the symbol distribution by giving frequent symbols shorter codes, approaching the entropy limit. They're complementary: LZ produces a stream of literals and references that still has skewed frequencies, so entropy-coding that output squeezes out the remaining redundancy. DEFLATE (LZ77 + Huffman) and zstd (LZ + FSE/Huffman) combine them for this reason."],
+    ["sd","How would you apply compression across a large web service's data path?","Enable HTTP response compression (brotli/gzip) for text, JSON, JS, CSS above a size threshold to cut egress bandwidth and speed transfers, with negotiated Accept-Encoding. Store user media in already-lossy formats (JPEG/WebP/AVIF, H.264/AV1) and don't re-compress them. In the data tier, use columnar formats (Parquet/ORC) with zstd/snappy for analytics, and page/block compression in the database. Compress logs and Kafka messages with zstd/LZ4 depending on latency needs. For backups/archives use high-ratio zstd/xz. Compress before encrypting, benchmark ratio vs CPU per workload, and skip compression for incompressible data."]
+  ],
+  mistakes:["Compressing already-compressed or encrypted data (no gain, wasted CPU).","Using max compression level on latency-critical hot paths.","Applying lossy compression to data that must be exact.","Encrypt-then-compress (gains nothing) instead of compress-then-encrypt.","Compressing tiny payloads where framing overhead exceeds savings."],
+  best:["Pick codec/level by read/write pattern (LZ4 hot, zstd/xz cold).","Use lossless for exact data, lossy only for media.","Compress before encrypting; skip incompressible data.","Enable HTTP compression for text assets above a threshold.","Benchmark ratio, throughput, and CPU; tune per workload."],
+  related:[["Deduplication","♻️","Complementary space saving","deduplication.html"],["Chunking","🧩","Compress per chunk","chunking.html"],["Block vs File vs Object","🧱","Where compressed data lives","block-storage.html"],["Video Streaming","🎬","Lossy media codecs","system-designed.html"],["LSM-Tree","🗂️","Compresses SSTable blocks","lsm-tree.html"],["HTTP/2 & HTTP/3","🚀","Header/body compression","http2-3.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

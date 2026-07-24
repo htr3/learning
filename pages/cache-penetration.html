@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cache Penetration — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function box(x,y,w,h,t,c){g.appendChild(S("rect",{x:x-w/2,y:y-h/2,width:w,height:h,rx:8,fill:c+"22",stroke:c,"stroke-width":2}));t.split("\n").forEach((s,i)=>g.appendChild(TX(x,y+(t.includes("\n")?(-2+i*13):4),s,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle","font-weight":700})));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    box(120,105,120,44,"😈 attacker\nid=-999","#f87171");box(330,105,110,44,"⚡ cache","#38bdf8");box(540,105,120,44,"🗄️ database","#f472b6");
+    if(phase===0){box(330,105,110,44,"⚡ MISS\n(key absent)","#fbbf24");arrow(g,182,105,273,105,"#f87171");
+      lbl.textContent="1 — request for a key that DOESN'T EXIST";lbl.setAttribute("fill","#f87171");sub.textContent="nonexistent id → nothing to cache → always a miss";}
+    else if(phase===1){arrow(g,385,105,478,105,"#f87171");g.appendChild(TX(540,150,"every request reaches the DB",{fill:"#f87171","font-size":9.5,"text-anchor":"middle"}));
+      lbl.textContent="2 — miss falls through to the DB, which returns 'not found'";lbl.setAttribute("fill","#f87171");sub.textContent="nothing gets cached (no value) → the NEXT request misses again";}
+    else if(phase===2){for(let i=0;i<4;i++){const y=60+i*22;arrow(g,182,y,478,y,"#f87171");}
+      lbl.textContent="PENETRATION — the cache is bypassed entirely";lbl.setAttribute("fill","#f87171");sub.textContent="a flood of bogus keys hammers the DB directly; the cache protects nothing";}
+    else{box(330,105,120,44,"⚡ cache +\n🌸 bloom filter","#34d399");arrow(g,182,105,268,105,"#34d399");
+      g.appendChild(TX(330,150,"'definitely absent' → reject",{fill:"#34d399","font-size":9.5,"text-anchor":"middle"}));
+      lbl.textContent="fix — cache negatives &/or a Bloom filter reject bogus keys";lbl.setAttribute("fill","#34d399");sub.textContent="the DB is shielded; only plausibly-real keys ever reach it";}}
+  function step(){phase=(phase+1)%4;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">An attacker (or buggy client) requests keys that <b>don't exist</b> — random ids like <code>-999</code>. Since there's no value to cache, every such request misses the cache and falls through to the database. Compare <b>no protection</b>, <b>caching negative results</b>, and a <b>Bloom filter</b> guard, then fire a mixed burst of real and bogus keys.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Total requests: <b id="pgReqV">1000</b></label><input id="pgReq" type="range" min="100" max="5000" value="1000" step="100"></div>
+      <div class="pg-field"><label>% bogus (nonexistent): <b id="pgBogusV">80</b>%</label><input id="pgBogus" type="range" min="0" max="100" value="80" step="5"></div>
+      <div class="pg-field"><label>Strategy</label><select id="pgMode">
+        <option value="none">no protection</option>
+        <option value="neg">cache negative results (TTL)</option>
+        <option value="bloom">Bloom filter guard</option>
+      </select></div>
+      <button class="pg-btn" id="pgFire">🔥 fire burst</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">DB hits</div><div class="v wa" id="pgDb">0</div></div>
+        <div class="pg-stat"><div class="k">Blocked at cache</div><div class="v ok" id="pgBlk">0</div></div>
+        <div class="pg-stat"><div class="k">DB load</div><div class="v" id="pgLoad">idle</div></div>
+        <div class="pg-stat"><div class="k">Protection</div><div class="v ac" id="pgProt">none</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=70;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const CAP=1500;
+  function draw(db){svg.innerHTML="";
+    svg.appendChild(TX(20,16,"DB request load (safe capacity ≈ "+CAP+"):",{fill:"#8b8b93","font-size":10}));
+    const bw=W-40,frac=Math.min(1,db/CAP),c=db>CAP?"#f87171":db>CAP*0.6?"#fbbf24":"#34d399";
+    svg.appendChild(S("rect",{x:20,y:24,width:bw,height:24,rx:5,fill:"#141416",stroke:"#242a33"}));
+    svg.appendChild(S("rect",{x:20,y:24,width:Math.max(3,bw*frac),height:24,rx:5,fill:c}));
+    svg.appendChild(TX(24,60,db+" DB hits",{fill:c,"font-size":10}));
+    if(db>CAP)svg.appendChild(TX(W-20,60,"OVERLOAD ✗",{fill:"#f87171","font-size":10,"text-anchor":"end","font-weight":700}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function fire(){const n=+$("pgReq").value||1000,pct=+$("pgBogus").value||0,mode=$("pgMode").value;
+    const bogus=Math.round(n*pct/100),real=n-bogus;let db,blk=0;
+    $("pgProt").textContent=({none:"none",neg:"neg-cache",bloom:"Bloom filter"})[mode];
+    if(mode==="none"){db=n;log("💥 "+bogus+" bogus + "+real+" real → ALL "+n+" fall through to the DB (bogus keys never cache)","bad");}
+    else if(mode==="neg"){db=Math.round(bogus*0.05)+real;blk=n-db;log("cache negatives: first hit per bogus key reaches DB, then it's cached as 'null' (TTL) → ~"+db+" DB hits","ok");}
+    else{db=real;blk=bogus;log("🌸 Bloom filter says 'definitely absent' for "+bogus+" bogus keys → rejected before the DB; only "+real+" real keys pass","ok");}
+    $("pgDb").textContent=db;$("pgBlk").textContent=blk;
+    const ov=db>CAP;$("pgLoad").textContent=ov?"OVERLOADED":db>CAP*0.6?"high":"healthy";$("pgLoad").className="v "+(ov?"bad":db>CAP*0.6?"wa":"ok");
+    draw(db);}
+  $("pgFire").onclick=fire;
+  $("pgReq").oninput=()=>{$("pgReqV").textContent=$("pgReq").value;};
+  $("pgBogus").oninput=()=>{$("pgBogusV").textContent=$("pgBogus").value;};
+  draw(0);log("choose a strategy and fire a mixed burst of real + bogus keys","ac");
+}
+
+const DATA={
+  badge:"🕳️",title:"Cache Penetration",category:"Caching",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Queries for Keys That Don't Exist",
+  tagline:"Cache penetration is when requests target keys that <b>don't exist</b> in the cache <em>or</em> the database — so there's never anything to cache, every request misses and falls through to the DB. Left unguarded it lets attackers (or bugs) bypass the cache and hammer the database directly. Fixes: <b>cache negative results</b> and a <b>Bloom filter</b>.",
+  pills:["Keys that <b>don't exist</b>","Cache <b>never populates</b>","Guard with <b>negative caching</b>","<b>Bloom filter</b> pre-check"],
+  overview:"<b>Cache penetration</b> is a failure mode where a large volume of requests ask for data that <b>does not exist anywhere</b> — neither in the cache nor in the backing database. Because the value is genuinely absent, a read-through cache finds nothing to serve (miss) and forwards the request to the database, which also returns 'not found' — and crucially, since there's no value, nothing gets stored in the cache. So the <em>next</em> identical request misses again and hits the database again. The cache, which exists to shield the database, protects nothing: every request 'penetrates' straight through. This is dangerous because it can be triggered deliberately — an attacker requesting random or negative IDs (<code>id=-1</code>, <code>id=99999999</code>) generates unlimited cache misses that bombard the database, a cheap denial-of-service — or accidentally by a buggy client. There are two standard defenses. <b>Negative caching</b>: when the database confirms a key is absent, cache a <b>null/sentinel</b> value with a (usually short) TTL, so subsequent requests for that same missing key are answered from the cache without touching the database. <b>Bloom filter</b> (or other membership structure): maintain a probabilistic set of all keys that <em>do</em> exist; before querying, check the filter — if it says the key is 'definitely not present,' reject immediately without hitting cache or DB. A Bloom filter never yields false negatives, so it can only over-admit (a small false-positive rate), never wrongly reject a real key. Practical deployments combine both, plus <b>input validation</b> (reject malformed/out-of-range keys) and rate limiting.",
+  problem:"Caches only help when there's a value to remember. Requests for nonexistent keys produce nothing cacheable, so they miss forever and pass through to the database on every attempt. This defeats the cache's protective purpose and creates an attack vector: flooding the system with bogus keys drives unbounded database load, potentially overwhelming it.",
+  diagram,diagramCaption:"Requests for nonexistent keys miss and fall through to the DB every time; negative caching / a Bloom filter block them.",
+  how:[
+    "A request targets a key that exists in neither the cache nor the database.",
+    "The cache misses (nothing to serve) and forwards to the database.",
+    "The database returns 'not found'; because there's no value, nothing is cached.",
+    "The next request for the same missing key repeats the miss — the cache is bypassed.",
+    "Guard it: cache a null sentinel for absent keys (TTL) and/or pre-check a Bloom filter of existing keys; validate inputs."
+  ],
+  complexity:[["Unguarded","every req → DB"],["Negative cache","1 DB hit per key/TTL"],["Bloom filter","O(k) hashes, ~no DB"],["False negatives","none (Bloom)"]],
+  advantages:["Negative caching stops repeat misses for the same key","Bloom filter blocks unknown keys before cache/DB","Bloom filter has no false negatives (never rejects a real key)","Combined with validation/rate-limiting, mitigates DoS","Low memory (Bloom) for huge key sets"],
+  disadvantages:["Negative caching alone fails against many DISTINCT bogus keys","Null sentinels consume cache space (needs short TTL)","Bloom filter false positives let some bogus keys through","Bloom filter must be kept in sync as keys are added/removed","Deletes are hard in a plain Bloom filter (need counting/rebuild)"],
+  tradeoffs:"The two defenses cover <b>different attack shapes</b>. <b>Negative caching</b> is trivial to add and effective when bogus requests <em>repeat the same</em> missing keys — you pay one DB hit per key per TTL, then serve nulls from cache. But it's weak against an attacker who sends a <b>high-cardinality flood of distinct</b> nonexistent keys: each unique key still causes one DB miss before it's negatively cached, and storing millions of null sentinels can bloat the cache and evict real data, so you keep TTLs short (trading protection duration for space). A <b>Bloom filter</b> is the complement: it answers 'could this key exist?' in O(1) with tiny memory even for huge keyspaces, and because it has <b>no false negatives</b> it will never reject a legitimate key — so it directly defeats the distinct-bogus-key flood. Its costs are a tunable <b>false-positive rate</b> (a few bogus keys slip through to the normal cache/DB path, which is fine), and the operational burden of <b>keeping it in sync</b> with the real dataset (rebuild or use a counting Bloom filter to support deletes). In practice you layer them: a Bloom filter to cheaply reject the bulk of unknown keys, negative caching to absorb the false-positive stragglers and legitimately-deleted items, plus input validation to reject obviously invalid keys up front. The overarching trade-off is a little memory and sync complexity in exchange for shielding the database from unbounded, uncacheable load.",
+  whenNot:"You don't need penetration defenses when clients only ever request keys that plausibly exist (internal, validated access patterns) or when the backing store can trivially absorb misses. Negative caching is unnecessary if missing-key requests never repeat. A Bloom filter is overkill for small keyspaces where a simple existence check or set lookup suffices, or when the key set changes so rapidly that keeping the filter in sync costs more than it saves. And none of this substitutes for authentication, input validation, and rate limiting against deliberate abuse — those are the first line.",
+  sim,
+  code:{
+"Negative caching":`# Cache the ABSENCE of a key so repeat misses don't hit the DB.\ndef get(key):\n    v = cache.get(key)\n    if v is not None:\n        return None if v == NULL_SENTINEL else v      # cached 'not found'\n    row = db.find(key)\n    if row is None:\n        cache.set(key, NULL_SENTINEL, ex=60)          # short TTL for negatives\n        return None\n    cache.set(key, row, ex=TTL)\n    return row\n# Weakness: a flood of DISTINCT missing keys still causes 1 DB hit each\n# (and can fill the cache with sentinels) -> pair with a Bloom filter.`,
+"Bloom filter guard":`# Pre-check membership; reject keys that DEFINITELY don't exist.\nbloom = BloomFilter(capacity=all_ids_count, error_rate=0.01)\nfor id in db.all_ids(): bloom.add(id)     # built from real keys\n\ndef get(key):\n    if key not in bloom:                  # no false negatives -> safe to reject\n        return None                       # blocked before cache & DB\n    return cache_get_or_load(key)         # possibly a false positive -> normal path\n\n# Keep in sync: add new ids on insert; for deletes use a COUNTING bloom filter\n# or periodically rebuild the filter.`,
+"Layered defense":`// Validate -> Bloom -> negative-cache -> cache -> DB\nfunction handle(req) {\n  const key = req.id;\n  if (!isValidId(key)) return notFound();          // 1) input validation\n  if (!bloom.mightContain(key)) return notFound(); // 2) reject unknown keys\n  const cached = cache.get(key);                   // 3) incl. null sentinels\n  if (cached !== undefined) return cached;\n  const row = db.find(key);                        // 4) at most 1 DB hit/key\n  cache.set(key, row ?? NULL, row ? TTL : NEG_TTL);\n  return row;\n}\n// Plus rate-limiting per client to blunt deliberate abuse.`
+  },
+  realWorld:[
+    ["Redis + Bloom (RedisBloom)","Membership pre-check to block nonexistent keys."],
+    ["CDNs","Negative caching of 404s to protect origins."],
+    ["Large key-value services","Bloom filters guard reads for huge sparse keyspaces (also LSM-trees)."],
+    ["API gateways","Input validation + rate limiting against bogus-key floods."],
+    ["Databases (Cassandra, HBase)","Bloom filters avoid disk reads for absent rows."]
+  ],
+  interview:[
+    ["basic","What is cache penetration?","When requests target keys that exist in neither the cache nor the database. Because there's no value, every such request misses the cache and falls through to the database, which also returns nothing — and nothing gets cached, so the next identical request repeats the miss. The cache is bypassed entirely, defeating its purpose of shielding the database, and it can be exploited to overload the DB with bogus-key floods."],
+    ["basic","How is cache penetration different from a cache stampede or avalanche?","Penetration is about keys that don't exist, so there's never anything to cache and misses fall through forever. A stampede is about a single existing hot key expiring and many concurrent requests recomputing it at once. An avalanche is about many keys expiring simultaneously, causing a broad miss storm. Penetration is a cardinality/existence problem; stampede and avalanche are expiry-timing problems for keys that do exist."],
+    ["inter","How does negative caching help and what's its limitation?","When the database confirms a key is absent, you cache a null/sentinel value with a short TTL, so subsequent requests for that same missing key are answered from the cache without hitting the DB. The limitation is that it only helps for repeated requests to the same missing keys — an attacker sending a high-cardinality stream of distinct nonexistent keys still causes one DB miss per unique key before it's cached, and storing many null sentinels can evict real data, so it's usually paired with a Bloom filter."],
+    ["inter","How does a Bloom filter prevent cache penetration?","You build a Bloom filter from all keys that actually exist. Before querying the cache or DB, you check the filter; if it reports the key is definitely not present, you reject the request immediately. Because Bloom filters have no false negatives, they never wrongly reject a real key — only occasionally over-admit a bogus one (false positive), which just takes the normal path. This cheaply blocks the bulk of nonexistent-key traffic even for huge keyspaces with minimal memory."],
+    ["adv","What are the operational challenges of using a Bloom filter for this?","It must be kept consistent with the dataset: adding new keys is easy (insert into the filter), but a standard Bloom filter can't delete, so removed keys stay 'present' (a false positive) until you rebuild it or use a counting Bloom filter. You must size it for the expected key count and target false-positive rate, and rebuild/scale as the set grows (or use a scalable Bloom filter). In distributed systems you need to replicate/refresh the filter across nodes. It also can't tell you the value — only possible membership."],
+    ["adv","Design a layered defense against cache penetration for a public API.","Layer it: (1) input validation to reject malformed or out-of-range keys up front; (2) a Bloom filter of existing keys to reject 'definitely absent' keys before touching cache/DB; (3) negative caching with a short TTL to absorb Bloom false positives and legitimately-deleted items; (4) the normal read-through cache and DB for real keys; and (5) per-client rate limiting and authentication to blunt deliberate abuse. Keep the Bloom filter in sync on inserts and rebuild periodically for deletes, and monitor miss/DB-hit ratios to detect attacks."],
+    ["sd","A malicious client is sending millions of requests for random nonexistent user IDs. How do you protect the database?","First validate the ID format/range and rate-limit the client. Put a Bloom filter of valid user IDs in front so the vast majority of random IDs are rejected in O(1) without hitting cache or DB (no false negatives means real users are never blocked). Add negative caching with a short TTL for the false positives and any real-but-missing lookups so repeats don't reach the DB. Monitor DB QPS and miss rates for anomaly detection, and ensure the DB has timeouts/circuit breakers so it degrades gracefully under any residual load."]
+  ],
+  mistakes:["Relying only on negative caching against high-cardinality bogus keys.","Caching null sentinels with a long TTL (bloats cache, hides new data).","No input validation — accepting obviously invalid keys.","Forgetting to keep the Bloom filter in sync (stale membership).","No rate limiting, so bogus-key floods aren't throttled."],
+  best:["Combine a Bloom filter (block unknown keys) with negative caching.","Use short TTLs for null sentinels; validate/normalize inputs.","Keep the Bloom filter synced (counting filter or periodic rebuild).","Add per-client rate limiting and authentication against abuse.","Give the DB timeouts/circuit breakers to survive residual load."],
+  related:[["Cache Stampede","🐎","Hot-key expiry herd","cache-stampede.html"],["Cache Avalanche","🏔️","Mass simultaneous expiry","cache-avalanche.html"],["Bloom Filter","🌸","Membership pre-check","bloom-filter.html"],["Rate Limiting","🚦","Throttle abusive clients","rate-limiting.html"],["Memcached","🧊","Common cache backend","memcached.html"],["LSM-Tree","🗂️","Uses Bloom filters for reads","lsm-tree.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

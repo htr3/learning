@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gRPC — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,190,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function box(x,txt,fill){g.appendChild(S("rect",{x:x-58,y:80,width:116,height:40,rx:8,fill:fill,stroke:"#7C3AED","stroke-width":2}));
+    const t=S("text",{x:x,y:104,fill:"#e4e4e7","font-size":11,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  const names=["Unary (1↔1)","Server streaming (1→N)","Client streaming (N→1)","Bidirectional (N↔N)"];
+  function render(){g.innerHTML="";box(90,"Client","#161619");box(530,"Server","rgba(124,58,237,.2)");
+    g.appendChild(TX(310,60,"HTTP/2 stream · Protobuf",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+    const y=100;
+    if(phase===0){g.appendChild(S("line",{x1:150,y1:92,x2:470,y2:92,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));g.appendChild(S("line",{x1:470,y1:110,x2:150,y2:110,stroke:"#38bdf8","stroke-width":2,"stroke-dasharray":"5 4","marker-end":"url(#a)"}));}
+    else if(phase===1){g.appendChild(S("line",{x1:150,y1:88,x2:470,y2:88,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));[100,112].forEach(yy=>g.appendChild(S("line",{x1:470,y1:yy,x2:150,y2:yy,stroke:"#38bdf8","stroke-width":1.8,"marker-end":"url(#a)"})));}
+    else if(phase===2){[88,100].forEach(yy=>g.appendChild(S("line",{x1:150,y1:yy,x2:470,y2:yy,stroke:"#34d399","stroke-width":1.8,"marker-end":"url(#a)"})));g.appendChild(S("line",{x1:470,y1:112,x2:150,y2:112,stroke:"#38bdf8","stroke-width":2,"marker-end":"url(#a)"}));}
+    else{g.appendChild(S("line",{x1:150,y1:90,x2:470,y2:90,stroke:"#34d399","stroke-width":1.8,"marker-end":"url(#a)"}));g.appendChild(S("line",{x1:470,y1:110,x2:150,y2:110,stroke:"#38bdf8","stroke-width":1.8,"marker-end":"url(#a)"}));}
+    lbl.textContent=names[phase];lbl.setAttribute("fill","#c4a2ff");sub.textContent="one persistent HTTP/2 connection multiplexes all four call styles";}
+  function step(){phase=(phase+1)%4;timer=2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Pick one of gRPC's four call types and run it over a single HTTP/2 stream. Watch messages flow, then compare the wire size: gRPC's binary <b>Protobuf</b> is far smaller and faster to parse than equivalent JSON — a big reason it's the default for internal microservices.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Call type</label>
+        <select id="pgType">
+          <option value="unary">Unary (request → response)</option>
+          <option value="sstream">Server streaming (1 → many)</option>
+          <option value="cstream">Client streaming (many → 1)</option>
+          <option value="bidi">Bidirectional (many ↔ many)</option>
+        </select></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgRun" class="go">▶ Run call</button><button id="pgSend">＋ Send msg</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Protobuf is a compact binary format defined by a <code>.proto</code> schema; fields are tag-numbered, so there are no repeated JSON key strings on the wire.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Messages</div><div class="v ac" id="pgMsgs">0</div></div>
+        <div class="pg-stat"><div class="k">Protobuf size</div><div class="v ok" id="pgPB">0 B</div></div>
+        <div class="pg-stat"><div class="k">JSON size</div><div class="v bad" id="pgJS">0 B</div></div>
+        <div class="pg-stat"><div class="k">Savings</div><div class="v wa" id="pgSave">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=170,cx1=70,cx2=490,cy=85;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let msgs,count,raf=null;
+  const PB_PER=14,JSON_PER=53;   // approx bytes per message
+  function reset(){msgs=[];count=0;if(raf)cancelAnimationFrame(raf);raf=null;draw();stats();$("pgLog").innerHTML="";log("select a call type and Run","ac");}
+  function type(){return $("pgType").value||"unary";}
+  function fire(dir,delay){msgs.push({dir,p:-delay,alive:true});}
+  function run(){const t=type();msgs=[];count=0;
+    if(t==="unary"){fire(1,0);fire(-1,0.6);log("unary: 1 request → 1 response","ac");}
+    else if(t==="sstream"){fire(1,0);for(let i=0;i<4;i++)fire(-1,0.5+i*0.35);log("server streaming: 1 request → 4 streamed responses","ac");}
+    else if(t==="cstream"){for(let i=0;i<4;i++)fire(1,i*0.35);fire(-1,1.8);log("client streaming: 4 messages → 1 aggregated response","ac");}
+    else{for(let i=0;i<3;i++){fire(1,i*0.5);fire(-1,0.3+i*0.5);}log("bidirectional: messages flow both ways independently","ac");}
+    animate();}
+  function send(){fire(type()==="cstream"||type()==="bidi"?1:1,0);log("＋ extra message sent on the open stream","ac");animate();}
+  function animate(){if(raf)cancelAnimationFrame(raf);let last=performance.now();
+    function fr(now){const dt=(now-last)/1000;last=now;let moving=false;
+      msgs.forEach(m=>{m.p+=dt*0.6;if(m.p>=0&&m.p<1)moving=true;if(m.p>=1&&m.alive){m.alive=false;count++;stats();}});
+      draw();if(msgs.some(m=>m.p<1)){raf=requestAnimationFrame(fr);}else raf=null;}
+    raf=requestAnimationFrame(fr);}
+  function draw(){svg.innerHTML="";
+    svg.appendChild(S("rect",{x:cx1-40,y:cy-20,width:80,height:40,rx:8,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));
+    svg.appendChild(TX(cx1,cy+4,"Client",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(S("rect",{x:cx2-40,y:cy-20,width:80,height:40,rx:8,fill:"rgba(124,58,237,.2)",stroke:"#7C3AED","stroke-width":2}));
+    svg.appendChild(TX(cx2,cy+4,"Server",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(S("line",{x1:cx1+40,y1:cy,x2:cx2-40,y2:cy,stroke:"#242a33","stroke-width":6}));
+    svg.appendChild(TX(W/2,30,"HTTP/2 stream",{fill:"#5b5b63","font-size":10,"text-anchor":"middle"}));
+    msgs.forEach(m=>{if(m.p<0||m.p>1)return;const x=m.dir>0?cx1+40+(cx2-cx1-80)*m.p:cx2-40-(cx2-cx1-80)*m.p;
+      svg.appendChild(S("circle",{cx:x,cy:cy+(m.dir>0?-9:9),r:6,fill:m.dir>0?"#34d399":"#38bdf8"}));});
+    svg.appendChild(TX(cx1,cy+34,"▲ request",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));
+    svg.appendChild(TX(cx2,cy+34,"▼ response",{fill:"#38bdf8","font-size":9,"text-anchor":"middle"}));}
+  function stats(){$("pgMsgs").textContent=count;const pb=count*PB_PER,js=count*JSON_PER;
+    $("pgPB").textContent=pb+" B";$("pgJS").textContent=js+" B";
+    $("pgSave").textContent=js?Math.round(100*(1-pb/js))+"% smaller":"—";}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgRun").onclick=run;$("pgSend").onclick=send;$("pgReset").onclick=reset;$("pgType").onchange=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔗",title:"gRPC",category:"Networking",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"High-Performance RPC Framework",
+  tagline:"Google's RPC framework: call remote methods like local functions, with compact <b>Protocol Buffers</b> over <b>HTTP/2</b>, strongly-typed contracts, code generation in many languages, and first-class <b>streaming</b> — the go-to for internal microservice communication.",
+  pills:["<b>Protobuf</b> binary","<b>HTTP/2</b> multiplexed","<b>Streaming</b> (4 modes)","<b>Codegen</b> contracts"],
+  overview:"gRPC lets a client invoke methods on a remote server as if they were local. You define services and messages in a <b>.proto</b> file (Protocol Buffers IDL); the compiler generates strongly-typed client and server stubs in Go, Java, Python, C++, and more. On the wire it uses <b>Protobuf</b> — a compact, tag-numbered binary format — over <b>HTTP/2</b>, which brings multiplexing (many calls on one connection), header compression, and bidirectional streaming. gRPC supports four call types: <b>unary</b> (one request/one response), <b>server streaming</b> (one request, a stream of responses), <b>client streaming</b> (a stream of requests, one response), and <b>bidirectional streaming</b> (independent streams both ways). It's designed for low-latency, high-throughput service-to-service communication where strict contracts and efficiency matter more than browser-friendliness.",
+  problem:"Internal microservices make huge volumes of calls to each other. JSON-over-REST is verbose (repeated key strings), text-based (slow to parse), weakly typed (contracts drift), and lacks native streaming and efficient connection reuse. Teams need a fast, strongly-typed, polyglot RPC mechanism with schema-driven contracts and streaming — which gRPC provides.",
+  diagram,diagramCaption:"The four call types, all multiplexed over one persistent HTTP/2 connection using Protobuf.",
+  how:[
+    "Define messages and service methods in a .proto file (the contract).",
+    "Run protoc to generate typed client stubs and server skeletons for each language.",
+    "The client calls a stub method; gRPC serializes args to Protobuf and sends them over HTTP/2.",
+    "The server deserializes, runs the method, and returns a Protobuf response (or a stream).",
+    "HTTP/2 multiplexes many concurrent calls and supports server/client/bidirectional streaming with flow control."
+  ],
+  complexity:[["Encoding","Protobuf (binary)"],["Transport","HTTP/2"],["Call types","4 (incl. streaming)"],["Contract","codegen from .proto"]],
+  advantages:["Very compact & fast (binary Protobuf)","HTTP/2 multiplexing + streaming","Strong typed contracts across languages","Auto-generated client/server code","Deadlines, cancellation, interceptors, LB built in"],
+  disadvantages:["Not natively browser-friendly (needs gRPC-Web/proxy)","Binary payloads are hard to debug by eye","Requires schema management & codegen tooling","Less human-readable than REST/JSON","Load balancing needs L7 (long-lived HTTP/2 conns)"],
+  tradeoffs:"gRPC trades REST's simplicity and universal browser/curl compatibility for performance and rigor. Binary Protobuf is compact and fast but opaque without tooling, and browsers can't speak raw gRPC (you need gRPC-Web plus a proxy like Envoy). Long-lived multiplexed HTTP/2 connections need L7-aware load balancing (naive L4 LBs pin all streams to one backend). The payoff is dramatically lower latency, bandwidth, and CPU for chatty internal traffic, plus enforced typed contracts and streaming. For public APIs, human debuggability, and edge caching, REST/GraphQL are usually better.",
+  whenNot:"Avoid gRPC for public-facing APIs consumed by arbitrary browsers/third parties (use REST/GraphQL or gRPC-Web behind a proxy), when human readability/curl-ability matters, for simple low-volume CRUD where the tooling overhead isn't worth it, or where your infra can't do L7 load balancing for long-lived HTTP/2 connections.",
+  sim,
+  code:{
+"Proto":`// user.proto — the contract; protoc generates typed stubs for every language\nsyntax = "proto3";\nservice UserService {\n  rpc GetUser        (GetUserRequest)  returns (User);              // unary\n  rpc ListUsers      (ListRequest)     returns (stream User);       // server stream\n  rpc UploadEvents   (stream Event)    returns (UploadSummary);     // client stream\n  rpc Chat           (stream Msg)      returns (stream Msg);        // bidirectional\n}\nmessage GetUserRequest { int64 id = 1; }\nmessage User { int64 id = 1;  string name = 2;  string email = 3; }`,
+"Go server":`func (s *server) GetUser(ctx context.Context, r *pb.GetUserRequest) (*pb.User, error) {\n    u, err := s.db.Find(r.Id)\n    if err != nil { return nil, status.Error(codes.NotFound, "no user") }\n    return &pb.User{Id: u.Id, Name: u.Name, Email: u.Email}, nil\n}\n// Server streaming: push many responses over one call\nfunc (s *server) ListUsers(r *pb.ListRequest, stream pb.UserService_ListUsersServer) error {\n    for _, u := range s.db.All() {\n        if err := stream.Send(&pb.User{Id: u.Id, Name: u.Name}); err != nil { return err }\n    }\n    return nil\n}`,
+"Client":`// Generated stub — call a remote method like a local function\nconn, _ := grpc.Dial("users:50051", grpc.WithTransportCredentials(creds))\nclient := pb.NewUserServiceClient(conn)\n\nctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond) // deadline\ndefer cancel()\nuser, err := client.GetUser(ctx, &pb.GetUserRequest{Id: 42})\n\n// Server-streaming consumption:\nstream, _ := client.ListUsers(ctx, &pb.ListRequest{})\nfor { u, err := stream.Recv(); if err == io.EOF { break }; handle(u) }`
+  },
+  realWorld:[
+    ["Google","gRPC powers internal service communication at massive scale (successor to Stubby)."],
+    ["Kubernetes","Components and the container runtime interface (CRI) use gRPC."],
+    ["Netflix / Square / Dropbox","Use gRPC for high-throughput internal microservice calls."],
+    ["etcd","Exposes a gRPC API for its key-value/consensus operations."],
+    ["Envoy / service meshes","Speak gRPC and proxy it, providing gRPC-Web bridging and LB."]
+  ],
+  interview:[
+    ["basic","What is gRPC and what does it use under the hood?","A high-performance RPC framework that lets you call remote methods like local functions. It serializes messages with Protocol Buffers (compact binary) and transports them over HTTP/2, generating typed client/server code from a .proto contract for many languages."],
+    ["basic","What are the four gRPC call types?","Unary (single request, single response), server streaming (one request, a stream of responses), client streaming (a stream of requests, one response), and bidirectional streaming (independent request and response streams over one connection)."],
+    ["inter","Why is gRPC faster than REST+JSON?","Protobuf is a compact binary format with tag-numbered fields — no repeated key strings and much less to parse than text JSON. HTTP/2 adds multiplexing (many calls share one connection without head-of-line blocking at the HTTP layer), header compression, and persistent connections, cutting latency, bandwidth, and CPU for high call volumes."],
+    ["inter","Why can't browsers use gRPC directly, and what's the workaround?","Browsers don't expose the low-level HTTP/2 frame control gRPC needs (e.g., trailers, raw framing). The workaround is gRPC-Web: the client speaks a browser-compatible variant and a proxy (Envoy or a gRPC-Web server) translates it to real gRPC for the backend."],
+    ["inter","How does load balancing differ for gRPC?","Because gRPC uses long-lived, multiplexed HTTP/2 connections, a naive L4 (connection-level) load balancer pins all a client's streams to one backend, defeating balancing. You need L7/request-level balancing (client-side LB with resolver + picker, or a proxy/mesh like Envoy) that distributes individual RPCs across backends."],
+    ["adv","What reliability features does gRPC provide?","Deadlines/timeouts propagated per call, cancellation, per-call metadata, interceptors (like middleware) for auth/logging/metrics, retries and hedging policies, keepalives, flow control from HTTP/2, and pluggable auth (TLS, token-based). These make it well-suited for robust service meshes."],
+    ["sd","When would you pick gRPC vs REST vs GraphQL in a system design?","gRPC for internal, high-throughput, low-latency service-to-service calls needing strict typed contracts and streaming. REST for public, cacheable CRUD APIs and broad client compatibility. GraphQL for client-driven aggregation across many services to avoid over/under-fetching. A common pattern: REST/GraphQL at the edge for clients, gRPC between microservices internally."]
+  ],
+  mistakes:["Exposing raw gRPC to browsers without gRPC-Web/proxy.","Using L4 load balancing for long-lived HTTP/2 connections.","Breaking Protobuf compatibility by reusing/renumbering field tags.","Not setting deadlines, so calls hang indefinitely.","Treating gRPC like REST and ignoring streaming where it fits."],
+  best:["Version schemas carefully; never reuse field numbers (only add).","Set deadlines and use cancellation on every call.","Use L7/client-side load balancing or a mesh for HTTP/2.","Add interceptors for auth, retries, metrics, and tracing.","Use gRPC internally; bridge to REST/gRPC-Web at the edge for external clients."],
+  related:[["REST API","🌐","Text CRUD alternative","rest.html"],["GraphQL","◼️","Client-driven queries","graphql.html"],["HTTP/2 & HTTP/3","🚀","The transport gRPC rides","http2-3.html"],["Service Mesh","🕸️","Proxies gRPC traffic","service-mesh.html"],["WebSockets","🔌","Other streaming option","websockets.html"],["Protobuf / Serialization","📦","Compact encoding","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Distributed Locking — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,188,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const clients=[[110,60],[110,140]];const lockX=310,lockY=100,resX=510,resY=100;
+  let phase=0,timer=0,running=false,raf,last;const g=S("g",{});svg.appendChild(g);
+  function box(x,y,w,h,txt,fill,stroke){g.appendChild(S("rect",{x:x-w/2,y:y-h/2,width:w,height:h,rx:8,fill:fill,stroke:stroke,"stroke-width":2}));
+    const t=S("text",{x:x,y:y+4,fill:"#e4e4e7","font-size":11,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  function render(){g.innerHTML="";
+    const holder=phase<2?0:1;
+    clients.forEach((c,i)=>box(c[0],c[1],90,34,"client "+(i+1),i===holder&&phase!==1?"rgba(52,211,153,.2)":"#161619",i===holder&&phase!==1?"#34d399":"#3a3a42"));
+    box(lockX,lockY,96,40,"LOCK",phase===1?"rgba(251,191,36,.18)":"rgba(124,58,237,.22)","#7C3AED");
+    box(resX,resY,90,40,"resource","#161619","#3a3a42");
+    if(phase===0){g.appendChild(S("line",{x1:155,y1:60,x2:lockX-48,y2:lockY,stroke:"#34d399","stroke-width":2}));
+      lbl.textContent="client 1 acquires the lock (token 33)";lbl.setAttribute("fill","#c4a2ff");sub.textContent="SET lock client1 NX PX 10000 → OK, gets a fencing token";}
+    else if(phase===1){lbl.textContent="client 1 pauses (GC) → lock TTL expires";lbl.setAttribute("fill","#f87171");sub.textContent="the lease auto-expires so the system can't deadlock";}
+    else if(phase===2){g.appendChild(S("line",{x1:155,y1:140,x2:lockX-48,y2:lockY,stroke:"#34d399","stroke-width":2}));
+      lbl.textContent="client 2 acquires the lock (token 34)";lbl.setAttribute("fill","#c4a2ff");sub.textContent="a new holder gets a strictly higher fencing token";}
+    else{g.appendChild(S("line",{x1:155,y1:60,x2:resX-48,y2:resY,stroke:"#f87171","stroke-width":2,"stroke-dasharray":"5 4"}));
+      lbl.textContent="stale client 1 writes with token 33 → REJECTED";lbl.setAttribute("fill","#f87171");sub.textContent="resource only accepts tokens ≥ 34 → no corruption";}}
+  function step(){phase=(phase+1)%4;timer=2.2;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Three clients contend for one lock backed by a lease (TTL). Only one can hold it; the TTL prevents deadlock if a holder dies. Each acquisition mints a higher <b>fencing token</b> — so a paused holder that wakes up late can't corrupt the resource, because its old token is rejected.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-btns"><button id="pgA" class="go">Client A: acquire</button></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgB" class="go">Client B: acquire</button></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgC" class="go">Client C: acquire</button></div>
+      <div class="pg-btns" style="margin-top:10px"><button id="pgPause">Pause holder (GC)</button><button id="pgRelease">Release</button></div>
+      <div class="pg-field" style="margin-top:6px"><label>Write to resource as</label>
+        <select id="pgWho"><option>A</option><option>B</option><option>C</option></select></div>
+      <div class="pg-btns" style="margin-top:4px"><button id="pgWrite">Write resource</button><button id="pgReset">↺ Reset</button></div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Lock holder</div><div class="v ok" id="pgHolder">none</div></div>
+        <div class="pg-stat"><div class="k">Lease TTL</div><div class="v wa" id="pgTTL">—</div></div>
+        <div class="pg-stat"><div class="k">Fencing token</div><div class="v ac" id="pgTok">0</div></div>
+        <div class="pg-stat"><div class="k">Resource token</div><div class="v" id="pgRes">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=210;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const names=["A","B","C"];let holder,ttl,token,resToken,paused,tokenOf,ticker=null;
+  const TTL0=10;
+  function reset(){holder=null;ttl=0;token=0;resToken=0;paused=false;tokenOf={A:0,B:0,C:0};draw();stats();$("pgLog").innerHTML="";log("lock is free — any client may acquire","ac");
+    if(ticker){clearInterval(ticker);ticker=null;}
+    ticker=setInterval(()=>{if(holder&&!paused){ttl--;if(ttl<=0){log("⏰ lease for client "+holder+" EXPIRED (TTL ran out) — lock released","bad");holder=null;}draw();stats();}},1000);}
+  function acquire(c){if(holder){if(holder===c){ttl=TTL0;log("client "+c+" refreshed its lease (TTL reset to "+TTL0+"s)","ac");}else log("client "+c+" BLOCKED — client "+holder+" holds the lock","wa");draw();stats();return;}
+    token++;tokenOf[c]=token;holder=c;ttl=TTL0;paused=false;log("client "+c+" ACQUIRED lock (SET NX PX) → fencing token "+token,"ok");draw();stats();}
+  function pause(){if(!holder){log("no holder to pause","wa");return;}paused=true;log("⏸ client "+holder+" paused (GC/network) — it still thinks it holds the lock, but TTL keeps ticking...","wa");
+    // simulate expiry after pause
+    ttl=0;const old=holder;setTimeout(()=>{},0);log("… lease for client "+old+" will expire; another client can now acquire","wa");holder=null;draw();stats();}
+  function release(){if(!holder){log("nothing to release","wa");return;}log("client "+holder+" released the lock","ac");holder=null;ttl=0;draw();stats();}
+  function write(){const c=$("pgWho").value;const t=tokenOf[c];
+    if(t>=resToken&&t>0){resToken=t;log("client "+c+" writes with token "+t+" ≥ "+"resource token → ACCEPTED (resource token = "+t+")","ok");}
+    else log("client "+c+" writes with STALE token "+t+" < resource token "+resToken+" → REJECTED (prevents corruption)","bad");
+    draw();stats();}
+  function draw(){svg.innerHTML="";
+    names.forEach((c,i)=>{const y=40+i*60;const isH=holder===c;
+      svg.appendChild(S("rect",{x:20,y:y-18,width:110,height:36,rx:8,fill:isH?"rgba(52,211,153,.18)":"#161619",stroke:isH?"#34d399":"#3a3a42","stroke-width":2}));
+      svg.appendChild(TX(75,y-2,"client "+c,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+      svg.appendChild(TX(75,y+11,"token "+tokenOf[c],{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+      if(isH)svg.appendChild(S("line",{x1:130,y1:y,x2:262,y2:H/2,stroke:"#34d399","stroke-width":2}));});
+    svg.appendChild(S("rect",{x:262,y:H/2-28,width:96,height:56,rx:10,fill:holder?"rgba(124,58,237,.22)":"#161619",stroke:"#7C3AED","stroke-width":2}));
+    svg.appendChild(TX(310,H/2-6,"LOCK",{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));
+    svg.appendChild(TX(310,H/2+12,holder?("held by "+holder+" ("+Math.max(0,ttl)+"s)"):"free",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));
+    svg.appendChild(S("rect",{x:440,y:H/2-28,width:100,height:56,rx:10,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));
+    svg.appendChild(TX(490,H/2-6,"resource",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(TX(490,H/2+12,"accepts ≥ "+resToken,{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));}
+  function stats(){$("pgHolder").textContent=holder?("client "+holder):"none";$("pgTTL").textContent=holder?Math.max(0,ttl)+"s":"—";$("pgTok").textContent=token;$("pgRes").textContent=resToken;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgA").onclick=()=>acquire("A");$("pgB").onclick=()=>acquire("B");$("pgC").onclick=()=>acquire("C");
+  $("pgPause").onclick=pause;$("pgRelease").onclick=release;$("pgWrite").onclick=write;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔒",title:"Distributed Locking",category:"Distributed Systems",difficulty:"Hard",readingTime:"10 min",
+  eyebrow:"Mutual Exclusion Across Machines",
+  tagline:"Guaranteeing that only <b>one</b> process across an entire cluster touches a resource at a time — using leases (TTLs) to avoid deadlock and <b>fencing tokens</b> to stop a paused holder from corrupting data after its lock expired.",
+  pills:["<b>Cluster-wide</b> mutex","<b>Lease + TTL</b>","<b>Fencing tokens</b>","<b>Redlock / ZK / etcd</b>"],
+  overview:"A distributed lock provides mutual exclusion across processes on different machines — e.g., only one worker should run a nightly job, or only one node should be the writer for a shard. Unlike an in-process mutex, it must survive crashes and network failures, so it's built on an external store (Redis, ZooKeeper, etcd) and almost always uses a <b>lease</b>: the lock auto-expires after a TTL so a dead holder doesn't deadlock everyone. The subtle danger is that leases can expire while a holder is merely paused (GC, network stall) and still believes it holds the lock. The robust fix is a <b>fencing token</b>: each acquisition returns a strictly increasing number, and the protected resource rejects any write carrying a token lower than the highest it has seen — so a late, stale holder's writes are safely refused.",
+  problem:"You need cluster-wide mutual exclusion, but nodes crash, pause, and get partitioned. A naïve lock can deadlock (holder dies without releasing) or allow two holders at once (holder pauses, lease expires, another acquires, then the first wakes up). Both lead to duplicated work or data corruption. Distributed locking with leases + fencing solves liveness (no deadlock) and safety (no two effective writers).",
+  diagram,diagramCaption:"A lease prevents deadlock; a fencing token stops a resurrected old holder from corrupting the resource.",
+  how:[
+    "Acquire: atomically set a key only if absent, with a TTL — e.g. Redis SET key owner NX PX 10000.",
+    "Hold & renew: the owner periodically extends the TTL (heartbeat) while working.",
+    "Auto-expire: if the owner dies or pauses, the TTL lapses and the lock frees itself (no deadlock).",
+    "Release: the owner deletes the key — safely, only if it still owns it (compare owner id via a Lua script).",
+    "Fence: return a monotonically increasing token on each acquire; the resource rejects writes with a token below the max it has seen."
+  ],
+  complexity:[["Acquire","O(1) atomic op"],["Deadlock risk","none (TTL expiry)"],["Safety","fencing token"],["Backends","Redis / ZK / etcd"]],
+  advantages:["Cluster-wide mutual exclusion","Lease/TTL prevents permanent deadlock","Fencing tokens guarantee safety under pauses","Simple to build on Redis/ZK/etcd"],
+  disadvantages:["Correctness is subtle (clock/pause edge cases)","Redlock is debated for strict correctness","Lock service is a critical dependency","TTL tuning trades safety vs liveness"],
+  tradeoffs:"TTL length is the core knob: too short and a slow-but-alive holder loses the lock mid-work (causing overlap); too long and recovery after a crash is slow. Redis-based locks (single-node or Redlock) are fast and simple but can violate safety under clock skew/pauses unless you add fencing tokens — which is why Martin Kleppmann argues fencing is mandatory for correctness. ZooKeeper/etcd locks (ephemeral nodes / leases) are consensus-backed and safer but higher-latency. The universal rule: never rely on the lock alone for correctness — always fence the resource.",
+  whenNot:"Avoid distributed locks when you can design the problem away: make operations idempotent, partition work so each key has a single owner, or use optimistic concurrency (compare-and-swap / versioned writes) or a queue with single-consumer semantics. Locks add a critical dependency and subtle failure modes; prefer coordination-free designs where possible.",
+  sim,
+  code:{
+"Redis":`-- Acquire: set only if absent, with a TTL and a unique owner value\nSET lock:job "client-42:uuid" NX PX 10000        -- OK => acquired\n\n-- Safe release: delete ONLY if we still own it (atomic Lua)\nif redis.call("GET", KEYS[1]) == ARGV[1] then\n    return redis.call("DEL", KEYS[1])\nelse\n    return 0            -- someone else owns it now; do nothing\nend\n\n-- Renew (heartbeat) while working: extend TTL if still owner\nif redis.call("GET", KEYS[1]) == ARGV[1] then\n    return redis.call("PEXPIRE", KEYS[1], 10000)\nend`,
+"Fencing":`// Fencing token: the lock service hands out increasing numbers.\nlong token = lock.acquire("shard-7");     // e.g. returns 34\n// ... long pause (GC). Lease expired; another node acquired -> got 35\nboolean ok = storage.writeIfTokenAtLeast("shard-7", data, token);\n// storage keeps the max token it has seen (35); our stale write (34) is\n// REJECTED -> no two effective writers, even though we THOUGHT we held it.`,
+"ZooKeeper":`// ZooKeeper recipe: lock = smallest sequential ephemeral znode.\nString path = zk.create("/lock/req-", EPHEMERAL_SEQUENTIAL);  // /lock/req-0007\nList<String> kids = zk.getChildren("/lock", false);\nif (isSmallest(path, kids)) {\n    // we hold the lock\n} else {\n    // watch ONLY the node just before us (avoids herd effect),\n    // then re-check when it disappears\n    zk.exists(predecessor(path, kids), watcher);\n}\n// ephemeral => if our session dies, the znode vanishes and the lock frees.`
+  },
+  realWorld:[
+    ["Redis (Redlock / SET NX)","The most common fast lock; single-instance SET NX or the multi-node Redlock algorithm."],
+    ["ZooKeeper","Ephemeral sequential znodes implement fair locks and leader election (Curator recipes)."],
+    ["etcd","Lease + txn (compare-and-swap) locks used by Kubernetes and many controllers."],
+    ["Google Chubby","The lock service inspiring most others; coarse-grained locks for GFS/Bigtable."],
+    ["Database advisory locks","Postgres pg_advisory_lock / SELECT … FOR UPDATE for lightweight coordination."]
+  ],
+  interview:[
+    ["basic","Why not use a normal mutex across services?","An in-process mutex only coordinates threads within a single process/machine. Across machines there's no shared memory, and nodes can crash or partition, so you need an external, fault-tolerant coordinator (Redis/ZK/etcd) that survives failures and can auto-release a dead holder's lock."],
+    ["basic","How does a lease/TTL help?","It bounds how long a lock can be held: if the owner crashes or hangs without releasing, the TTL expires and the lock frees automatically. This guarantees liveness (no permanent deadlock) even when holders die unexpectedly."],
+    ["inter","What problem do fencing tokens solve?","A holder can pause (GC, network stall) long enough for its lease to expire; another client then acquires the lock, but when the first wakes up it still believes it holds it and may write — causing two writers. A fencing token (a strictly increasing number issued per acquisition) fixes this: the resource records the highest token it has seen and rejects any write with a lower token, so the stale holder's writes are refused."],
+    ["inter","Is Redlock safe? What's the controversy?","Redlock (acquiring a majority of N independent Redis nodes) improves availability, but Kleppmann argued it doesn't guarantee correctness under clock jumps, process pauses, and network delays — timing assumptions can be violated. Antirez defended it for its intended use. The pragmatic consensus: Redlock is fine for efficiency (avoiding duplicate work) but for correctness you must add fencing tokens regardless of the backend."],
+    ["adv","How does ZooKeeper implement a lock, and what's the herd effect?","Each client creates a sequential ephemeral znode under a lock path; the client with the smallest sequence number holds the lock. Ephemeral means it vanishes if the client's session dies (auto-release). To avoid the herd effect — all waiters waking when the lock frees — each waiter watches only its immediate predecessor, so exactly one client is notified when the lock is released."],
+    ["adv","How do you choose the TTL?","Set it comfortably longer than the worst-case work time under normal operation, and have the holder renew (heartbeat) periodically so long-but-healthy work doesn't lose the lock. Shorter TTLs recover faster from crashes but risk premature expiry; longer TTLs are safer against pauses but slow recovery. Always pair with fencing so a late renewal can't cause corruption."],
+    ["sd","Design a lock so only one worker runs a nightly batch job.","Workers try to acquire lock:nightly-job via SET NX PX (or an etcd lease). The winner runs the job and renews the lease via a heartbeat; losers back off and retry. Writes/side-effects carry the fencing token, and the job's steps are idempotent so a rare overlap during failover is harmless. On completion or crash the lease is released/expires and the next run can proceed. Prefer this over trusting the lock alone — idempotency + fencing make it correct."]
+  ],
+  mistakes:["Relying on the lock alone for correctness without fencing tokens.","Deleting the lock without checking ownership (deleting someone else's lock).","Setting TTL shorter than the actual work, causing overlapping holders.","Assuming synchronized clocks (Redlock's timing assumptions).","No heartbeat/renewal, so long healthy jobs lose the lock mid-way."],
+  best:["Always fence the resource with monotonically increasing tokens.","Release locks atomically, checking owner id (Lua/txn/compare-and-swap).","Renew leases via heartbeats and size TTL to worst-case work time.","Make locked operations idempotent to survive rare overlaps.","Prefer designing locks away (partitioning, idempotency, CAS) when feasible."],
+  related:[["Leader Election","👑","Locks pick a leader","leader-election.html"],["ZooKeeper","🐘","Ephemeral-node locks","zookeeper.html"],["Consensus / Raft","🧭","Backs safe locks","consensus-raft.html"],["Idempotency","♻️","Tolerate overlaps","system-designed.html"],["Split Brain","🧠","Two-holder failure","split-brain.html"],["Redis","🧱","Common lock backend","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

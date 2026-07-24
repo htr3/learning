@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Monolith vs Microservices — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    if(phase===0){g.appendChild(S("rect",{x:210,y:50,width:220,height:110,rx:12,fill:"rgba(56,189,248,.12)",stroke:"#38bdf8","stroke-width":2}));g.appendChild(TX(320,68,"🏛️ MONOLITH",{fill:"#38bdf8","font-size":13,"text-anchor":"middle","font-weight":700}));
+      ["Users","Orders","Payments","Inventory"].forEach((m,i)=>{const x=228+(i%2)*100,y=82+Math.floor(i/2)*38;g.appendChild(S("rect",{x,y,width:88,height:30,rx:5,fill:"rgba(56,189,248,.2)",stroke:"#38bdf8"}));g.appendChild(TX(x+44,y+19,m,{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));});
+      g.appendChild(TX(320,152,"one codebase · one deploy · one database",{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+      lbl.textContent="monolith — all modules in one deployable unit";lbl.setAttribute("fill","#38bdf8");sub.textContent="simple to build, test, and deploy; modules call each other in-process";}
+    else if(phase===1){["Users","Orders","Payments","Inventory"].forEach((m,i)=>{const x=80+i*135;const c=["#38bdf8","#34d399","#fbbf24","#f472b6"][i];g.appendChild(S("rect",{x,y:70,width:110,height:44,rx:10,fill:c+"22",stroke:c,"stroke-width":2}));g.appendChild(TX(x+55,88,m,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle","font-weight":700}));g.appendChild(TX(x+55,104,"svc + DB",{fill:"#8b8b93","font-size":7,"text-anchor":"middle"}));if(i<3)arrow(g,x+110,92,x+135,92,"#5b5b63");});
+      g.appendChild(TX(320,150,"independent services · own DBs · talk over the network (API)",{fill:"#8b8b93","font-size":8.5,"text-anchor":"middle"}));
+      lbl.textContent="microservices — independent services per capability";lbl.setAttribute("fill","#34d399");sub.textContent="deploy & scale independently, but now it's a distributed system";}
+    else{g.appendChild(TX(320,55,"scale only the hot service",{fill:"#fbbf24","font-size":12,"text-anchor":"middle","font-weight":700}));
+      g.appendChild(S("rect",{x:120,y:80,width:90,height:36,rx:8,fill:"rgba(56,189,248,.2)",stroke:"#38bdf8"}));g.appendChild(TX(165,102,"Users ×1",{fill:"#e4e4e7","font-size":9,"text-anchor":"middle"}));
+      [0,1,2].forEach(k=>{g.appendChild(S("rect",{x:280+k*14,y:76+k*6,width:120,height:36,rx:8,fill:"rgba(251,191,36,.2)",stroke:"#fbbf24"}));});g.appendChild(TX(360,120,"Payments ×3 (scaled)",{fill:"#fbbf24","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="a key microservices win: independent scaling";lbl.setAttribute("fill","#fbbf24");sub.textContent="a monolith must scale as a whole; microservices scale each part to demand";}}
+  function step(){phase=(phase+1)%3;timer=3.4;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">There's no universally 'better' architecture — it depends on team size, scale, and domain complexity. Answer a few questions about your context and get a recommendation with the reasoning, plus how each choice scores on the dimensions that matter: <b>simplicity</b>, <b>independent deploy/scale</b>, <b>operational cost</b>, and <b>team autonomy</b>.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Team size: <b id="pgTeamV">8</b> engineers</label><input id="pgTeam" type="range" min="2" max="200" value="8" step="2"></div>
+      <div class="pg-field"><label>Domain complexity: <b id="pgCplxV">3</b>/5</label><input id="pgCplx" type="range" min="1" max="5" value="3" step="1"></div>
+      <div class="pg-field"><label>Scale need: <b id="pgScaleV">2</b>/5</label><input id="pgScale" type="range" min="1" max="5" value="2" step="1"></div>
+      <div class="pg-field"><label><input type="checkbox" id="pgOps"> mature DevOps/platform (CI/CD, k8s, observability)</label></div>
+      <button class="pg-btn" id="pgGo">recommend architecture</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Recommendation</div><div class="v ac" id="pgRec">—</div></div>
+        <div class="pg-stat"><div class="k">Score (mono)</div><div class="v" id="pgSm">—</div></div>
+        <div class="pg-stat"><div class="k">Score (micro)</div><div class="v" id="pgSu">—</div></div>
+        <div class="pg-stat"><div class="k">Confidence</div><div class="v ok" id="pgConf">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=110;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  const DIMS=[["simplicity",["mono","micro"]],["indep. deploy/scale",["micro","mono"]],["low ops cost",["mono","micro"]],["team autonomy",["micro","mono"]]];
+  function bars(mono,micro){svg.innerHTML="";
+    svg.appendChild(TX(20,14,"how each fits your context (longer = better):",{fill:"#8b8b93","font-size":9.5}));
+    const dims=[["simplicity",mono.simp,micro.simp],["indep deploy/scale",mono.dep,micro.dep],["low ops cost",mono.ops,micro.ops],["team autonomy",mono.team,micro.team]];
+    dims.forEach((d,i)=>{const y=26+i*20;svg.appendChild(TX(20,y+9,d[0],{fill:"#8b8b93","font-size":8.5}));
+      svg.appendChild(S("rect",{x:150,y:y,width:d[1]*1.6,height:7,rx:2,fill:"#38bdf8"}));
+      svg.appendChild(S("rect",{x:150,y:y+9,width:d[2]*1.6,height:7,rx:2,fill:"#34d399"}));});
+    svg.appendChild(TX(150,H-4,"■ monolith  ",{fill:"#38bdf8","font-size":8}));svg.appendChild(TX(230,H-4,"■ microservices",{fill:"#34d399","font-size":8}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function go(){const team=+$("pgTeam").value,cplx=+$("pgCplx").value,scale=+$("pgScale").value,ops=$("pgOps").checked;
+    // heuristic scoring
+    let mono=0,micro=0;
+    if(team<15)mono+=2;else if(team>40)micro+=2;else micro+=0.5;
+    if(cplx>=4)micro+=1.5;else mono+=1;
+    if(scale>=4)micro+=1.5;else mono+=1;
+    if(ops)micro+=1.5;else mono+=2;
+    const monoDims={simp:90,dep:35,ops:90,team:30},microDims={simp:35,dep:90,ops:40,team:90};
+    bars(monoDims,microDims);
+    const rec=micro>mono?"Microservices":"Monolith (or modular monolith)";
+    $("pgRec").textContent=rec;$("pgSm").textContent=mono.toFixed(1);$("pgSu").textContent=micro.toFixed(1);
+    const conf=Math.abs(micro-mono);$("pgConf").textContent=conf>=2?"high":conf>=1?"medium":"low (close call)";
+    $("pgConf").className="v "+(conf>=2?"ok":conf>=1?"wa":"bad");
+    let why=[];if(team<15)why.push("small team favors a monolith");if(team>40)why.push("large org favors service ownership");
+    if(cplx>=4)why.push("complex domain benefits from bounded contexts");if(scale>=4)why.push("high scale needs independent scaling");
+    if(!ops)why.push("without mature DevOps, microservices ops cost is high");if(ops)why.push("mature platform lowers microservices overhead");
+    log("→ "+rec+" (mono "+mono.toFixed(1)+" vs micro "+micro.toFixed(1)+"): "+why.join("; "),micro>mono?"ok":"ac");
+    if(conf<1)log("   close call — consider a modular monolith you can split later (start simple, extract services when pain is real)","wa");}
+  $("pgGo").onclick=go;
+  ["pgTeam","pgCplx","pgScale"].forEach(id=>$(id).oninput=()=>{$(id+"V").textContent=$(id).value;});
+  bars({simp:90,dep:35,ops:90,team:30},{simp:35,dep:90,ops:40,team:90});
+  log("set your context and get a recommendation — most teams should start with a monolith","ac");
+}
+
+const DATA={
+  badge:"🏗️",title:"Monolith vs Microservices",category:"Microservices",difficulty:"Medium",readingTime:"11 min",
+  eyebrow:"Choosing an Architecture Style",
+  tagline:"A <b>monolith</b> packages all functionality into one deployable unit — simple to build and operate. <b>Microservices</b> split the system into small, independently-deployable services owned by different teams — flexible and independently scalable, but a distributed system with real operational cost. Neither is universally 'better'; the right choice depends on <b>team, scale, and complexity</b>.",
+  pills:["<b>One unit</b> vs <b>many services</b>","<b>Simplicity</b> vs <b>autonomy</b>","<b>Distributed-system</b> tax","Start simple, split later"],
+  overview:"The <b>monolith vs microservices</b> debate is about how to <b>decompose</b> an application. A <b>monolith</b> is a single deployable unit containing all modules (users, orders, payments, inventory…) that call each other <b>in-process</b>, typically backed by one shared database. It's the simplest starting point: one codebase to build and test, one thing to deploy, easy local development, no network between modules, and straightforward transactions and refactoring. Its downsides appear as it and its team grow: the codebase becomes hard to understand and change safely, any change requires redeploying the whole app, you can only scale the entire application (not the hot part), a bug can take down everything, and one technology stack constrains all teams. <b>Microservices</b> decompose the system into small, independently-deployable services, each owning a business capability and (ideally) its own database, communicating over the <b>network</b> via APIs or messaging. This grants <b>independent deployment</b> (ship a service without redeploying others), <b>independent scaling</b> (scale only the service under load), <b>team autonomy</b> (teams own services end-to-end with their own stack and release cadence), <b>fault isolation</b> (one service failing needn't crash the rest), and technology flexibility. But microservices turn a local problem into a <b>distributed systems</b> problem, importing enormous complexity: network calls fail and add latency, data is spread across services (no easy cross-service transactions — you need sagas and eventual consistency), you need service discovery, load balancing, distributed tracing, centralized logging, resilience (retries/timeouts/circuit breakers, often via a service mesh/sidecars), and sophisticated CI/CD and observability. Debugging spans many services, and poorly-drawn service boundaries create a <b>distributed monolith</b> — the worst of both worlds (chatty, tightly-coupled services that must deploy together). The pragmatic consensus: <b>start with a (well-modularized) monolith</b> and extract services only when you feel real pain — team coordination bottlenecks, divergent scaling needs, or clearly independent domains. A <b>modular monolith</b> (clean internal boundaries in one deployable) captures much of the organizational benefit without the distributed tax and makes later extraction easier.",
+  problem:"As applications and engineering organizations grow, a single codebase and deploy can become a bottleneck: teams step on each other, releases are risky and coordinated, and you can't scale or evolve parts independently. Microservices promise to solve these organizational and scaling problems — but at the cost of distributed-systems complexity. The core question is when the benefits justify that cost, and how to draw service boundaries.",
+  diagram,diagramCaption:"Monolith: one unit, one DB. Microservices: independent services with own DBs — enabling per-service scaling.",
+  how:[
+    "Monolith: one codebase/deploy; modules call in-process; usually one shared database.",
+    "Microservices: split by business capability into independently-deployable services with their own data stores.",
+    "Services communicate over the network (sync APIs or async messaging), not in-process calls.",
+    "Add platform infrastructure: service discovery, LB, tracing, logging, resilience (mesh/sidecars), CI/CD.",
+    "Manage data consistency across services with sagas/events (eventual consistency) instead of ACID transactions."
+  ],
+  complexity:[["Monolith","1 deploy, in-process"],["Microservices","N deploys, network"],["Data","shared DB vs per-service"],["Ops","simple vs distributed"]],
+  advantages:["Microservices: independent deploy & scaling","Microservices: team autonomy + tech flexibility","Microservices: fault isolation per service","Monolith: simplicity, easy local dev & transactions","Monolith: no network latency between modules"],
+  disadvantages:["Microservices import distributed-systems complexity","No cross-service ACID transactions (sagas/eventual)","Heavy ops: discovery, tracing, resilience, CI/CD","Monolith: scales as a whole; risky big-bang deploys","Bad boundaries → 'distributed monolith' (worst of both)"],
+  tradeoffs:"This is a trade-off between <b>simplicity and organizational scalability</b>, and the decisive factors are <b>team size, domain complexity, scale needs, and operational maturity</b> — not fashion. A monolith minimizes <b>accidental complexity</b>: everything is in-process, so calls are fast and reliable, transactions are ACID, refactoring across modules is a compiler-checked operation, and there's one thing to deploy and monitor — ideal for small teams, early products, and unclear domains where boundaries will shift. Its cost is <b>organizational</b>: as the team grows, a single codebase and coordinated deploy pipeline become a bottleneck, and you can't independently scale or evolve parts. Microservices invert this: they excel when many teams need to own and ship capabilities <b>independently</b> and when different parts have genuinely different scaling profiles — but they convert every in-process call into a fallible, latent <b>network call</b>, scatter data so you lose easy transactions (forcing sagas and eventual consistency), and demand a serious <b>platform investment</b> (service discovery, load balancing, distributed tracing, centralized logging, retries/timeouts/circuit breakers, secrets, CI/CD per service, a service mesh). Without mature DevOps, that operational tax outweighs the benefits. The most expensive failure mode is <b>bad boundaries</b>: splitting along technical layers or too finely yields a <b>distributed monolith</b> — services so chatty and coupled they must be deployed together, combining microservice complexity with monolith rigidity. Hence the widely-recommended path: begin with a <b>modular monolith</b> (clear internal domain boundaries in one deployable), get the organizational and design benefits cheaply, and <b>extract services incrementally</b> along proven seams only when a concrete pain (team contention, a component needing separate scaling, an isolated failure domain) justifies the cost. Conway's Law matters: your architecture will mirror your org structure, so decompose to match how teams actually own work.",
+  whenNot:"Don't adopt microservices for a small team or early-stage product — the distributed-systems complexity and platform overhead will crush velocity with little benefit; a monolith (ideally modular) is faster and cheaper. Avoid them without mature CI/CD, observability, and on-call practices, since operating many services safely requires that foundation. Avoid splitting when domain boundaries are still unclear (you'll draw the wrong lines and pay to move them) or when components are tightly coupled and chatty (you'll build a distributed monolith). Conversely, don't cling to a monolith when a large organization is bottlenecked on coordinated deploys, teams need independent ownership, or parts have sharply different scaling/availability requirements — that's when extraction pays off.",
+  sim,
+  code:{
+"In-process call vs network call":`// MONOLITH: modules call each other in-process — fast, reliable, transactional.\nclass OrderService {\n  placeOrder(o) {\n    inventory.reserve(o.items);     // in-process, same transaction\n    payment.charge(o.total);        // if this throws, DB rolls back atomically\n    return db.save(o);              // one ACID transaction across all modules\n  }\n}\n\n// MICROSERVICES: the same flow crosses the network — calls can fail/latency,\n// and there is NO shared transaction across services.\nasync placeOrder(o) {\n  await http.post(INVENTORY, "/reserve", o.items);   // may time out / fail\n  await http.post(PAYMENT,   "/charge",  o.total);    // partial failure!\n  return await http.post(ORDERS, "/save", o);          // must handle rollback\n}`,
+"Saga (distributed consistency)":`# No cross-service ACID -> coordinate with a SAGA of local txns + compensations.\n# Order flow with compensating actions on failure:\nsteps = [\n  ("reserve_inventory", "release_inventory"),   # action, compensation\n  ("charge_payment",    "refund_payment"),\n  ("confirm_order",     "cancel_order"),\n]\ntry:\n    for action, _ in steps:\n        invoke(action)                 # each is a local transaction in its service\nexcept StepFailed as f:\n    for _, compensate in reversed(steps[:f.index]):\n        invoke(compensate)             # undo prior steps -> eventual consistency`,
+"Extraction path (strangler fig)":`# Recommended: start monolith -> extract services incrementally along seams.\n# 1) Modular monolith: clear internal module boundaries, still one deploy.\n#    modules: users | orders | payments | inventory   (no shared internals)\n#\n# 2) Route new/changed functionality through a facade; peel off one module:\n#    [client] -> [proxy/facade] -> monolith (most paths)\n#                               \\-> payments-service (extracted)   <-- new\n#\n# 3) Repeat for the next module ONLY when a real pain justifies it\n#    (team contention, independent scaling, isolated failure domain).\n# Avoid a big-bang rewrite; avoid splitting before boundaries are proven.`
+  },
+  realWorld:[
+    ["Amazon / Netflix / Uber","Famously moved from monoliths to microservices at scale."],
+    ["Shopify / Basecamp","Champions of the (modular) 'majestic monolith'."],
+    ["Kubernetes ecosystem","Platform that makes running many services feasible."],
+    ["Service meshes (Istio/Linkerd)","Provide the resilience/observability microservices need."],
+    ["Strangler fig migrations","Incrementally extracting services from a monolith."]
+  ],
+  interview:[
+    ["basic","What is the difference between a monolith and microservices?","A monolith packages all functionality into a single deployable unit where modules call each other in-process, usually over one shared database. Microservices split the system into small, independently-deployable services, each owning a business capability and ideally its own data store, communicating over the network via APIs or messaging. The monolith optimizes simplicity; microservices optimize independent deployment, scaling, and team autonomy at the cost of distributed complexity."],
+    ["basic","What are the main advantages of microservices?","Independent deployment (ship one service without redeploying the rest), independent scaling (scale only the service under load), team autonomy (each team owns a service end-to-end with its own stack and cadence), fault isolation (one service failing needn't crash everything), and technology flexibility. These are largely organizational and scaling benefits that matter most for large teams and high-scale, complex systems."],
+    ["inter","What complexity do microservices introduce that a monolith avoids?","They turn in-process calls into network calls that can fail and add latency, and they scatter data across services so you lose easy cross-service ACID transactions (needing sagas and eventual consistency). You must add service discovery, load balancing, distributed tracing, centralized logging, resilience patterns (retries, timeouts, circuit breakers, often via a service mesh), per-service CI/CD, and richer observability. Debugging spans many services, and operations become a distributed-systems problem — significant overhead a monolith simply doesn't have."],
+    ["inter","How do you decide between a monolith and microservices?","Base it on team size, domain complexity, scale needs, and operational maturity — not trends. Favor a monolith (ideally modular) for small teams, early products, unclear domains, and limited DevOps maturity. Favor microservices when a large org is bottlenecked on coordinated deploys, teams need independent ownership, parts have very different scaling/availability needs, and you have mature CI/CD and observability. The common advice is to start with a modular monolith and extract services incrementally when a concrete pain justifies it."],
+    ["adv","What is a 'distributed monolith' and why is it the worst outcome?","It's a set of services that are so tightly coupled and chatty that they can't actually be developed, deployed, or scaled independently — they must change and release together. It arises from bad boundaries: splitting along technical layers or too finely, or sharing databases across services. You pay the full operational and latency cost of microservices (network calls, distributed debugging, infrastructure) while getting none of the autonomy benefits, plus you've lost the monolith's simplicity and transactions. It's why correct, business-capability-aligned boundaries are the crux of microservices."],
+    ["adv","How do you handle data consistency across microservices without distributed transactions?","Since two-phase commit across services is fragile and rarely used, you embrace eventual consistency with the saga pattern: model a business transaction as a sequence of local transactions, each in its own service, with compensating actions to undo prior steps if a later one fails (e.g. reserve inventory → charge payment → confirm order, with release/refund/cancel compensations). Sagas can be orchestrated (a coordinator drives steps) or choreographed (services react to events). Combine with idempotency, the outbox pattern for reliable event publishing, and CQRS/read models where needed. You design for eventual consistency rather than trying to preserve ACID across the boundary."],
+    ["sd","A fast-growing startup's monolith is becoming a bottleneck. How would you evolve the architecture?","First confirm the pain is real (team contention on deploys, specific components needing independent scaling, isolated failure domains) rather than cargo-culting. Refactor toward a modular monolith with clean, business-capability boundaries and separate schemas per module — this yields much of the benefit cheaply. Invest in the platform prerequisites: CI/CD, containerization/orchestration, centralized logging, distributed tracing, and monitoring. Then use the strangler-fig approach to extract services incrementally along proven seams, starting with a component that clearly needs independent scaling or ownership; route traffic through a facade, give the new service its own data store, and handle cross-service consistency with sagas/events and idempotency. Avoid a big-bang rewrite and stop extracting once services no longer solve a concrete problem. Align service boundaries with team ownership (Conway's Law)."]
+  ],
+  mistakes:["Adopting microservices too early / for a small team (crushes velocity).","Splitting before domain boundaries are understood (wrong seams).","Sharing a database across services (couples them → distributed monolith).","Going microservices without CI/CD, tracing, and observability.","Big-bang rewrite instead of incremental extraction."],
+  best:["Start with a modular monolith; extract services on real pain.","Draw boundaries around business capabilities; give each its own data.","Invest in platform (CI/CD, discovery, tracing, resilience) first.","Use sagas/events + idempotency for cross-service consistency.","Align services with team ownership (Conway's Law); avoid chatty coupling."],
+  related:[["Sidecar Pattern","🏍️","Cross-cutting concerns per service","sidecar.html"],["Service Mesh","🕸️","Infra microservices rely on","service-mesh.html"],["Auto-Scaling","📈","Independent per-service scaling","auto-scaling.html"],["gRPC / REST","🔌","Service-to-service comms","grpc.html"],["Message Queues","📨","Async decoupling (sagas/events)","kafka.html"],["High Availability","🟢","Fault isolation & uptime","high-availability.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

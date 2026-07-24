@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Split Brain — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,20,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,188,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  const left=[[130,75],[130,135]],right=[[430,60],[490,105],[430,150]];
+  let phase=0,timer=0,running=false,raf,last;
+  function nd(x,y,txt,leader,active){g.appendChild(S("circle",{cx:x,cy:y,r:22,fill:leader?"rgba(124,58,237,.3)":active?"rgba(52,211,153,.14)":"#161619",stroke:leader?"#7C3AED":active?"#34d399":"#3a3a42","stroke-width":2}));
+    const t=S("text",{x:x,y:y+4,fill:"#e4e4e7","font-size":10,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  function render(){g.innerHTML="";
+    g.appendChild(S("line",{x1:310,y1:35,x2:310,y2:180,stroke:"#f87171","stroke-width":2.5,"stroke-dasharray":"7 5"}));
+    if(phase===0){left.forEach((p,i)=>nd(p[0],p[1],"N"+(i+1),i===0));right.forEach((p,i)=>nd(p[0],p[1],"N"+(i+3),i===0));
+      lbl.textContent="NO quorum → both sides elect a leader";lbl.setAttribute("fill","#f87171");sub.textContent="two leaders accept conflicting writes → data diverges (split brain)";}
+    else{left.forEach((p,i)=>nd(p[0],p[1],"N"+(i+1),false,false));right.forEach((p,i)=>nd(p[0],p[1],"N"+(i+3),i===0,true));
+      lbl.textContent="WITH quorum → only the majority (3) side leads";lbl.setAttribute("fill","#34d399");sub.textContent="the minority (2) side steps down → no conflicting writes, stays consistent";}}
+  function step(){phase=(phase+1)%2;timer=2.6;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Partition a 5-node cluster and try to write on both sides. With <b>quorum required</b>, only the majority side (≥3) accepts writes — the minority steps down, staying consistent. Turn quorum <b>off</b> and both sides accept conflicting writes: classic split-brain. Heal the partition to see the divergence collide.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Nodes on left side: <b id="pgSV">2</b> (right gets <b id="pgSR">3</b>)</label>
+        <input id="pgSplit" type="range" min="0" max="5" value="2"></div>
+      <div class="pg-field"><label>Require quorum <b id="pgQV">on</b></label>
+        <div class="pg-btns"><button id="pgQ">Toggle quorum</button></div></div>
+      <div class="pg-btns" style="margin-top:10px"><button id="pgWL" class="go">Write on LEFT</button><button id="pgWR" class="go">Write on RIGHT</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgHeal">Heal partition</button><button id="pgReset">↺ Reset</button></div>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Split</div><div class="v ac" id="pgSplitV">2 | 3</div></div>
+        <div class="pg-stat"><div class="k">Active leaders</div><div class="v" id="pgLeaders">1</div></div>
+        <div class="pg-stat"><div class="k">Left value</div><div class="v ok" id="pgLV">v0</div></div>
+        <div class="pg-stat"><div class="k">Right value</div><div class="v wa" id="pgRV">v0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const N=5,W=560,H=230;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let split,quorum,leftVal,rightVal,leftWrites,rightWrites,healed,diverged;
+  function reset(){split=+$("pgSplit").value||2;quorum=true;leftVal="v0";rightVal="v0";leftWrites=0;rightWrites=0;healed=false;diverged=false;
+    $("pgQV").textContent="on";draw();stats();$("pgLog").innerHTML="";log("cluster split "+split+" | "+(N-split)+" — try writing on each side","ac");}
+  function leftMajority(){return split>N-split;}
+  function leftLeads(){if(!quorum)return split>0;return leftMajority()&&split>=1;}
+  function rightLeads(){if(!quorum)return (N-split)>0;return (N-split)>split;}
+  function activeLeaders(){let c=0;if(leftLeads())c++;if(rightLeads())c++;return c;}
+  function writeLeft(){if(!leftLeads()){log("LEFT side ("+split+" nodes) has no leader"+(quorum?" — it's the minority, cannot accept writes (safe)":""),quorum?"ok":"wa");draw();return;}
+    leftWrites++;leftVal="L"+leftWrites;log("write accepted on LEFT → "+leftVal+(activeLeaders()>1?"  ⚠ but RIGHT is also leading!":""),activeLeaders()>1?"bad":"ok");checkDiverge();draw();stats();}
+  function writeRight(){if(!rightLeads()){log("RIGHT side ("+(N-split)+" nodes) has no leader"+(quorum?" — minority, cannot accept writes (safe)":""),quorum?"ok":"wa");draw();return;}
+    rightWrites++;rightVal="R"+rightWrites;log("write accepted on RIGHT → "+rightVal+(activeLeaders()>1?"  ⚠ but LEFT is also leading!":""),activeLeaders()>1?"bad":"ok");checkDiverge();draw();stats();}
+  function checkDiverge(){if(activeLeaders()>1&&leftWrites>0&&rightWrites>0){diverged=true;}}
+  function heal(){healed=true;
+    if(diverged){log("💥 PARTITION HEALED — both sides wrote! LEFT="+leftVal+" vs RIGHT="+rightVal+" → CONFLICT, needs manual/automatic reconciliation","bad");}
+    else if(quorum){log("partition healed — only one side ever led → single consistent value, no conflict","ok");}
+    else log("partition healed — no conflicting writes occurred","ac");
+    draw();stats();}
+  function draw(){svg.innerHTML="";
+    if(!healed)svg.appendChild(S("line",{x1:W/2,y1:20,x2:W/2,y2:H-20,stroke:"#f87171","stroke-width":2.5,"stroke-dasharray":"7 5"}));
+    const ll=leftLeads(),rl=rightLeads();
+    // left nodes
+    for(let i=0;i<split;i++){const x=70+ (i%2)*70,y=50+Math.floor(i/2)*60;const isL=ll&&i===0;
+      svg.appendChild(S("circle",{cx:x,cy:y,r:22,fill:isL?"rgba(124,58,237,.3)":ll?"rgba(52,211,153,.14)":"rgba(120,120,130,.1)",stroke:isL?"#7C3AED":ll?"#34d399":"#4a4a52","stroke-width":2}));
+      svg.appendChild(TX(x,y+4,"N"+(i+1),{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+      if(isL)svg.appendChild(TX(x,y+34,"👑",{fill:"#fbbf24","font-size":11,"text-anchor":"middle"}));}
+    // right nodes
+    for(let i=0;i<N-split;i++){const x=W-140+ (i%2)*70,y=50+Math.floor(i/2)*60;const isL=rl&&i===0;
+      svg.appendChild(S("circle",{cx:x,cy:y,r:22,fill:isL?"rgba(124,58,237,.3)":rl?"rgba(52,211,153,.14)":"rgba(120,120,130,.1)",stroke:isL?"#7C3AED":rl?"#34d399":"#4a4a52","stroke-width":2}));
+      svg.appendChild(TX(x,y+4,"N"+(split+i+1),{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+      if(isL)svg.appendChild(TX(x,y+34,"👑",{fill:"#fbbf24","font-size":11,"text-anchor":"middle"}));}
+    svg.appendChild(TX(W/4,H-8,"LEFT: "+leftVal+(ll?" (leader)":" (no leader)"),{fill:ll?"#34d399":"#6b6b73","font-size":11,"text-anchor":"middle"}));
+    svg.appendChild(TX(3*W/4,H-8,"RIGHT: "+rightVal+(rl?" (leader)":" (no leader)"),{fill:rl?"#34d399":"#6b6b73","font-size":11,"text-anchor":"middle"}));
+    if(diverged)svg.appendChild(TX(W/2,H-8,"⚡SPLIT BRAIN",{fill:"#f87171","font-size":11,"text-anchor":"middle","font-weight":700}));}
+  function stats(){$("pgSplitV").textContent=split+" | "+(N-split);const al=activeLeaders();
+    $("pgLeaders").textContent=al;$("pgLeaders").className="v "+(al>1?"bad":"ok");
+    $("pgLV").textContent=leftVal;$("pgRV").textContent=rightVal;}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgSplit").oninput=()=>{split=+$("pgSplit").value||0;$("pgSV").textContent=split;$("pgSR").textContent=N-split;healed=false;diverged=false;leftWrites=rightWrites=0;leftVal=rightVal="v0";draw();stats();log("re-split "+split+" | "+(N-split),"ac");};
+  $("pgQ").onclick=()=>{quorum=!quorum;$("pgQV").textContent=quorum?"on":"off";log(quorum?"quorum ON — minority steps down (safe, may be unavailable)":"quorum OFF — every side self-promotes (available, but risks split brain)",quorum?"ok":"wa");draw();stats();};
+  $("pgWL").onclick=writeLeft;$("pgWR").onclick=writeRight;$("pgHeal").onclick=heal;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🧠",title:"Split Brain",category:"Distributed Systems",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"The Two-Leader Failure",
+  tagline:"When a network partition splits a cluster and <b>both sides believe they're in charge</b>, each accepts writes independently — silently diverging into two conflicting realities. The cure is quorum: only a majority may act, so the minority steps down.",
+  pills:["<b>Two leaders</b> at once","<b>Divergent</b> writes","<b>Quorum</b> prevents it","<b>Fencing</b> as backstop"],
+  overview:"Split brain happens when a distributed system partitions and each side independently decides it is the authoritative one — electing its own leader/primary and accepting writes. Because the sides can't communicate, they drift apart: two masters take conflicting updates, and when the partition heals you're left with two divergent copies of the truth that must be reconciled (often with data loss or manual intervention). The standard defense is a <b>quorum</b>: require any active leader to hold a majority of votes. Since a cluster can have only one majority, at most one side can operate; the minority side detects it lacks quorum and refuses writes (becoming unavailable rather than inconsistent). Extra safety comes from <b>fencing</b> (STONITH — 'shoot the other node in the head'), witness/tiebreaker nodes, and fencing tokens so a demoted leader can't keep acting.",
+  problem:"Failure detection is imperfect: a partition or slow link looks identical to a crashed peer. If each side reacts by promoting itself to leader, you get two primaries writing conflicting data. This is one of the most dangerous distributed-systems bugs because it corrupts data quietly and is hard to undo — so systems must be designed to make it impossible, not just unlikely.",
+  diagram,diagramCaption:"Without quorum both sides lead and diverge; with quorum only the majority side stays active.",
+  how:[
+    "A partition (or asymmetric network failure) splits the cluster so the halves can't talk.",
+    "Each half's failure detector thinks the other half is dead.",
+    "Danger: without a rule, each half elects a leader and accepts writes → two masters, divergent data.",
+    "Quorum fix: a leader must hold a majority of votes; only one majority can exist, so only one side operates.",
+    "Backstops: witness/arbiter nodes break ties, fencing (STONITH) forcibly disables the loser, and fencing tokens reject a stale leader's late writes."
+  ],
+  complexity:[["Trigger","network partition"],["Bad outcome","2 leaders, divergence"],["Primary defense","majority quorum"],["Even clusters","need a tiebreaker"]],
+  advantages:["Understanding it drives correct HA design","Quorum gives a simple, provable guarantee","Fencing/witness nodes handle edge cases","Prevents silent, catastrophic data corruption"],
+  disadvantages:["Quorum sacrifices availability on the minority side","Even-sized clusters can deadlock without a tiebreaker","Fencing (STONITH) adds operational complexity","Reconciliation after divergence can lose data"],
+  tradeoffs:"Split-brain prevention is the CAP trade-off in action: to stay consistent (CP) under partition, the minority must refuse service and become unavailable. Choosing availability (AP) instead means accepting divergence and needing conflict resolution (vector clocks, CRDTs, last-writer-wins) later. Quorum needs an odd number of voters or a lightweight witness/arbiter to avoid a 50/50 stalemate. Aggressive fencing prevents dual writers but can cause unnecessary node shutdowns on transient blips; timeouts must balance fast failover against false positives.",
+  whenNot:"'Avoiding' split brain isn't optional for stateful leadership — but you can sidestep leader-based designs entirely: use leaderless/multi-master replication with conflict-free merges (CRDTs) or last-writer-wins where the application tolerates it, so there's no single primary to duplicate. For stateless services with no shared authoritative state, split brain simply doesn't apply.",
+  sim,
+  code:{
+"Quorum guard":`// A node only acts as leader if it can see a strict majority of votes.\nboolean canLead(Set<Node> reachable) {\n    int votes = reachable.size() + 1;      // include self\n    return votes > totalNodes / 2;          // strict majority\n}\n// Minority side: canLead() == false -> step down, reject writes.\n// Only ONE side of any partition can have a majority => one leader max.\nif (!canLead(reachable)) { demoteToFollower(); rejectClientWrites(); }`,
+"Witness / tiebreaker":`# 2-node clusters can't form a majority (1 is not > 1), so add a cheap\n# witness/arbiter that only votes (stores no data):\n#   node A + node B + witness  = 3 votes\n#   partition A|B  -> whichever side also reaches the witness wins (2 of 3)\n# MongoDB "arbiter", Patroni/etcd for Postgres, and Windows FCI "file/cloud\n# share witness" all use this pattern to break ties.`,
+"Fencing (STONITH)":`# High-availability clusters fence the loser so it CANNOT write:\n# STONITH = Shoot The Other Node In The Head\ncrm configure primitive stonith-ipmi stonith:external/ipmi ...\n# On partition, the surviving majority powers off / isolates the old primary\n# BEFORE promoting a new one. Combined with fencing tokens on storage,\n# a demoted primary's late writes are rejected -> no split-brain corruption.`
+  },
+  realWorld:[
+    ["MongoDB replica sets","A primary that can't reach a majority steps down; an arbiter breaks ties in even sets."],
+    ["Elasticsearch","Historically hit split-brain; fixed with minimum_master_nodes / a proper voting config."],
+    ["PostgreSQL HA (Patroni)","Uses etcd/Consul (quorum) to ensure only one primary is promoted."],
+    ["Pacemaker/Corosync clusters","Use quorum + STONITH fencing to prevent dual-active resources."],
+    ["Redis Sentinel","Requires a quorum of sentinels to agree before failing over the master."]
+  ],
+  interview:[
+    ["basic","What is split brain?","When a network partition causes a cluster to divide, and both sides independently believe they are the authoritative leader/primary. Each accepts writes, so the data diverges into two conflicting versions that must later be reconciled — often with loss or manual repair."],
+    ["basic","How does quorum prevent split brain?","By requiring any active leader to hold votes from a strict majority of nodes. A set has at most one majority, so during a partition only one side can achieve quorum and keep operating; the other side detects it's in the minority and steps down (refusing writes). This guarantees a single leader at the cost of minority-side availability."],
+    ["inter","Why are even-numbered clusters a problem?","A 2|2 partition gives neither side a majority, so both step down and the whole cluster becomes unavailable (or, worse, a naive system lets both proceed). Odd numbers guarantee one side always has the majority. For 2-node setups you add a lightweight witness/arbiter (a third vote that stores no data) to break ties."],
+    ["inter","What is fencing / STONITH?","Fencing forcibly ensures a demoted or partitioned node cannot keep acting. STONITH ('Shoot The Other Node In The Head') powers off or network-isolates the old primary before promoting a new one. Combined with fencing tokens (storage rejects writes carrying an old token), it stops a resurrected leader from corrupting shared state."],
+    ["adv","How does split brain relate to CAP?","It's the CAP dilemma made concrete. Under a partition (P) you must choose: stay Consistent (CP) by having the minority refuse service — preventing divergence but sacrificing availability — or stay Available (AP) by letting both sides serve and accepting divergence, which you then reconcile with conflict resolution. Split-brain prevention via quorum is the CP choice."],
+    ["adv","How do you recover after a split brain has occurred?","You must reconcile the two divergent datasets. Strategies: last-writer-wins by timestamp (simple, lossy), version vectors to detect and surface conflicts for application/manual merge, or CRDTs that merge deterministically without loss. The best answer is to prevent it (quorum + fencing) so recovery is unnecessary; if it happened, pick a reconciliation policy appropriate to the data's correctness needs."],
+    ["sd","How would you make a primary-replica database safe against split brain?","Put leadership behind a quorum-based coordinator (etcd/ZooKeeper/Patroni): a node becomes primary only by winning a majority lease. Use an odd number of voters or a witness for even clusters. Fence the old primary (STONITH and/or fencing tokens on storage) before promoting a new one, and keep failover timeouts tuned to avoid false promotions. Clients discover the current primary via the coordinator, never by assuming."]
+  ],
+  mistakes:["Promoting a new leader without fencing the old one.","Running an even number of voters with no witness/tiebreaker.","Trusting timeouts alone to declare a peer dead (partition looks like a crash).","Choosing availability (both sides write) without a conflict-resolution plan.","Assuming a healed partition auto-merges cleanly — it usually doesn't."],
+  best:["Gate leadership on a strict majority quorum.","Use odd node counts or a lightweight witness/arbiter for ties.","Fence demoted/partitioned nodes (STONITH) and use fencing tokens.","Tune failure-detection timeouts to reduce false failovers.","If you must stay available, adopt CRDTs/version vectors for principled merges."],
+  related:[["Quorum","🗳️","Majority prevents two leaders","quorum.html"],["Leader Election","👑","Where split brain strikes","leader-election.html"],["Consensus / Raft","🧭","Quorum-safe leadership","consensus-raft.html"],["CAP Theorem","🔺","Consistency vs availability","system-designed.html"],["Vector Clocks","🕰️","Reconcile divergence","vector-clocks.html"],["Distributed Locking","🔒","Fencing tokens","distributed-lock.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

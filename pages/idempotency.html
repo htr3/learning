@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Idempotency — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function box(x,y,w,txt,fill,stroke){g.appendChild(S("rect",{x:x-w/2,y:y-18,width:w,height:36,rx:8,fill:fill,stroke:stroke,"stroke-width":2}));
+    const t=S("text",{x:x,y:y+4,fill:"#e4e4e7","font-size":10.5,"text-anchor":"middle"});t.textContent=txt;g.appendChild(t);}
+  function render(){g.innerHTML="";box(85,100,110,"Client","#161619","#3a3a42");box(310,100,130,"Server","rgba(124,58,237,.2)","#7C3AED");box(535,100,110,"DB / charge","rgba(56,189,248,.15)","#38bdf8");
+    if(phase===0){g.appendChild(S("line",{x1:140,y1:88,x2:245,y2:88,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:140,y1:112,x2:245,y2:112,stroke:"#f87171","stroke-width":2,"stroke-dasharray":"4 3","marker-end":"url(#a)"}));
+      g.appendChild(TX(192,80,"POST",{fill:"#34d399","font-size":9,"text-anchor":"middle"}));g.appendChild(TX(192,126,"retry (same key)",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+      g.appendChild(S("line",{x1:375,y1:100,x2:480,y2:100,stroke:"#38bdf8","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(TX(535,140,"charged ONCE ✓",{fill:"#34d399","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="idempotency key → server dedups the retry";lbl.setAttribute("fill","#34d399");sub.textContent="a repeated request with the same key returns the stored result — no double charge";}
+    else{g.appendChild(S("line",{x1:140,y1:88,x2:245,y2:88,stroke:"#34d399","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:140,y1:112,x2:245,y2:112,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:375,y1:88,x2:480,y2:88,stroke:"#38bdf8","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("line",{x1:375,y1:112,x2:480,y2:112,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(TX(535,140,"charged TWICE ✗",{fill:"#f87171","font-size":10,"text-anchor":"middle"}));
+      lbl.textContent="no idempotency key → retry duplicates the effect";lbl.setAttribute("fill","#f87171");sub.textContent="a timeout + retry can charge the customer twice — the classic bug idempotency prevents";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Simulate a flaky network where responses get lost and clients retry. Toggle the <b>Idempotency-Key</b> and watch the difference: with a key, the server dedups repeats and the customer is charged <b>once</b>; without it, every retry creates a <b>new charge</b> — the classic double-charge bug.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pgKey" checked>send Idempotency-Key</label></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReq" class="go">💳 Charge $50</button><button id="pgRetry">↻ Retry (timeout)</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">A retry uses the <b>same</b> key as the last charge (a client retrying after a lost response). GET/PUT/DELETE are naturally idempotent; POST needs a key to become safe to retry.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Requests sent</div><div class="v ac" id="pgSent">0</div></div>
+        <div class="pg-stat"><div class="k">Actual charges</div><div class="v" id="pgCharges">0</div></div>
+        <div class="pg-stat"><div class="k">Deduped</div><div class="v ok" id="pgDedup">0</div></div>
+        <div class="pg-stat"><div class="k">Total billed</div><div class="v wa" id="pgTotal">$0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=120;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let sent,charges,dedup,store,lastKey,keyCounter;
+  function reset(){sent=0;charges=0;dedup=0;store={};lastKey=null;keyCounter=0;draw();stats();$("pgLog").innerHTML="";log("charge the customer, then retry to test idempotency","ac");}
+  function charge(isRetry){const useKey=$("pgKey").checked;sent++;
+    let key;
+    if(useKey){key=isRetry&&lastKey?lastKey:("key-"+(++keyCounter));lastKey=key;}
+    else key=null;
+    if(useKey&&store[key]){dedup++;log("POST /charge (Idempotency-Key: "+key+") → 200 CACHED result, NOT charged again ✓","ok");}
+    else{charges++;const id="ch_"+(1000+charges);if(useKey){store[key]=id;log("POST /charge"+(useKey?" (Idempotency-Key: "+key+")":" (no key)")+" → 201 created "+id+" (customer charged $50)",isRetry&&!useKey?"bad":"ac");}
+      else log("POST /charge (NO key) → 201 created "+id+" — retry made a DUPLICATE charge ✗",isRetry?"bad":"ac");}
+    stats();draw();}
+  function stats(){$("pgSent").textContent=sent;$("pgCharges").textContent=charges;$("pgDedup").textContent=dedup;
+    $("pgTotal").textContent="$"+(charges*50);$("pgTotal").className="v "+(charges>1?"bad":"ok");
+    $("pgCharges").className="v "+(charges>1?"bad":"ok");}
+  function draw(){svg.innerHTML="";
+    svg.appendChild(TX(20,20,"charges recorded on the account:",{fill:"#8b8b93","font-size":10}));
+    if(!charges){svg.appendChild(TX(W/2,70,"none yet",{fill:"#6b6b73","font-size":12,"text-anchor":"middle"}));return;}
+    for(let i=0;i<charges;i++){const x=30+i*95;const dup=charges>1;
+      svg.appendChild(S("rect",{x:x,y:40,width:82,height:40,rx:7,fill:dup?"rgba(248,113,113,.14)":"rgba(52,211,153,.14)",stroke:dup?"#f87171":"#34d399","stroke-width":1.6}));
+      svg.appendChild(TX(x+41,y1(),"$50",{fill:"#e4e4e7","font-size":13,"text-anchor":"middle","font-weight":700}));
+      svg.appendChild(TX(x+41,72,"ch_"+(1001+i),{fill:"#8b8b93","font-size":8,"text-anchor":"middle"}));}
+    function y1(){return 62;}}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgReq").onclick=()=>charge(false);$("pgRetry").onclick=()=>charge(true);$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔁",title:"Idempotency",category:"Resilience",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Safe Retries Without Side Effects",
+  tagline:"An operation is <b>idempotent</b> if performing it multiple times has the same effect as doing it once. In distributed systems where retries are inevitable, idempotency is what keeps a retried payment from charging the customer twice.",
+  pills:["<b>At-least-once</b> reality","<b>Idempotency keys</b>","<b>Dedup</b> retries","<b>Exactly-once</b> effect"],
+  overview:"Networks fail: a request may succeed on the server but the response gets lost, so the client retries — now the same operation runs again. If that operation isn't idempotent, retries cause duplicates: double charges, duplicate orders, repeated emails. <b>Idempotency</b> guarantees that repeating a request produces the same result and side effect as a single execution. Some HTTP methods are naturally idempotent (GET, PUT, DELETE), but <b>POST</b> (create) is not. The standard fix is an <b>idempotency key</b>: the client generates a unique key per logical operation and sends it with the request; the server records the key and its result, and on any retry with the same key returns the stored result <b>without re-executing</b>. This turns unreliable at-least-once delivery into an effectively <b>exactly-once</b> effect — essential for payments, order creation, and any state-changing API.",
+  problem:"Distributed systems can guarantee at-most-once (may lose work) or at-least-once (may duplicate) delivery, but not naive exactly-once. Since we can't avoid retries (timeouts, restarts, at-least-once queues), we must make the *effects* safe to repeat. Without idempotency, every retry risks corrupting state — the most infamous being duplicate financial transactions.",
+  diagram,diagramCaption:"With an idempotency key the retry is deduplicated (charged once); without one it duplicates the charge.",
+  how:[
+    "Client generates a unique idempotency key (e.g., a UUID) for each logical operation.",
+    "It sends the key with the request (e.g., Idempotency-Key header) and reuses the same key on retries.",
+    "Server checks a store: if the key exists, return the saved response without re-running the operation.",
+    "If new, execute the operation atomically, persist the key → result mapping, then respond.",
+    "Expire old keys after a window; handle concurrent duplicates with a lock/unique constraint on the key."
+  ],
+  complexity:[["Naturally idempotent","GET, PUT, DELETE"],["Not idempotent","POST (create)"],["Mechanism","idempotency key"],["Effect","exactly-once"]],
+  advantages:["Makes retries safe (no duplicates)","Turns at-least-once into exactly-once effect","Essential correctness for payments/orders","Enables aggressive client retries & queues","Simplifies failure recovery"],
+  disadvantages:["Requires storing keys + results (state/TTL)","Concurrency edge cases (simultaneous retries)","Clients must generate & reuse keys correctly","Key store adds a dependency/latency","Choosing key scope & expiry is subtle"],
+  tradeoffs:"Idempotency adds storage and a small amount of coordination (a key store, uniqueness checks, expiry) in exchange for correctness under retries — almost always worth it for state-changing operations. The subtle parts are concurrency (two retries arriving at once must not both execute — use a unique constraint or lock on the key) and scope (the key must map to the exact operation and its parameters, or you risk returning a wrong cached result). You also decide how long to retain keys: too short and late retries duplicate; too long and the store grows. For read-only or already-idempotent operations, no key is needed.",
+  whenNot:"You don't need explicit idempotency keys for operations that are already idempotent (reads, absolute PUT updates, DELETE) or that have no side effects. Very high-throughput fire-and-forget telemetry may accept duplicates rather than pay for dedup. But any operation that creates resources or moves money should be idempotent.",
+  sim,
+  code:{
+"API":`# Client sends a stable key it will REUSE on every retry of this operation:\nPOST /v1/charges\nIdempotency-Key: 7f3c1e9a-0b21-4c6e-9a11-2f7d5c8e91aa\nContent-Type: application/json\n\n{ "amount": 5000, "currency": "usd", "customer": "cus_123" }\n\n# First call -> 201 Created (charge executed, result stored under the key)\n# Retry with SAME key -> 200 OK, returns the SAME charge (NOT re-executed)`,
+"Server":`async function charge(req, res) {\n  const key = req.headers["idempotency-key"];\n  if (!key) return res.status(400).json({ error: "Idempotency-Key required" });\n\n  // Atomic: only ONE request wins the insert; others see it exists.\n  const existing = await store.get(key);\n  if (existing) return res.status(200).json(existing.response);  // dedup\n\n  const lock = await store.acquire(key);           // guard concurrent retries\n  if (!lock) return res.status(409).json({ error: "in progress" });\n\n  const result = await paymentGateway.charge(req.body);   // real side effect\n  await store.put(key, { response: result }, { ttlDays: 1 });\n  res.status(201).json(result);\n}`,
+"DB-level dedup":`-- Enforce exactly-once at the database with a unique constraint on the key.\nCREATE TABLE charges (\n  id              TEXT PRIMARY KEY,\n  idempotency_key TEXT UNIQUE NOT NULL,   -- duplicate insert -> constraint error\n  amount_cents    INT  NOT NULL,\n  created_at      TIMESTAMPTZ DEFAULT now()\n);\n-- A retry attempting to INSERT the same key fails the unique constraint,\n-- so the app catches it and returns the original charge instead.`
+  },
+  realWorld:[
+    ["Stripe","Idempotency-Key header on all POSTs so network retries never double-charge."],
+    ["PayPal / Adyen","Idempotency/reference keys to dedup payment operations."],
+    ["Kafka / SQS consumers","At-least-once delivery means consumers must process idempotently."],
+    ["AWS APIs","ClientToken / idempotency tokens on resource-creation calls (e.g., EC2 RunInstances)."],
+    ["Order/checkout systems","Idempotent order creation to prevent duplicate orders on retry."]
+  ],
+  interview:[
+    ["basic","What does idempotent mean, and why does it matter?","An operation is idempotent if applying it multiple times yields the same result and side effect as applying it once. It matters because networks and clients retry (timeouts, restarts, at-least-once queues), so non-idempotent operations create duplicates — double charges, duplicate orders. Idempotency makes retries safe."],
+    ["basic","Which HTTP methods are idempotent?","GET, HEAD, OPTIONS, PUT, and DELETE are idempotent (repeating them leaves the same end state). POST is not — each call typically creates a new resource. That's why POST endpoints need an idempotency key to be safely retryable, while a PUT that sets an absolute value is naturally safe to repeat."],
+    ["inter","How do idempotency keys work?","The client generates a unique key per logical operation and sends it (e.g., Idempotency-Key header), reusing the same key on retries. The server stores each key with its result. On a first request it executes and saves the result under the key; on any retry with the same key it returns the stored result without re-executing. This deduplicates retries into a single effect."],
+    ["inter","How do you handle two retries arriving concurrently with the same key?","Serialize on the key: use a database unique constraint on the idempotency key (the second insert fails and you return the first result) or a distributed lock. A request that finds the operation 'in progress' can wait, return 409, or poll. The goal is that exactly one execution happens even under concurrent duplicates."],
+    ["adv","Why can't systems just provide true exactly-once delivery?","Because a sender can never be sure whether a lost acknowledgment means the message wasn't delivered or the ack was lost — so it must either risk losing it (at-most-once) or resend (at-least-once). True exactly-once *delivery* over an unreliable network is impossible in general. What we achieve is exactly-once *processing/effect* by combining at-least-once delivery with idempotent consumers (dedup keys, unique constraints)."],
+    ["adv","What are the design considerations for the idempotency key store?","Scope: the key must uniquely identify the operation and ideally be tied to its parameters so a reused key can't return a mismatched result (some APIs reject a key reused with a different body). Retention: keep keys long enough to cover realistic retry windows, then expire to bound storage. Atomicity: persist the key and result in the same transaction as the side effect (or use a unique constraint) so a crash can't leave them inconsistent."],
+    ["sd","Design an idempotent payment API.","Require an Idempotency-Key header on POST /charges. On receipt, attempt to claim the key (unique constraint / lock). If already present, return the stored charge. Otherwise call the payment gateway, and in one transaction persist the charge plus the key→result mapping, then respond 201. Expire keys after e.g. 24h. Consumers of downstream events also dedup by charge id. This yields an exactly-once effect despite client retries and at-least-once queues."]
+  ],
+  mistakes:["Assuming POST retries are safe (they duplicate without a key).","Executing the side effect before persisting the key (crash → duplicate).","Not handling concurrent duplicates (both retries execute).","Reusing one key for different operations (returns wrong cached result).","Never expiring keys, letting the store grow unbounded."],
+  best:["Require idempotency keys on all state-changing (POST) endpoints.","Persist key→result atomically with the side effect (or use a unique constraint).","Serialize concurrent duplicates via unique key / lock.","Design consumers to be idempotent for at-least-once queues.","Scope keys to the operation + parameters and expire them sensibly."],
+  related:[["Retry & Backoff","⏳","What makes retries safe","backoff.html"],["Timeout","⏱️","Triggers the retries","timeout.html"],["Message Queues","📨","At-least-once delivery","kafka.html"],["Payment Processing","💳","Idempotency in practice","payment-processing.html"],["REST API","🌐","Method idempotency","rest.html"],["Distributed Locking","🔒","Guard concurrent keys","distributed-lock.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HyperLogLog — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 210"});host.appendChild(svg);
+  const lbl=TX(310,26,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  // hash bits row
+  const bits=[];const bw=26,x0=90;
+  for(let i=0;i<16;i++){const r=S("rect",{x:x0+i*bw,y:56,width:bw-3,height:30,rx:4,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    const t=TX(x0+i*bw+(bw-3)/2,76,"0",{fill:"#8b8b93","font-size":12,"text-anchor":"middle"});svg.appendChild(t);bits.push({r,t});}
+  svg.appendChild(TX(x0-8,76,"hash",{fill:"#8b8b93","font-size":11,"text-anchor":"end"}));
+  const brace1=TX(x0+3*bw,108,"index (first 4 bits → register)",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"});svg.appendChild(brace1);
+  const brace2=TX(x0+11*bw,108,"count leading zeros here",{fill:"#34d399","font-size":10,"text-anchor":"middle"});svg.appendChild(brace2);
+  // registers
+  const regs=[];const rw=34;
+  for(let i=0;i<16;i++){const r=S("rect",{x:60+i*rw,y:140,width:rw-4,height:40,rx:5,fill:"#161619",stroke:"#2a2a32"});svg.appendChild(r);
+    const t=TX(60+i*rw+(rw-4)/2,165,"0",{fill:"#e4e4e7","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(t);regs.push({r,t,v:0});}
+  svg.appendChild(TX(310,200,"16 registers, each keeps the MAX leading-zero run seen",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+  let phase=3,timer=0,running=false,raf,last;
+  host._h=0;host._ri=0;host._lz=1;
+  function draw(hash,ri,lz){
+    for(let i=0;i<16;i++){const b=(hash>>>(15-i))&1;bits[i].t.textContent=b;
+      bits[i].r.setAttribute("fill",i<4?"rgba(56,189,248,.25)":"#161619");}
+  }
+  function step(){phase=(phase+1)%4;timer=1.8;
+    if(phase===0){const h=Math.floor(Math.random()*65536);host._h=h;host._ri=(h>>>12)&15;
+      let lz=1,rest=(h&0x0fff);for(let i=11;i>=0;i--){if((rest>>>i)&1)break;lz++;}host._lz=Math.min(lz,12);
+      lbl.textContent="hash a new item";draw(h,host._ri,host._lz);regs.forEach(r=>r.r.setAttribute("stroke","#2a2a32"));}
+    else if(phase===1){lbl.textContent="first 4 bits → register "+host._ri;regs[host._ri].r.setAttribute("stroke","#38bdf8");}
+    else if(phase===2){lbl.textContent="leading zeros +1 = "+host._lz;
+      if(host._lz>regs[host._ri].v){regs[host._ri].v=host._lz;regs[host._ri].t.textContent=host._lz;regs[host._ri].r.setAttribute("fill","rgba(52,211,153,.3)");regs[host._ri].r.setAttribute("stroke","#34d399");}}
+    else{lbl.textContent="estimate ≈ α·m² / Σ 2^-register";lbl.setAttribute("fill","#c4a2ff");}}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);step();
+}
+
+function sim(holder){
+  holder.innerHTML=`<p class="lead" style="margin-bottom:14px">Stream unique items into a HyperLogLog with 64 registers. It never stores the items — just the max leading-zero run per register — yet estimates the true count within a few percent using only ~64 bytes.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Add unique items</label>
+        <div class="pg-btns"><button id="pgA1" class="go">+100</button><button id="pgA2">+1k</button><button id="pgA3">+10k</button></div></div>
+      <div class="pg-field"><label>Add duplicates (shouldn't change count)</label>
+        <div class="pg-btns"><button id="pgDup">+5k dupes</button></div></div>
+      <div class="pg-btns" style="margin-top:4px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5">Notice: adding duplicates leaves the estimate flat — HLL counts <b>distinct</b> items. Error stays roughly ±1.3/√m.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">True distinct</div><div class="v ac" id="pgTrue">0</div></div>
+        <div class="pg-stat"><div class="k">HLL estimate</div><div class="v ok" id="pgEst">0</div></div>
+        <div class="pg-stat"><div class="k">Error</div><div class="v wa" id="pgErr">0%</div></div>
+        <div class="pg-stat"><div class="k">Memory</div><div class="v" id="pgMem">64 B</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const M=64,BITS=6,alpha=0.709;
+  const svg=S("svg",{viewBox:"0 0 620 130"});$("pgViz").appendChild(svg);
+  const bars=[],bw=620/M;
+  for(let i=0;i<M;i++){const b=S("rect",{x:i*bw+1,y:110,width:bw-2,height:2,rx:1,fill:"#7C3AED"});svg.appendChild(b);bars.push(b);}
+  svg.appendChild(TX(310,124,"64 registers (bar height = max leading-zero run)",{fill:"#8b8b93","font-size":10,"text-anchor":"middle"}));
+
+  let reg,trueCount,seen;
+  const fnv=str=>{let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h>>>0;};
+  function offer(str){const h=fnv(str);const ri=h>>> (32-BITS);let w=(h<<BITS)>>>0||1;let lz=1;for(let i=31;i>=0;i--){if((w>>>i)&1)break;lz++;}lz=Math.min(lz,32-BITS+1);
+    if(lz>reg[ri]){reg[ri]=lz;bars[ri].setAttribute("height",Math.max(2,lz*3.4));bars[ri].setAttribute("y",110-Math.max(2,lz*3.4));}}
+  function estimate(){let sum=0,zeros=0;for(let i=0;i<M;i++){sum+=Math.pow(2,-reg[i]);if(reg[i]===0)zeros++;}
+    let E=alpha*M*M/sum;
+    if(E<=2.5*M&&zeros>0)E=M*Math.log(M/zeros);       // small-range correction
+    return Math.round(E);}
+  function stats(){const est=estimate();$("pgTrue").textContent=trueCount.toLocaleString();$("pgEst").textContent=est.toLocaleString();
+    const err=trueCount?Math.abs(est-trueCount)/trueCount*100:0;$("pgErr").textContent=err.toFixed(1)+"%";}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>24)l.removeChild(l.lastChild);}
+  function addUnique(n){for(let i=0;i<n;i++){const key="u"+(seen++);trueCount++;offer(key);}stats();log("+"+n.toLocaleString()+" unique → est "+estimate().toLocaleString(),"ok");}
+  function addDup(n){const cap=Math.max(1,seen);for(let i=0;i<n;i++){offer("u"+Math.floor(Math.random()*cap));}stats();log("+"+n.toLocaleString()+" duplicates → est unchanged ✓","ac");}
+  function reset(){reg=new Array(M).fill(0);trueCount=0;seen=0;bars.forEach(b=>{b.setAttribute("height",2);b.setAttribute("y",108);});$("pgLog").innerHTML="";stats();log("reset — registers cleared","ac");}
+
+  $("pgA1").onclick=()=>addUnique(100);$("pgA2").onclick=()=>addUnique(1000);$("pgA3").onclick=()=>addUnique(10000);
+  $("pgDup").onclick=()=>addDup(5000);$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🔢",title:"HyperLogLog",category:"Algorithms",difficulty:"Hard",readingTime:"9 min",
+  eyebrow:"Probabilistic Cardinality Estimation",
+  tagline:"Count the number of <b>distinct</b> elements in a massive stream using a fixed, tiny amount of memory (~1.5&nbsp;KB for billions of items) — trading exactness for a small, predictable error.",
+  pills:["<b>~1.5 KB</b> for billions","<b>±0.8%</b> typical error","<b>O(1)</b> add","<b>Mergeable</b>"],
+  overview:"HyperLogLog (HLL) estimates <b>cardinality</b> — how many unique items a stream contains — without storing the items. The key insight: if you hash items uniformly, the probability of seeing a hash with many leading zeros grows with how many distinct items you've seen. HLL splits the hash: the first bits pick one of <i>m</i> registers, and each register records the maximum leading-zero run it has observed. Combining all registers with a harmonic mean (and a bias constant α) yields an accurate distinct-count estimate with error ≈ 1.04/√m.",
+  problem:"An exact distinct count needs a hash set holding every unique value — gigabytes for billions of items, and impossible to merge across shards cheaply. HLL answers 'how many unique visitors / IPs / search terms?' in constant memory and merges trivially by taking the max of each register.",
+  diagram,diagramCaption:"Split the hash: index bits pick a register; the leading-zero run in the rest updates that register's max.",
+  how:[
+    "Hash each incoming item to a uniformly random value.",
+    "Use the first b bits as a register index (m = 2^b registers).",
+    "In the remaining bits, count leading zeros + 1 = ρ.",
+    "Keep register[index] = max(register[index], ρ).",
+    "Estimate = α·m² / Σ 2^(−register[i]), with small/large-range corrections."
+  ],
+  complexity:[["Add","O(1)"],["Merge","O(m)"],["Space","O(m) ≈ 1.5 KB"],["Std error","1.04/√m"]],
+  advantages:["Near-constant memory for any cardinality","O(1) inserts, trivially parallel","Mergeable: union = max per register","Predictable, tunable error"],
+  disadvantages:["Approximate, never exact","No per-element membership test","Weak for very small counts (needs correction)","Can't remove elements"],
+  tradeoffs:"More registers m → lower error (1.04/√m) but more memory. Redis uses m=16384 (14 bits) for ~0.81% error in 12 KB. HLL only estimates cardinality — for membership use a Bloom filter; for exact counts use a hash set. HLL++ (Google) adds bias correction and sparse representation for better accuracy at low cardinalities.",
+  whenNot:"Don't use HLL when you need the exact count, when the set is small enough to store exactly, when you must test membership of a specific element, or when you need to delete/decrement — those call for hash sets, Bloom filters, or counting structures.",
+  sim,
+  code:{
+"Java":`// core HyperLogLog add + estimate\nclass HyperLogLog {\n  final int b, m; final byte[] reg;\n  HyperLogLog(int b){ this.b=b; this.m=1<<b; reg=new byte[m]; }\n  void add(long x){\n    long h = mix(x);\n    int idx = (int)(h >>> (64 - b));            // first b bits -> register\n    long w  = (h << b) | (1L << (b-1));          // remaining bits\n    int rho = Long.numberOfLeadingZeros(w) + 1;  // leading-zero run\n    if (rho > reg[idx]) reg[idx] = (byte) rho;\n  }\n  double count(){\n    double sum=0; int zeros=0;\n    for(byte r: reg){ sum += Math.pow(2,-r); if(r==0) zeros++; }\n    double alpha = 0.7213 / (1 + 1.079/m);\n    double e = alpha * m * m / sum;\n    if(e <= 2.5*m && zeros>0) e = m * Math.log((double)m/zeros); // small range\n    return e;\n  }\n}`,
+"Python":`import math\nclass HyperLogLog:\n    def __init__(self, b=14):\n        self.b, self.m = b, 1 << b\n        self.reg = bytearray(self.m)\n    def add(self, x):\n        h = hash(x) & ((1<<64)-1)\n        idx = h >> (64 - self.b)\n        w = (h << self.b) & ((1<<64)-1) | 1\n        rho = 64 - w.bit_length() + 1\n        if rho > self.reg[idx]:\n            self.reg[idx] = rho\n    def count(self):\n        alpha = 0.7213 / (1 + 1.079/self.m)\n        s = sum(2.0 ** -r for r in self.reg)\n        e = alpha * self.m * self.m / s\n        z = self.reg.count(0)\n        if e <= 2.5*self.m and z: e = self.m * math.log(self.m/z)\n        return e`,
+"Redis":`# Redis PFADD / PFCOUNT are HyperLogLog (12 KB, 0.81% error)\nPFADD visitors:2024-05-01 user:12 user:99 user:12\nPFCOUNT visitors:2024-05-01           # -> ~2 (distinct)\n# merge many days into one estimate\nPFMERGE visitors:may visitors:2024-05-01 visitors:2024-05-02\nPFCOUNT visitors:may`,
+"Merge":`// two HLLs merge by taking the max of each register\nHyperLogLog merge(HyperLogLog a, HyperLogLog b){\n  HyperLogLog out = new HyperLogLog(a.b);\n  for(int i=0;i<a.m;i++)\n    out.reg[i] = (byte) Math.max(a.reg[i], b.reg[i]);\n  return out;   // count(out) ~= |A ∪ B|\n}`
+  },
+  realWorld:[
+    ["Redis","PFADD/PFCOUNT store HLLs in 12 KB with 0.81% error — used everywhere for unique counts."],
+    ["Google (HLL++)","Improved HLL with bias correction powers distinct counts across BigQuery & analytics."],
+    ["Presto / Redshift / Druid","approx_distinct() uses HLL to count uniques over huge tables fast."],
+    ["Reddit / analytics","Unique visitors, unique viewers per post, distinct IPs — mergeable across shards."],
+    ["Network monitoring","Estimate distinct source IPs / flows in high-throughput traffic in constant memory."]
+  ],
+  interview:[
+    ["basic","What does HyperLogLog estimate?","The cardinality — the number of distinct elements — of a multiset or stream, using a tiny fixed amount of memory instead of storing every unique value."],
+    ["basic","Why leading zeros?","With uniformly random hashes, seeing a value with k leading zeros happens with probability 2^(−k). So the longer the maximum leading-zero run you've observed, the more distinct values you've likely hashed. The max run is a proxy for log2(cardinality)."],
+    ["inter","Why use many registers and a harmonic mean?","A single estimator has huge variance. Splitting the hash across m registers ('stochastic averaging') and combining them with a harmonic mean reduces variance to a standard error of about 1.04/√m, making the estimate stable and tunable."],
+    ["inter","How do you merge two HyperLogLogs?","Take the element-wise maximum of their registers. This yields the HLL of the union, so you can compute distinct counts across shards, days, or servers without re-scanning data — a key operational advantage."],
+    ["adv","What are the small- and large-range corrections?","At low cardinality many registers are still 0, biasing the raw estimate; HLL switches to linear counting (m·ln(m/zeros)). At very high cardinality near hash collisions, classic HLL applies a large-range correction. HLL++ replaces these with empirical bias tables and a sparse representation."],
+    ["adv","HyperLogLog vs a Bloom filter — different jobs?","A Bloom filter answers 'have I seen THIS element?' (membership) but can't count uniques; HLL answers 'how many DISTINCT elements?' but can't test membership. Different questions, both probabilistic and memory-efficient."],
+    ["sd","Where would you use HLL in a system design?","Real-time unique-visitor dashboards, distinct search queries, unique IPs for abuse detection, ad reach/frequency — anywhere you need distinct counts over massive or streaming data, want constant memory, and can tolerate ~1% error. Its mergeability makes it ideal for sharded/roll-up analytics."]
+  ],
+  mistakes:["Expecting exact counts — HLL is an estimate with ~1% error.","Using too few registers, so error is large and small counts are unreliable.","Forgetting small-range correction, giving bad estimates at low cardinality.","Trying to use it for membership tests — that's a Bloom filter's job.","Merging HLLs with different register counts/hashes — must be identical config."],
+  best:["Pick m for your target error (m=16384 → ~0.8%).","Use a well-mixed 64-bit hash for uniform distribution.","Prefer HLL++ (bias correction + sparse mode) for accuracy at low counts.","Exploit mergeability: keep per-shard/per-hour HLLs and union them.","Use battle-tested implementations (Redis PFADD, DataSketches)."],
+  related:[["Bloom Filter","🌸","Membership, not counting","bloom-filter.html"],["Consistent Hashing","🔁","Uniform hashing","system-designed.html"],["Merkle Tree","🌳","Hashing structure","merkle-tree.html"],["Kafka","🪵","Stream processing","kafka.html"],["News Feed","🐦","Analytics at scale","news-feed.html"],["System Design Lab","🎓","All concepts","system-designed.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

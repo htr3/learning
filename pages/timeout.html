@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Timeouts — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    g.appendChild(S("rect",{x:40,y:82,width:110,height:38,rx:8,fill:"#161619",stroke:"#3a3a42","stroke-width":2}));g.appendChild(TX(95,105,"Client",{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));
+    g.appendChild(S("rect",{x:470,y:82,width:110,height:38,rx:8,fill:"rgba(124,58,237,.2)","stroke":"#7C3AED","stroke-width":2}));g.appendChild(TX(525,105,"Slow service",{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));
+    if(phase===0){g.appendChild(S("line",{x1:150,y1:100,x2:470,y2:100,stroke:"#f87171","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(TX(310,92,"request…",{fill:"#f87171","font-size":10,"text-anchor":"middle"}));
+      g.appendChild(TX(310,140,"⏳ no response — client hangs forever",{fill:"#f87171","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="no timeout → resources pile up waiting";lbl.setAttribute("fill","#f87171");sub.textContent="threads/connections block indefinitely; one slow dependency can exhaust the whole pool";}
+    else{g.appendChild(S("line",{x1:150,y1:92,x2:470,y2:92,stroke:"#fbbf24","stroke-width":2,"marker-end":"url(#a)"}));
+      g.appendChild(S("rect",{x:150,y:108,width:180,height:14,rx:4,fill:"#242a33"}));g.appendChild(S("rect",{x:150,y:108,width:180,height:14,rx:4,fill:"#34d399"}));
+      g.appendChild(TX(340,119,"⏱ deadline",{fill:"#34d399","font-size":10}));
+      g.appendChild(TX(310,140,"✂ abort at deadline → fail fast, free the thread",{fill:"#34d399","font-size":11,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="timeout → bounded wait, fail fast";lbl.setAttribute("fill","#34d399");sub.textContent="after the deadline the client gives up, releases resources, and can retry or fall back";}}
+  function step(){phase=(phase+1)%2;timer=3;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Call a service whose latency you control against a client <b>timeout</b>. When the response beats the deadline it succeeds; when it's too slow the client <b>aborts</b> and fails fast — freeing the thread instead of hanging. Watch how a too-tight timeout causes false failures and a too-loose one lets slow calls pile up.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Server latency: <b id="pgLV">800</b> ms</label><input id="pgLat" type="range" min="100" max="3000" value="800" step="100"></div>
+      <div class="pg-field"><label>Client timeout: <b id="pgTV">1000</b> ms</label><input id="pgTo" type="range" min="200" max="3000" value="1000" step="100"></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReq" class="go">▶ Send request</button><button id="pgFlood">Send 10</button></div>
+      <div class="pg-btns" style="margin-top:8px"><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Rule of thumb: set timeouts from the dependency's p99 latency (not the average), and make deadlines shrink as they propagate down a call chain.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Requests</div><div class="v ac" id="pgN">0</div></div>
+        <div class="pg-stat"><div class="k">Succeeded</div><div class="v ok" id="pgOk">0</div></div>
+        <div class="pg-stat"><div class="k">Timed out</div><div class="v bad" id="pgTe">0</div></div>
+        <div class="pg-stat"><div class="k">Success rate</div><div class="v wa" id="pgRate">—</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=120;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let n,ok,te,anim;
+  function reset(){n=0;ok=0;te=0;anim=null;draw(0);stats();$("pgLog").innerHTML="";log("send a request and compare latency vs timeout","ac");}
+  function lat(){return +$("pgLat").value||800;}
+  function to(){return +$("pgTo").value||1000;}
+  function one(){n++;const L=lat()*(0.8+Math.random()*0.4),T=to();const win=Math.min(L,T);
+    if(L<=T){ok++;log("request → responded in "+Math.round(L)+"ms (< "+T+"ms deadline) → 200 OK","ok");}
+    else{te++;log("request → still waiting at "+T+"ms deadline (would take "+Math.round(L)+"ms) → ✂ timeout, fail fast","bad");}
+    stats();animate(win/Math.max(L,T),L<=T);}
+  function flood(){let i=0;const iv=setInterval(()=>{one();if(++i>=10)clearInterval(iv);},120);}
+  function animate(frac,success){if(anim)cancelAnimationFrame(anim);let start=performance.now();const dur=700;
+    function fr(now){const p=Math.min(1,(now-start)/dur);draw(p*frac,success,p);if(p<1)anim=requestAnimationFrame(fr);else anim=null;}
+    anim=requestAnimationFrame(fr);}
+  function draw(p,success,prog){svg.innerHTML="";const T=to(),L=lat();
+    const barY=40,barX=20,barW=W-40;const scale=barW/Math.max(T,L,1);
+    svg.appendChild(TX(barX,24,"latency bar vs deadline line:",{fill:"#8b8b93","font-size":10}));
+    svg.appendChild(S("rect",{x:barX,y:barY,width:barW,height:22,rx:6,fill:"#141416",stroke:"#242a33"}));
+    const filled=Math.min(barW,barW*(p||0));
+    svg.appendChild(S("rect",{x:barX,y:barY,width:Math.max(2,filled),height:22,rx:6,fill:success===false?"#f87171":success===true?"#34d399":"#fbbf24"}));
+    const dx=barX+Math.min(barW,T*scale);
+    svg.appendChild(S("line",{x1:dx,y1:barY-6,x2:dx,y2:barY+28,stroke:"#38bdf8","stroke-width":2,"stroke-dasharray":"3 3"}));
+    svg.appendChild(TX(dx,barY+42,"⏱ "+T+"ms",{fill:"#38bdf8","font-size":10,"text-anchor":"middle"}));
+    const lx=barX+Math.min(barW,L*scale);
+    svg.appendChild(TX(lx,barY-10,"server ~"+L+"ms",{fill:"#8b8b93","font-size":9,"text-anchor":"middle"}));}
+  function stats(){$("pgN").textContent=n;$("pgOk").textContent=ok;$("pgTe").textContent=te;
+    $("pgRate").textContent=n?Math.round(100*ok/n)+"%":"—";}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgLat").oninput=()=>{$("pgLV").textContent=$("pgLat").value;draw(0);};
+  $("pgTo").oninput=()=>{$("pgTV").textContent=$("pgTo").value;draw(0);};
+  $("pgReq").onclick=one;$("pgFlood").onclick=flood;$("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"⏱️",title:"Timeouts",category:"Resilience",difficulty:"Easy",readingTime:"8 min",
+  eyebrow:"Bounding How Long You Wait",
+  tagline:"A timeout caps how long a caller waits for a response before giving up. Without them, one slow dependency can block threads, exhaust connection pools, and cascade into a full outage. With them, systems <b>fail fast</b> and stay responsive.",
+  pills:["<b>Fail fast</b>","<b>Bound</b> resource use","<b>p99-based</b>","<b>Deadline propagation</b>"],
+  overview:"Every network call can hang — a slow database, an overloaded service, a lost packet. A <b>timeout</b> sets the maximum time a caller will wait before aborting and returning an error (or a fallback). This is one of the most important resilience patterns because resources are finite: each in-flight request holds a thread and a connection. If calls to a degraded dependency never time out, those threads pile up until the pool is exhausted and the caller itself becomes unresponsive — the failure <b>cascades</b> upstream. Good timeouts are derived from the dependency's <b>tail latency</b> (p99/p99.9), not its average, so you don't abort healthy-but-slow calls. In a call chain, <b>deadlines</b> should propagate and shrink (each hop gets the remaining budget) so the whole request has a bounded total time. Timeouts pair with <b>retries</b> (with backoff) and <b>circuit breakers</b> to form a resilience toolkit.",
+  problem:"Distributed calls have unbounded worst-case latency. A caller that waits indefinitely ties up finite threads/connections; under a slow dependency these accumulate until the caller runs out of capacity and fails too. Timeouts convert an unbounded, cascading failure into a bounded, local one you can handle (retry, fallback, shed load).",
+  diagram,diagramCaption:"Without a timeout the client hangs; with one it aborts at the deadline, fails fast, and frees resources.",
+  how:[
+    "Choose a timeout based on the dependency's tail latency (e.g., slightly above p99), not the mean.",
+    "Set timeouts at every layer: connect, read/socket, request, and overall operation.",
+    "When the deadline elapses, cancel the call, release the thread/connection, and return an error or fallback.",
+    "Propagate a shrinking deadline down the call chain so total request time stays bounded.",
+    "Combine with limited retries + backoff and a circuit breaker to avoid hammering a failing dependency."
+  ],
+  complexity:[["Set from","p99/p99.9 latency"],["Connect timeout","short (e.g., 100–500ms)"],["Request timeout","dependency-specific"],["Chain","deadline propagation"]],
+  advantages:["Prevents thread/connection pool exhaustion","Fails fast → stays responsive under stress","Bounds worst-case request latency","Enables retries, fallbacks, and load shedding","Contains failures locally (no cascade)"],
+  disadvantages:["Too tight → false failures on healthy-but-slow calls","Too loose → slow calls still pile up","Doesn't cancel server-side work by itself","Requires per-dependency tuning & monitoring","Naive retries after timeout can amplify load"],
+  tradeoffs:"Timeouts trade the chance of aborting a call that would have succeeded against the risk of resource exhaustion from waiting too long. Set them too aggressively and you turn slow responses into errors (hurting success rate); too generously and a degraded dependency still consumes your capacity. The right value comes from measured tail latency and must be revisited as the system changes. A timeout on the client doesn't necessarily stop the server from finishing the work (wasting its resources), so pair with cancellation/deadline propagation. And because a timeout often triggers a retry, without backoff and idempotency you can amplify load on an already-struggling service.",
+  whenNot:"Timeouts should be on essentially every remote call — the question is the value, not whether. Avoid extremely tight timeouts on inherently long operations (large uploads, batch jobs, streaming) where you instead use heartbeats/progress deadlines. Purely local, in-memory operations don't need network-style timeouts. And don't rely on timeouts alone — combine with retries, circuit breakers, and bulkheads.",
+  sim,
+  code:{
+"Client timeouts":`// Always bound remote calls. Fetch with an AbortController deadline:\nconst ctrl = new AbortController();\nconst t = setTimeout(() => ctrl.abort(), 1000);   // 1s deadline\ntry {\n  const res = await fetch(url, { signal: ctrl.signal });\n  return await res.json();\n} catch (e) {\n  if (e.name === "AbortError") return fallback();   // fail fast\n  throw e;\n} finally { clearTimeout(t); }`,
+"Layered timeouts":`// Set timeouts at EVERY layer, not just one overall value:\nconst client = new HttpClient({\n  connectTimeoutMs: 300,     // TCP/TLS connect\n  socketTimeoutMs:  1000,    // idle between bytes\n  requestTimeoutMs: 2000,    // whole request\n});\n// DB / pool:\npool = new Pool({ connectionTimeoutMillis: 500, query_timeout: 1500 });`,
+"Deadline propagation":`// In a call chain, pass a SHRINKING deadline so total time is bounded.\nfunc Handler(ctx context.Context) error {\n    // caller gave us, say, 2s total\n    ctx, cancel := context.WithTimeout(ctx, 2*time.Second)\n    defer cancel()\n\n    // downstream call inherits the REMAINING budget, not a fresh 2s\n    resp, err := downstream.Call(ctx, req)   // aborts if ctx deadline passes\n    return err\n}\n// gRPC/HTTP propagate the deadline so no single hop can overrun the whole request.`
+  },
+  realWorld:[
+    ["Netflix Hystrix / resilience4j","Timeouts + circuit breakers around every remote dependency."],
+    ["gRPC deadlines","Per-call deadlines propagated across service hops."],
+    ["Envoy / service meshes","Configurable request timeouts and retries per route."],
+    ["Database drivers","Connection, query, and statement timeouts to avoid stuck queries."],
+    ["Browsers / HTTP clients","Connect and request timeouts to avoid hanging pages."]
+  ],
+  interview:[
+    ["basic","Why are timeouts important in distributed systems?","Because remote calls can hang indefinitely, and each in-flight call holds finite resources (threads, connections). Without timeouts, a slow dependency causes calls to accumulate until the caller's pool is exhausted and it fails too — a cascading outage. Timeouts bound the wait so the system fails fast and stays responsive."],
+    ["basic","How should you choose a timeout value?","Base it on the dependency's tail latency (e.g., just above p99 or p99.9), not the average, so you don't abort healthy-but-slow requests. Consider the overall latency budget for the request and set connect timeouts short. Then monitor timeout rates and adjust as traffic and dependencies change."],
+    ["inter","What is a cascading failure and how do timeouts help?","When a slow/failed dependency causes callers to block, their resources exhaust, so they slow/fail too, propagating upstream until the whole system is down. Timeouts break this chain: callers give up quickly, free their threads, and can shed load or fall back — containing the failure to the affected dependency instead of taking down everything that depends on it."],
+    ["inter","What is deadline propagation?","Passing a request's remaining time budget down the call chain instead of giving each hop a fresh full timeout. If the top-level request has 2s and the first hop used 800ms, the next call inherits ~1.2s. This ensures the total end-to-end time is bounded and avoids doing work for a request the caller has already abandoned. gRPC and context deadlines implement this."],
+    ["adv","How do timeouts interact with retries and circuit breakers?","A timeout typically triggers a retry, but naive immediate retries amplify load on a struggling dependency (retry storms). So combine timeouts with capped retries plus exponential backoff and jitter, make operations idempotent so retries are safe, and use a circuit breaker to stop calling a dependency that's failing — failing fast without even attempting the call until it recovers."],
+    ["adv","Why doesn't a client timeout always fix resource usage?","A client aborting doesn't automatically stop the server from completing the (now-pointless) work, so the server keeps consuming resources. Proper systems propagate cancellation (e.g., context cancellation, gRPC deadline) so the server also aborts. Without cancellation, timeouts protect the caller but not the callee, and wasted downstream work can still contribute to overload."],
+    ["sd","How would you apply timeouts across a microservice request path?","Give each external request an overall deadline at the edge/gateway. Propagate a shrinking deadline through each service hop (via gRPC deadlines / context). Set layered timeouts (connect, read, request) per dependency based on their p99s. Pair with bounded retries + backoff + jitter and idempotency, and wrap flaky dependencies in circuit breakers with fallbacks. Monitor timeout and retry rates to tune values."]
+  ],
+  mistakes:["Having no timeout at all (calls hang, pools exhaust).","Setting timeouts from average latency instead of p99 (false failures).","Using one fresh timeout per hop instead of a propagating deadline.","Retrying immediately after a timeout with no backoff (retry storm).","Assuming a client timeout cancels server-side work (it usually doesn't)."],
+  best:["Put a timeout on every remote call; set layered (connect/read/request) values.","Derive timeouts from measured tail latency and monitor timeout rates.","Propagate shrinking deadlines through the call chain.","Combine with capped retries + backoff + jitter and idempotency.","Add circuit breakers and fallbacks for consistently failing dependencies."],
+  related:[["Retry & Backoff","⏳","Retry after timeout safely","backoff.html"],["Bulkhead","🧱","Isolate resource pools","bulkhead.html"],["Idempotency","🔁","Make retries safe","idempotency.html"],["Circuit Breaker","🔌","Stop calling failures","system-designed.html"],["Failover","🔀","Switch to healthy node","failover.html"],["High Availability","🟢","Stay responsive","high-availability.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trie — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 620 200"});host.appendChild(svg);
+  const lbl=TX(310,16,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(310,192,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  let phase=0,timer=0,running=false,raf,last;
+  function nd(x,y,ch,hot,end){g.appendChild(S("circle",{cx:x,cy:y,r:14,fill:hot?"rgba(124,58,237,.35)":"#161619",stroke:hot?"#c4a2ff":(end?"#34d399":"#3a3a42"),"stroke-width":2}));
+    g.appendChild(TX(x,y+4,ch,{fill:"#e4e4e7","font-size":11,"text-anchor":"middle"}));}
+  function edge(x1,y1,x2,y2,hot){g.appendChild(S("line",{x1,y1:y1+14,x2,y2:y2-14,stroke:hot?"#c4a2ff":"#3a3a42","stroke-width":hot?2.4:1.4}));}
+  function render(){g.innerHTML="";
+    // trie: root -> c -> a -> (t, r) ; c-a-t, c-a-r ; root -> d -> o -> g
+    const hotPath=phase===0?["c","a","t"]:["c","a","r"];
+    nd(310,48,"•",false);
+    edge(310,48,180,100,true);nd(180,100,"c",true);
+    edge(180,100,180,150,true);nd(180,150,"a",true);
+    edge(180,150,130,190>200?190:185,phase===0);
+    // simplify: children t and r at y=... place within 200 height, use y=185
+    nd(140,185,"t",phase===0,true);edge(180,150,140,185,phase===0);
+    nd(230,185,"r",phase===1,true);edge(180,150,230,185,phase===1);
+    edge(310,48,440,100,false);nd(440,100,"d",false);edge(440,100,440,150,false);nd(440,150,"o",false);edge(440,150,440,185,false);nd(440,185,"g",false,true);
+    lbl.textContent="trie stores words by shared prefixes";lbl.setAttribute("fill","#c4a2ff");
+    sub.textContent=phase===0?"path root→c→a→t spells 'cat' (green node = end of word)":"path root→c→a→r spells 'car' — 'ca' is shared, stored once";}
+  function step(){phase=(phase+1)%2;timer=2.8;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">Type a prefix and watch the trie work like an autocomplete engine. It walks one node per character down the shared-prefix tree, then collects every word beneath that node — so lookups and completions cost <b>O(length of prefix)</b>, independent of how many words are stored.</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Type a prefix</label><input id="pgQ" type="text" value="ca" placeholder="e.g. ca" style="width:140px"></div>
+      <div class="pg-field"><label>Add a word to the trie</label><input id="pgAdd" type="text" placeholder="new word" style="width:140px"></div>
+      <div class="pg-btns" style="margin-top:6px"><button id="pgAddBtn" class="go">＋ Insert</button><button id="pgReset">↺ Reset</button></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">Autocomplete = descend to the prefix node, then DFS the subtree for word-ends. The dictionary here has ~12 words; try <code>ca</code>, <code>car</code>, <code>do</code>, <code>b</code>.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Prefix</div><div class="v ac" id="pgPfx">—</div></div>
+        <div class="pg-stat"><div class="k">Nodes walked</div><div class="v" id="pgWalk">0</div></div>
+        <div class="pg-stat"><div class="k">Matches</div><div class="v ok" id="pgMatch">0</div></div>
+        <div class="pg-stat"><div class="k">Total words</div><div class="v wa" id="pgTotal">0</div></div>
+      </div>
+      <div id="pgViz"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  const W=560,H=250;const svg=S("svg",{viewBox:"0 0 "+W+" "+H});$("pgViz").appendChild(svg);
+  let rootNode,total;
+  function makeNode(){return {ch:{},end:false};}
+  function insert(w){w=w.toLowerCase().replace(/[^a-z]/g,"");if(!w)return;let n=rootNode;for(const c of w){if(!n.ch[c])n.ch[c]=makeNode();n=n.ch[c];}if(!n.end){n.end=true;total++;}}
+  function reset(){rootNode=makeNode();total=0;["cat","car","card","care","cart","dog","dot","do","door","bat","ball","bar"].forEach(insert);query();log("dictionary loaded — type a prefix to autocomplete","ac");}
+  function collect(n,pfx,out){if(n.end)out.push(pfx);for(const c of Object.keys(n.ch).sort())collect(n.ch[c],pfx+c,out);}
+  function query(){const q=($("pgQ").value||"").toLowerCase().replace(/[^a-z]/g,"");$("pgPfx").textContent=q||"(all)";
+    let n=rootNode,walked=0,ok=true;for(const c of q){walked++;if(n.ch[c])n=n.ch[c];else{ok=false;break;}}
+    $("pgWalk").textContent=walked;$("pgTotal").textContent=total;
+    let matches=[];if(ok)collect(n,q,matches);
+    $("pgMatch").textContent=matches.length;
+    draw(q,ok,n,matches);
+    $("pgLog").innerHTML="";
+    if(!ok)log("no node for prefix \""+q+"\" → 0 completions (walked "+walked+" nodes)","bad");
+    else log("prefix \""+q+"\" → "+matches.length+" completion(s): "+(matches.slice(0,10).join(", ")||"(none)"),"ok");}
+  // layout: assign x by DFS order of leaves, y by depth
+  function layout(){const positions=new Map();let leafX=0;const leaves=[];
+    (function count(n){const kids=Object.keys(n.ch);if(!kids.length){leaves.push(n);}else kids.forEach(c=>count(n.ch[c]));})(rootNode);
+    return positions;}
+  function draw(q,ok,target,matches){svg.innerHTML="";
+    // compute positions via DFS, x spread across leaves
+    const nodes=[];let order=0;const depthMax={v:0};
+    function walk(n,depth,path,onPath){n._d=depth;n._path=path;n._onPath=onPath;
+      const kids=Object.keys(n.ch).sort();
+      if(!kids.length){n._x=order++;}
+      else{let xs=[];kids.forEach(c=>{const child=n.ch[c];const childOn=onPath&&q[depth]===c;walk(child,depth+1,path+c,childOn);xs.push(child._x);});n._x=(Math.min(...xs)+Math.max(...xs))/2;}
+      depthMax.v=Math.max(depthMax.v,depth);nodes.push({n,c:path.slice(-1)||"•"});}
+    walk(rootNode,0,"",true);
+    const leafCount=order||1;const xStep=(W-40)/leafCount;const yStep=Math.min(38,(H-40)/(depthMax.v+1));
+    function px(n){return 20+(n._x+0.5)*xStep;}function py(n){return 24+n._d*yStep;}
+    // edges
+    nodes.forEach(({n})=>{Object.keys(n.ch).forEach(c=>{const ch=n.ch[c];const hot=n._onPath&&ch._onPath;
+      svg.appendChild(S("line",{x1:px(n),y1:py(n),x2:px(ch),y2:py(ch),stroke:hot?"#c4a2ff":"#2f3742","stroke-width":hot?2.4:1.2}));});});
+    // nodes
+    nodes.forEach(({n,c})=>{const onPfx=n._onPath&&n._d<=q.length;const inMatch=ok&&n._path.startsWith(q)&&n._path.length>=q.length;
+      const r=n._d===0?9:11;
+      svg.appendChild(S("circle",{cx:px(n),cy:py(n),r,fill:onPfx?"rgba(124,58,237,.4)":inMatch?"rgba(52,211,153,.12)":"#161619",stroke:n.end?"#34d399":onPfx?"#c4a2ff":"#3a3a42","stroke-width":n.end?2.2:1.6}));
+      svg.appendChild(TX(px(n),py(n)+3.5,n._d===0?"•":c,{fill:"#e4e4e7","font-size":10,"text-anchor":"middle"}));});
+    svg.appendChild(TX(W/2,H-4,"purple = prefix path · green ring = end of a word",{fill:"#5b5b63","font-size":9,"text-anchor":"middle"}));}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+
+  $("pgQ").oninput=query;
+  $("pgAddBtn").onclick=()=>{const w=$("pgAdd").value;if(w){insert(w);$("pgAdd").value="";log("inserted \""+w.toLowerCase()+"\"","ac");query();}};
+  $("pgReset").onclick=reset;
+  reset();
+}
+
+const DATA={
+  badge:"🌴",title:"Trie",category:"Search",difficulty:"Medium",readingTime:"8 min",
+  eyebrow:"Prefix Tree",
+  tagline:"A tree where each path from the root spells a string, and common prefixes are shared. It makes prefix operations — autocomplete, type-ahead, dictionary lookups — cost <b>O(length of the key)</b>, independent of how many keys are stored.",
+  pills:["<b>Prefix</b> sharing","<b>O(L)</b> lookup","<b>Autocomplete</b>","<b>Ordered</b> traversal"],
+  overview:"A <b>trie</b> (prefix tree) stores a set of strings as a tree of characters. Each node represents a prefix; following an edge labeled with a character extends the prefix, and a node marked as a <b>word-end</b> means that prefix is a complete stored key. Strings sharing a prefix share the same path (so 'car', 'card', 'care' all reuse the 'car' path), which both saves space for common prefixes and makes prefix queries extremely fast. Looking up a key or checking a prefix takes <b>O(L)</b> time where L is the key length — crucially, this does <b>not</b> depend on the number of keys N in the structure, unlike a balanced BST (O(L·log N)) or hashing (which can't do prefixes at all). This is why tries power <b>autocomplete/type-ahead</b>: descend to the node for what the user typed, then traverse the subtree to enumerate all completions. Variants like compressed tries (radix/Patricia trees) merge single-child chains to save memory, and tries also enable ordered iteration, longest-prefix matching (IP routing), and spell-check.",
+  problem:"Prefix-based operations are common and awkward for other structures: hash tables give O(1) exact lookup but can't answer 'all words starting with ca', and balanced trees can but at O(log N) per comparison with full-string comparisons. As dictionaries grow to millions of entries, you want prefix lookup that scales with the query length, not the dataset size — exactly what a trie provides.",
+  diagram,diagramCaption:"Words share prefix paths; a green-ringed node marks the end of a complete word.",
+  how:[
+    "Each node has child links keyed by the next character (map or array) and an is-end-of-word flag.",
+    "Insert: walk/create one node per character of the key; mark the final node as a word-end.",
+    "Search a key: follow characters; the key exists if you land on a word-end node.",
+    "Prefix query / autocomplete: descend to the prefix node, then DFS the subtree collecting word-ends.",
+    "Optionally compress single-child chains (radix tree) and store payloads/frequencies at word-ends for ranking."
+  ],
+  complexity:[["Insert","O(L)"],["Lookup","O(L)"],["Prefix search","O(L + matches)"],["Space","O(total chars); shared prefixes save"]],
+  advantages:["Prefix queries in O(L), independent of N","Natural autocomplete / type-ahead","No hash collisions; keys stored once","Ordered traversal (lexicographic)","Longest-prefix matching (routing, dictionaries)"],
+  disadvantages:["Memory heavy (many nodes/pointers)","Poor cache locality vs arrays/hashes","Overkill for exact-match-only lookups","Wide alphabets inflate per-node child storage","Compression adds implementation complexity"],
+  tradeoffs:"A trie trades memory for fast, ordered, prefix-aware access. The classic implementation with a child map/array per node uses a lot of pointers and has poor cache locality, so for pure exact-match key-value lookup a hash table is faster and leaner. The trie wins when you need prefix operations, ordered enumeration, or longest-prefix matching — none of which hashing supports. To tame memory, use <b>compressed/radix tries</b> (merge single-child paths) or ternary search tries; for huge static dictionaries, minimal DFA/FST structures (used by Lucene) pack the same capability far more compactly. There's also a build-vs-query trade-off: tries make prefix queries cheap by paying the cost of a structured insert up front.",
+  whenNot:"Don't use a trie when you only need exact-match key lookups — a hash map is simpler, faster, and smaller. Avoid naive tries for very large dictionaries with wide alphabets unless compressed (memory blows up). For approximate/fuzzy matching you need trie + edit-distance traversal or specialized structures; for full ranked text search, an inverted index with scoring is the right tool (a trie handles prefixes, not relevance).",
+  sim,
+  code:{
+"Trie":`class TrieNode { constructor(){ this.children = {}; this.end = false; } }\n\nclass Trie {\n  constructor(){ this.root = new TrieNode(); }\n  insert(word){\n    let n = this.root;\n    for (const c of word) { n = n.children[c] ??= new TrieNode(); }  // O(L)\n    n.end = true;\n  }\n  search(word){\n    const n = this._node(word);\n    return !!n && n.end;                         // O(L)\n  }\n  startsWith(prefix){ return !!this._node(prefix); }   // O(L)\n  _node(str){\n    let n = this.root;\n    for (const c of str){ if (!(c in n.children)) return null; n = n.children[c]; }\n    return n;\n  }\n}`,
+"Autocomplete":`// Descend to the prefix node, then DFS the subtree for completions.\nfunction autocomplete(trie, prefix, limit = 10){\n  const start = trie._node(prefix);\n  if (!start) return [];\n  const out = [];\n  (function dfs(node, path){\n    if (out.length >= limit) return;\n    if (node.end) out.push(path);\n    for (const c of Object.keys(node.children).sort())  // ordered\n      dfs(node.children[c], path + c);\n  })(start, prefix);\n  return out;                                    // O(L + matches)\n}\n// Store a frequency/score at word-ends to rank suggestions (popular first).`,
+"Longest-prefix match":`// Tries also do longest-prefix matching — e.g., IP routing / dictionaries.\nfunction longestPrefix(trie, word){\n  let n = trie.root, best = "", path = "";\n  for (const c of word){\n    if (!(c in n.children)) break;\n    n = n.children[c]; path += c;\n    if (n.end) best = path;        // remember the longest word-end seen\n  }\n  return best;\n}\n// Radix/Patricia variant compresses single-child chains to save memory.`
+  },
+  realWorld:[
+    ["Search autocomplete","Google/e-commerce type-ahead suggestions backed by prefix structures."],
+    ["IP routing tables","Longest-prefix matching via (radix) tries in routers."],
+    ["Lucene/Elasticsearch terms","FST (a compressed trie/DFA) stores the term dictionary compactly."],
+    ["Spell checkers / T9","Dictionary lookups and prefix suggestions on keyboards."],
+    ["Redis, DB indexes","Prefix scans and ordered key iteration."]
+  ],
+  interview:[
+    ["basic","What is a trie and what is it good at?","A trie (prefix tree) stores strings as a tree where each path spells a key and common prefixes are shared. It's ideal for prefix operations — autocomplete, prefix existence checks, ordered enumeration, and longest-prefix matching — because those run in O(L) where L is the key length, independent of how many keys are stored."],
+    ["basic","How do you implement insert and search?","Insert: start at the root and, for each character, follow the child link (creating a node if absent); mark the final node as end-of-word. Search: follow the characters from the root; the key exists only if you can traverse all of them and land on a node flagged as end-of-word. Both are O(L)."],
+    ["inter","Why use a trie over a hash map for autocomplete?","A hash map does O(1) exact lookups but has no notion of prefixes — you can't efficiently find 'all keys starting with ca' without scanning everything. A trie descends to the prefix node in O(L) and then enumerates the subtree, giving completions in O(L + number of matches). It also yields results in sorted order and stores shared prefixes once."],
+    ["inter","What's the time and space complexity of a trie?","Time: insert, search, and prefix lookup are all O(L), where L is the string length — notably independent of N (the number of keys). Prefix enumeration adds the cost of the matches found. Space: O(total characters across keys), reduced by prefix sharing, but with significant pointer overhead per node — often the trie's main downside versus hashing."],
+    ["adv","How do you reduce a trie's memory usage?","Use a compressed trie (radix/Patricia tree) that merges chains of single-child nodes into one edge labeled with a substring, drastically cutting node count. Ternary search tries store children as a BST to avoid large per-node arrays for wide alphabets. For large static dictionaries, minimal deterministic acyclic finite state automata (DAWG/FST — used by Lucene) share both prefixes and suffixes for extreme compactness."],
+    ["adv","How would you rank autocomplete suggestions?","Store a popularity/score (e.g., query frequency) at each word-end node. When enumerating completions under the prefix, collect candidates with their scores and return the top-k by score (a heap over the subtree). For scale, precompute and cache the top completions per prefix node, or use a specialized suggester (like Lucene's) that stores weights in the FST for fast top-k prefix lookups."],
+    ["sd","Design an autocomplete service for a search box.","Build a trie/FST of query terms with popularity weights at word-ends, precomputing top-k completions per prefix node for fast lookup. Serve prefix queries in O(L) returning ranked suggestions; cache hot prefixes. Update weights from query logs periodically (batch rebuild of the FST for compactness). Shard the term space for scale, add personalization/recency as re-ranking signals, and debounce client requests. Combine with fuzzy matching for typo tolerance."]
+  ],
+  mistakes:["Using a trie when only exact lookups are needed (hash map is better).","Ignoring memory: naive tries with wide alphabets explode in size.","Forgetting the end-of-word flag (prefixes get confused with words).","Not compressing single-child chains for sparse dictionaries.","Enumerating the whole subtree without a top-k limit for autocomplete."],
+  best:["Use tries for prefix/ordered/longest-prefix operations, not exact-only lookup.","Compress with radix/ternary tries or FSTs to save memory.","Store scores/payloads at word-ends and precompute top-k per prefix.","Cache hot prefixes' completions for autocomplete at scale.","Combine with edit-distance traversal for typo-tolerant suggestions."],
+  related:[["Inverted Index","🔎","Backs full-text search","inverted-index.html"],["Typeahead Search","⌨️","Tries in production","typeahead-search.html"],["Fuzzy Search","≈","Typo tolerance","fuzzy-search.html"],["Full-Text Search","📄","Analysis + index","full-text-search.html"],["B-Tree","🌲","Ordered index alt.","b-tree.html"],["Skip List","🔗","Ordered structure","skip-list.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

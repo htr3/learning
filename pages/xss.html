@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>XSS — System Design Concepts</title>
+<link rel="stylesheet" href="../assets/concept.css" />
+</head>
+<body>
+<script src="../assets/concept.js"></script>
+<script>
+"use strict";
+
+function arrow(parent,x1,y1,x2,y2,c){
+  parent.appendChild(S("line",{x1,y1,x2,y2,stroke:c,"stroke-width":2}));
+  const a=Math.atan2(y2-y1,x2-x1),h=7;
+  const p1=[x2-h*Math.cos(a-0.5),y2-h*Math.sin(a-0.5)],p2=[x2-h*Math.cos(a+0.5),y2-h*Math.sin(a+0.5)];
+  parent.appendChild(S("polygon",{points:x2+","+y2+" "+p1[0]+","+p1[1]+" "+p2[0]+","+p2[1],fill:c}));
+}
+
+function diagram(host){
+  const svg=S("svg",{viewBox:"0 0 640 210"});host.appendChild(svg);
+  const lbl=TX(320,18,"",{fill:"#c4a2ff","font-size":13,"text-anchor":"middle","font-weight":700});svg.appendChild(lbl);
+  const sub=TX(320,200,"",{fill:"#8b8b93","font-size":11,"text-anchor":"middle"});svg.appendChild(sub);
+  const g=S("g",{});svg.appendChild(g);
+  function box(x,y,w,t,c){g.appendChild(S("rect",{x:x-w/2,y:y-20,width:w,height:40,rx:8,fill:c+"22",stroke:c,"stroke-width":2}));g.appendChild(TX(x,y+5,t,{fill:"#e4e4e7","font-size":12,"text-anchor":"middle","font-weight":700}));}
+  let phase=0,timer=0,running=false,raf,last;
+  function render(){g.innerHTML="";
+    if(phase===0){box(110,90,140,"😈 attacker","#f87171");box(360,90,150,"💾 server / DB","#38bdf8");
+      arrow(g,182,80,285,80,"#f87171");g.appendChild(TX(233,72,"posts <script>… comment",{fill:"#f87171","font-size":8.5,"text-anchor":"middle"}));
+      lbl.textContent="1 — attacker injects a script into stored data";lbl.setAttribute("fill","#f87171");sub.textContent="e.g. a comment field: <script>steal(document.cookie)<\/script>";}
+    else if(phase===1){box(360,90,150,"💾 server / DB","#38bdf8");box(560,90,130,"🧑 victim","#34d399");
+      arrow(g,435,80,497,80,"#fbbf24");g.appendChild(TX(466,72,"serves page",{fill:"#fbbf24","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="2 — victim loads the page containing the unescaped payload";lbl.setAttribute("fill","#fbbf24");sub.textContent="the browser can't tell attacker data from real markup → runs the script";}
+    else if(phase===2){box(560,90,130,"🧑 victim","#34d399");box(110,90,140,"😈 attacker","#f87171");
+      arrow(g,497,110,182,110,"#f87171");g.appendChild(TX(340,124,"cookie / session exfiltrated ✗",{fill:"#f87171","font-size":9,"text-anchor":"middle"}));
+      lbl.textContent="3 — script runs in victim's origin → steals cookies/keystrokes";lbl.setAttribute("fill","#f87171");sub.textContent="full account takeover: the code runs with the victim's privileges";}
+    else{box(360,90,160,"escape + CSP + HttpOnly","#34d399");
+      g.appendChild(TX(360,128,"&lt;script&gt; rendered as text ✓",{fill:"#34d399","font-size":10,"text-anchor":"middle","font-weight":700}));
+      lbl.textContent="defense — escape on output, Content-Security-Policy, HttpOnly";lbl.setAttribute("fill","#34d399");sub.textContent="untrusted data is treated as data, never as executable code";}}
+  function step(){phase=(phase+1)%4;timer=phase===3?4:2.8;render();}
+  function loop(now){if(!running)return;const dt=(now-last)/1000;last=now;timer-=dt;if(timer<=0)step();raf=requestAnimationFrame(loop);}
+  const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}else{running=false;cancelAnimationFrame(raf);}},{threshold:.15});
+  io.observe(host);render();
+}
+
+function sim(root){
+  root.innerHTML=`<p class="lead" style="margin-bottom:14px">You run a comment board. An attacker submits a comment containing a <code>&lt;script&gt;</code> tag. What happens when the next visitor loads the page depends entirely on how you <b>render</b> that data. Type a payload, choose a rendering strategy, and post it — see whether the script <b>executes</b> (attack) or shows as harmless <b>text</b> (safe).</p>
+  <div class="pg">
+    <div class="pg-controls">
+      <div class="pg-field"><label>Comment (try a payload)</label><input id="pgIn" type="text" value="&lt;script&gt;steal(cookie)&lt;/script&gt;" style="width:230px"></div>
+      <div class="pg-field"><label>Rendering</label><select id="pgMode">
+        <option value="raw">innerHTML — raw (vulnerable)</option>
+        <option value="escape">escape / textContent (safe)</option>
+        <option value="csp">innerHTML + strict CSP</option>
+      </select></div>
+      <button class="pg-btn" id="pgPost">post comment</button>
+      <button class="pg-btn secondary" id="pgClear">clear board</button>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">This is a safe simulation — no real script runs. It detects whether your rendering choice would allow the payload to execute.</p>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-stats">
+        <div class="pg-stat"><div class="k">Comments</div><div class="v" id="pgN">0</div></div>
+        <div class="pg-stat"><div class="k">Scripts executed</div><div class="v wa" id="pgExec">0</div></div>
+        <div class="pg-stat"><div class="k">Cookies stolen</div><div class="v" id="pgSteal">0</div></div>
+        <div class="pg-stat"><div class="k">Render mode</div><div class="v ac" id="pgM">raw</div></div>
+      </div>
+      <div id="pgBoard" style="min-height:120px;background:#0d0d0f;border:1px solid #242a33;border-radius:8px;padding:10px;margin:8px 0;font-size:12px;overflow:auto;max-height:160px"></div>
+      <div class="pg-log" id="pgLog"></div>
+    </div>
+  </div>`;
+
+  let n=0,exec=0,steal=0;
+  function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  // input arrives HTML-entity-encoded from the value attr; decode to the "raw" payload the attacker typed
+  function decode(s){return s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").replace(/&quot;/g,'"');}
+  function stats(){$("pgN").textContent=n;$("pgExec").textContent=exec;$("pgSteal").textContent=steal;$("pgM").textContent=({raw:"raw",escape:"escaped",csp:"CSP"})[$("pgMode").value||"raw"];}
+  function log(m,c){const l=$("pgLog");const d=el("div",c||"",m);l.insertBefore(d,l.firstChild);while(l.children.length>22)l.removeChild(l.lastChild);}
+  function post(){const raw=decode($("pgIn").value||"");const mode=$("pgMode").value||"raw";n++;
+    const hasScript=/<script|onerror=|onload=|javascript:|<img[^>]+onerror/i.test(raw);
+    const board=$("pgBoard");const row=el("div","");row.style.cssText="padding:6px 8px;border-bottom:1px solid #1c1c20";
+    let executes=false;
+    if(mode==="raw"){
+      // vulnerable: attacker markup would be live. We DON'T actually run it; we render escaped + flag.
+      row.innerHTML="<span style='color:#8b8b93'>🧑 anon:</span> "+esc(raw)+(hasScript?" <span style='color:#f87171'>← would EXECUTE</span>":"");
+      if(hasScript)executes=true;
+    } else if(mode==="escape"){
+      row.textContent="🧑 anon: "+raw; // textContent never parses HTML
+    } else { // csp
+      row.innerHTML="<span style='color:#8b8b93'>🧑 anon:</span> "+esc(raw)+(hasScript?" <span style='color:#34d399'>← inline script blocked by CSP</span>":"");
+    }
+    board.insertBefore(row,board.firstChild);
+    if(executes){exec++;steal++;log("💀 XSS! payload executed in victim's browser — cookie exfiltrated","bad");}
+    else if(hasScript&&mode==="escape")log("✓ payload escaped — rendered as literal text, not code","ok");
+    else if(hasScript&&mode==="csp")log("✓ CSP blocked inline script execution (script-src 'self')","ok");
+    else log("comment posted — no active payload detected","ac");
+    stats();}
+  $("pgPost").onclick=post;
+  $("pgClear").onclick=()=>{$("pgBoard").innerHTML="";log("board cleared","ac");};
+  $("pgMode").onchange=stats;
+  stats();log("post a <script> payload and switch rendering modes to compare","ac");
+}
+
+const DATA={
+  badge:"💉",title:"XSS",category:"Security",difficulty:"Medium",readingTime:"9 min",
+  eyebrow:"Cross-Site Scripting",
+  tagline:"XSS happens when an app renders <b>untrusted data as executable code</b>, letting an attacker run JavaScript in a victim's browser <b>in your site's origin</b> — stealing cookies, hijacking sessions, and defacing pages. The fix: treat data as data with <b>output encoding</b>, a <b>Content-Security-Policy</b>, and <b>HttpOnly</b> cookies.",
+  pills:["<b>Stored</b> / <b>Reflected</b> / <b>DOM</b>","<b>Escape on output</b>","<b>CSP</b> defense","<b>HttpOnly</b> cookies"],
+  overview:"<b>Cross-Site Scripting (XSS)</b> is an injection flaw where an application includes <b>untrusted input in a page without properly neutralizing it</b>, so the browser interprets attacker-supplied text as HTML/JavaScript. Because that script runs within your site's <b>origin</b>, it has the victim's full privileges: it can read cookies (unless HttpOnly), read the DOM and local storage, make authenticated requests, log keystrokes, and rewrite the page. There are three classic forms. <b>Stored (persistent) XSS</b>: the payload is saved server-side (a comment, profile field) and served to every visitor — the most dangerous. <b>Reflected XSS</b>: the payload is echoed back from the request (a search term in the response), triggered by a crafted link. <b>DOM-based XSS</b>: the vulnerability is entirely client-side — JavaScript takes untrusted input (e.g. <code>location.hash</code>) and writes it into the DOM via a sink like <code>innerHTML</code> or <code>eval</code>. The root cause is the same: <b>mixing data and code</b>. The primary defense is <b>context-aware output encoding</b> — escape data for the exact context it lands in (HTML body, attribute, URL, JS, CSS). Layer on a <b>Content-Security-Policy</b> to block inline scripts and restrict sources, use safe sinks (<code>textContent</code> over <code>innerHTML</code>), sanitize any HTML you must allow (e.g. DOMPurify), and set session cookies <b>HttpOnly</b> so stolen script can't read them.",
+  problem:"Web pages interleave developer markup with user-supplied data. If the app fails to distinguish the two, an attacker can smuggle <code>&lt;script&gt;</code> (or an event handler, or a <code>javascript:</code> URL) into the output. The browser, unable to tell intended markup from injected markup, executes it — running arbitrary code in the trusted context of your site and every user who views the affected page.",
+  diagram,diagramCaption:"Attacker stores a script; the victim's browser executes it in your origin; encoding + CSP render it inert.",
+  how:[
+    "Attacker submits input containing markup/script into a field the app will later render.",
+    "The app stores or reflects that input into an HTML response without proper encoding.",
+    "A victim loads the page; the browser parses the injected payload as real code and runs it.",
+    "The script executes in your origin — reading cookies, session, DOM; exfiltrating or acting as the user.",
+    "Defense: context-aware output encoding, CSP, safe DOM sinks, HTML sanitization, and HttpOnly cookies."
+  ],
+  complexity:[["Stored","persisted, hits all viewers"],["Reflected","via crafted link"],["DOM","client-side sink"],["Runs as","victim's origin"]],
+  advantages:["Output encoding fully neutralizes the common cases","CSP blocks inline scripts as a strong second layer","HttpOnly stops cookie theft even if XSS occurs","Framework auto-escaping (React/Angular) defends by default","Sanitizer libraries safely allow rich user HTML"],
+  disadvantages:["Encoding must match context (HTML vs attr vs JS vs URL)","DOM XSS bypasses server-side encoding entirely","innerHTML / dangerouslySetInnerHTML / eval are easy footguns","CSP is hard to deploy without breaking legit inline scripts","Rich-text features expand the attack surface"],
+  tradeoffs:"XSS defense trades developer convenience for safety, and the layers cover different gaps. <b>Output encoding</b> is the fundamental fix but must be <b>context-aware</b> — the correct escaping for an HTML text node differs from an attribute, a URL, or an inline script, and using the wrong one leaves a hole; this is why modern frameworks (React, Angular, Vue) auto-escape by default and you should avoid their raw-HTML escape hatches. A <b>Content-Security-Policy</b> is a powerful backstop that can neutralize injected inline scripts even when encoding fails, but a strict CSP is <b>operationally painful</b>: it forbids inline scripts/styles, forcing nonces or hashes and refactoring, and a loose CSP gives false confidence. <b>HttpOnly cookies</b> cheaply defeat the most common goal (cookie theft) but don't stop the script from making authenticated requests as the user. And <b>sanitizing</b> user HTML (for rich text) is necessary but hard to get right — allowlist with a vetted library, never a hand-rolled blocklist. The overarching principle: never mix untrusted data into a code context, and assume any single control can fail — defend in depth.",
+  whenNot:"There's no scenario where you 'skip' XSS defense — any app that reflects user input into a page needs it. But the effort scales with surface: a fully framework-rendered app with no raw-HTML sinks and no user-authored HTML gets most protection for free and mainly needs a CSP and HttpOnly cookies. Heavy investment in HTML sanitization is warranted only where you deliberately allow user-supplied rich markup (comments, WYSIWYG). Avoid custom sanitizers and blocklist filters entirely — they're where teams get burned.",
+  sim,
+  code:{
+"Vulnerable vs safe output":`// VULNERABLE: untrusted data flows straight into an HTML sink.\nel.innerHTML = "Hi " + user.name;         // name = "<img src=x onerror=steal()>"\ndocument.write(location.hash);            // DOM XSS sink\neval(userInput);                          // never\n\n// SAFE: treat data as data.\nel.textContent = "Hi " + user.name;       // browser never parses it as HTML\n// or encode explicitly for the HTML-body context:\nfunction escapeHTML(s){\n  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;")\n          .replace(/>/g,"&gt;").replace(/"/g,"&quot;");\n}\nel.innerHTML = "Hi " + escapeHTML(user.name);`,
+"Content-Security-Policy":`# Block inline scripts and restrict where code may load from.\nContent-Security-Policy:\n  default-src 'self';\n  script-src 'self' 'nonce-r4nd0m';   # only our scripts + nonced inline\n  object-src 'none';\n  base-uri 'self';\n\n# Injected <script>alert(1)<\/script> won't run: it has no valid nonce\n# and inline execution is disallowed. CSP is a strong second layer,\n# NOT a replacement for output encoding.`,
+"Sanitize rich HTML + HttpOnly":`// If you MUST allow user HTML (comments, WYSIWYG), sanitize with a vetted\n// allowlist library — never a hand-rolled blocklist.\nimport DOMPurify from "dompurify";\nel.innerHTML = DOMPurify.sanitize(userHtml, { ALLOWED_TAGS:["b","i","a","p"] });\n\n// And make cookie theft useless even if XSS slips through:\nSet-Cookie: session=abc; HttpOnly; Secure; SameSite=Lax\n// HttpOnly -> document.cookie can't read it from injected script.`
+  },
+  realWorld:[
+    ["React / Angular / Vue","Auto-escape interpolated values; raw-HTML APIs are opt-in and flagged."],
+    ["Content-Security-Policy","Standard browser mechanism to constrain script sources and inline code."],
+    ["DOMPurify","Widely used allowlist sanitizer for user-supplied HTML."],
+    ["OWASP XSS cheat sheets","Canonical guidance on context-aware output encoding."],
+    ["Bug bounty programs","XSS is consistently among the most-reported web vulnerabilities."]
+  ],
+  interview:[
+    ["basic","What is XSS?","Cross-Site Scripting: a vulnerability where an app renders untrusted input as executable code, so an attacker's JavaScript runs in a victim's browser within the app's origin. That script has the victim's privileges — it can steal cookies, hijack the session, read the DOM, and make authenticated requests, leading to account takeover or data theft."],
+    ["basic","What are the three types of XSS?","Stored (persistent): the payload is saved server-side and served to every visitor (most dangerous). Reflected: the payload is echoed from the request into the response and triggered via a crafted link. DOM-based: purely client-side — JavaScript reads untrusted input (like location.hash) and writes it to a dangerous DOM sink such as innerHTML, so the server never sees the payload."],
+    ["inter","What is the primary defense against XSS?","Context-aware output encoding: escape untrusted data for the exact context where it's inserted — HTML body, HTML attribute, URL, JavaScript, or CSS each need different escaping. This ensures the browser treats data as data, not code. Modern frameworks auto-escape interpolated values by default, which is why you should avoid their raw-HTML escape hatches."],
+    ["inter","How does a Content-Security-Policy help, and what are its limits?","CSP lets the server restrict where scripts can load from and disallow inline scripts, so an injected <script> won't run without a valid nonce/hash. It's a strong second layer that can save you when encoding fails. Limits: it's hard to deploy on apps with lots of inline scripts, a loose policy gives false confidence, and it doesn't fix the underlying injection — it's defense in depth, not a substitute for encoding."],
+    ["adv","What is DOM-based XSS and why is server-side encoding insufficient for it?","DOM-based XSS occurs entirely in the browser: client JavaScript takes untrusted input (URL fragment, postMessage, etc.) and passes it to a sink like innerHTML, document.write, or eval. The server never renders the payload, so server-side output encoding never touches it. You defend it client-side: avoid dangerous sinks, use textContent, use safe framework bindings, and apply Trusted Types / sanitization on the client."],
+    ["adv","If XSS is present, how do HttpOnly cookies and CSP limit the damage?","HttpOnly makes the session cookie unreadable to JavaScript, so the most common goal — stealing the cookie via document.cookie — fails, though the script can still make requests as the user while the page is open. CSP can block the injected inline script from executing at all and restrict where it could exfiltrate data. Together they reduce impact, but they don't remove the vulnerability — you still must fix the injection with encoding/sanitization."],
+    ["sd","How would you prevent XSS across a large web application?","Default to a framework with automatic context-aware escaping and forbid raw-HTML sinks except where reviewed. Deploy a strict CSP with nonces and object-src 'none'. Sanitize any user-authored HTML with a vetted allowlist library (DOMPurify). Set cookies HttpOnly, Secure, SameSite. Adopt Trusted Types to lock down DOM sinks. Add linting/CI rules to flag innerHTML/eval, security tests, and code review for any dynamic HTML. Treat every input as untrusted and encode on output for its context."]
+  ],
+  mistakes:["Using innerHTML / dangerouslySetInnerHTML / eval with untrusted data.","Encoding for the wrong context (HTML escaping data placed in a JS or URL context).","Blocklist 'filters' that strip '<script>' but miss event handlers/URLs.","Ignoring DOM XSS because server-side templates look safe.","Storing session tokens where script can read them (no HttpOnly)."],
+  best:["Encode output for its exact context; prefer auto-escaping frameworks.","Use safe sinks (textContent) and avoid eval / innerHTML with user data.","Deploy a strict CSP with nonces/hashes; set object-src 'none'.","Sanitize user HTML with an allowlist library (DOMPurify), never a blocklist.","Set cookies HttpOnly + Secure + SameSite; adopt Trusted Types."],
+  related:[["CSRF","🎭","Different attack; often paired","csrf.html"],["Session Management","🎫","XSS target: session tokens","session-management.html"],["SQL Injection","🗄️","Sibling injection flaw","sql-injection.html"],["CORS","🔗","Origin model context","cors.html"],["Secrets Management","🔐","Keep keys out of the client","secrets-management.html"],["OAuth2 / OIDC","🔑","Token storage & theft risk","oauth2-oidc.html"]]
+};
+renderConcept(DATA);
+</script>
+</body>
+</html>

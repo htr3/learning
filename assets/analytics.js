@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var MEASUREMENT_ID = "G-XXXXXXXXXX"; // <-- replace with your GA4 Measurement ID
+  var MEASUREMENT_ID = "G-1L1YNB06SE"; // <-- replace with your GA4 Measurement ID
 
   // Not configured yet -> stay completely inert.
   if (!MEASUREMENT_ID || MEASUREMENT_ID === "G-XXXXXXXXXX") return;

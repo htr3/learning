@@ -1,0 +1,146 @@
+/* ============================================================
+   Architecture Editor — canvas, grid, nodes, edges, selection
+   ============================================================ */
+
+#viewport{
+  position:absolute;inset:0;overflow:hidden;
+  background-color:var(--bg);
+  /* grid is painted via background-image; offset/scale updated in JS */
+  --grid:36px;
+  --grid-color:rgba(255,255,255,.045);
+  --grid-strong:rgba(255,255,255,.08);
+  cursor:default;
+  touch-action:none;
+}
+body.theme-light #viewport{--grid-color:rgba(20,20,40,.06);--grid-strong:rgba(20,20,40,.10)}
+#viewport.grid-on{
+  background-image:
+    linear-gradient(var(--grid-color) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-color) 1px,transparent 1px);
+}
+#viewport.panning{cursor:grabbing}
+#viewport.space-ready{cursor:grab}
+#viewport.connecting{cursor:crosshair}
+
+#world{position:absolute;top:0;left:0;transform-origin:0 0;width:0;height:0}
+
+/* ---------------- EDGE LAYER ---------------- */
+#edge-layer{position:absolute;overflow:visible;pointer-events:none;left:0;top:0;width:1px;height:1px}
+#edge-group{pointer-events:none}
+.edge{pointer-events:stroke;cursor:pointer;fill:none}
+.edge-hit{pointer-events:stroke;stroke:transparent;stroke-width:16;fill:none;cursor:pointer}
+.edge-path{fill:none;stroke:var(--edge-color,#8b8b93);stroke-width:2;transition:stroke .12s}
+.edge-path.selected{stroke:var(--accent);stroke-width:2.6}
+.edge-path.animated{stroke-dasharray:7 6;animation:edge-flow 1s linear infinite}
+@keyframes edge-flow{to{stroke-dashoffset:-13}}
+.temp-edge{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-dasharray:5 5;pointer-events:none;opacity:0;stroke-linecap:round}
+.temp-edge.active{opacity:1}
+
+.edge-label{
+  font-family:"JetBrains Mono",monospace;font-size:11px;fill:var(--line);
+  dominant-baseline:middle;text-anchor:middle;pointer-events:none;
+}
+.edge-label-bg{fill:var(--panel-2);stroke:var(--border-2);stroke-width:1;rx:6;pointer-events:none}
+
+/* inline edge label editor (screen-space overlay) */
+.edge-label-input{
+  position:fixed;z-index:120;background:var(--panel-3);border:1px solid var(--accent);border-radius:7px;
+  color:var(--line);font-family:"JetBrains Mono",monospace;font-size:12px;padding:3px 8px;outline:none;
+  text-align:center;box-shadow:var(--shadow-sm);min-width:70px;
+}
+
+/* ---------------- NODE LAYER ---------------- */
+#node-layer{position:absolute;left:0;top:0}
+
+.node{
+  position:absolute;left:0;top:0;
+  width:160px;min-height:64px;
+  background:var(--node-bg,var(--panel-2));
+  border:1.5px solid var(--node-border,var(--border-2));
+  border-radius:13px;
+  box-shadow:0 4px 14px rgba(0,0,0,.28);
+  display:flex;flex-direction:column;
+  --node-accent:var(--accent);
+  transition:box-shadow .14s,border-color .14s;
+  will-change:transform;
+  overflow:visible;
+}
+.node:hover{border-color:color-mix(in srgb,var(--node-accent) 55%,var(--node-border,var(--border-2)))}
+.node.selected{border-color:var(--node-accent);box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--node-accent),0 10px 26px rgba(0,0,0,.4)}
+.node.dragging{box-shadow:0 18px 40px rgba(0,0,0,.5);opacity:.96}
+.node.locked{opacity:.9}
+.node.dim{opacity:.32}
+
+.node-accent-bar{height:4px;border-radius:12px 12px 0 0;background:var(--node-accent);flex:none}
+.node-body{display:flex;align-items:center;gap:10px;padding:10px 11px;flex:1;min-height:0}
+.node-ico{
+  width:34px;height:34px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;
+  color:var(--node-accent);background:color-mix(in srgb,var(--node-accent) 16%,transparent);
+  border:1px solid color-mix(in srgb,var(--node-accent) 34%,transparent);
+}
+.node-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.node-text{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
+.node-title{font-size:13px;font-weight:700;color:var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;outline:none}
+.node-title[contenteditable="true"]{white-space:normal;overflow:visible;cursor:text;border-bottom:1px dashed var(--node-accent)}
+.node-sub{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node-badge{position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--node-accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.node-lock{position:absolute;top:6px;right:6px;color:var(--muted);opacity:.85}
+.node-lock svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2}
+
+/* connection ports */
+.port{
+  position:absolute;width:12px;height:12px;border-radius:50%;
+  background:var(--panel);border:2px solid var(--node-accent);
+  opacity:0;transition:opacity .12s,transform .12s;cursor:crosshair;z-index:5;
+}
+.node:hover .port,.node.selected .port{opacity:1}
+.port:hover{transform:scale(1.35);background:var(--node-accent)}
+.port.n{top:-7px;left:50%;margin-left:-6px}
+.port.s{bottom:-7px;left:50%;margin-left:-6px}
+.port.e{right:-7px;top:50%;margin-top:-6px}
+.port.w{left:-7px;top:50%;margin-top:-6px}
+.node.connect-target{border-color:var(--ok);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ok)}
+
+/* resize handles */
+.rh{position:absolute;width:9px;height:9px;background:var(--node-accent);border:1.5px solid var(--bg);border-radius:3px;opacity:0;z-index:6}
+.node.selected .rh{opacity:1}
+.node.locked .rh{display:none}
+.rh.nw{left:-5px;top:-5px;cursor:nwse-resize}
+.rh.ne{right:-5px;top:-5px;cursor:nesw-resize}
+.rh.sw{left:-5px;bottom:-5px;cursor:nesw-resize}
+.rh.se{right:-5px;bottom:-5px;cursor:nwse-resize}
+.rh.n{left:50%;top:-5px;margin-left:-4.5px;cursor:ns-resize}
+.rh.s{left:50%;bottom:-5px;margin-left:-4.5px;cursor:ns-resize}
+.rh.w{left:-5px;top:50%;margin-top:-4.5px;cursor:ew-resize}
+.rh.e{right:-5px;top:50%;margin-top:-4.5px;cursor:ew-resize}
+
+/* group outline */
+.node.grouped::after{content:"";position:absolute;inset:-4px;border:1px dashed color-mix(in srgb,var(--node-accent) 50%,transparent);border-radius:16px;pointer-events:none;opacity:0}
+body.show-groups .node.grouped::after{opacity:.7}
+
+/* ---------------- MARQUEE SELECTION ---------------- */
+.marquee{
+  position:absolute;z-index:40;border:1px solid var(--accent);
+  background:var(--accent-glow);border-radius:3px;pointer-events:none;
+}
+
+/* ---------------- EMPTY STATE + HINTS ---------------- */
+.canvas-empty{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
+  text-align:center;color:var(--muted-2);pointer-events:none;transition:opacity .25s;
+}
+.canvas-empty svg{color:var(--border-2);margin-bottom:14px}
+.canvas-empty h3{font-size:16px;color:var(--muted);font-weight:700;margin-bottom:4px}
+.canvas-empty p{font-size:12.5px}
+body.has-nodes .canvas-empty{opacity:0}
+
+.mini-hint{
+  position:absolute;left:12px;bottom:12px;z-index:15;
+  background:rgba(26,26,28,.8);backdrop-filter:blur(8px);
+  border:1px solid var(--border);border-radius:9px;padding:6px 10px;
+  font-size:11px;color:var(--muted);pointer-events:none;transition:opacity .3s;
+}
+body.theme-light .mini-hint{background:rgba(255,255,255,.8)}
+
+/* drop indicator when dragging a component over the canvas */
+#ed-canvas-wrap.drop-active::after{content:"";position:absolute;inset:6px;border:2px dashed var(--accent);border-radius:16px;pointer-events:none;z-index:30}
